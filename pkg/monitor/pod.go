@@ -15,6 +15,26 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
+type LogLine struct {
+	Timestamp string
+	Data      string
+}
+
+type PodLogChunk struct {
+	PodName       string
+	ContainerName string
+	LogLines      []LogLine
+}
+
+type PodError struct {
+	Message       string
+	PodName       string
+	ContainerName string
+}
+
+// func MonitorPod(name, namespace string, kube kubernetes.Interface, wf PodFeed) error {
+// }
+
 type PodWatchMonitor struct {
 	WatchMonitor
 
@@ -93,8 +113,6 @@ func (pod *PodWatchMonitor) WatchContainerLogs(containerName string) error {
 
 		time.Sleep(time.Duration(200) * time.Millisecond)
 	}
-
-	return nil
 }
 
 func (pod *PodWatchMonitor) Watch() error {
@@ -124,9 +142,8 @@ func (pod *PodWatchMonitor) Watch() error {
 
 	watcher, err := client.Core().Pods(pod.Namespace).
 		Watch(metav1.ListOptions{
-			ResourceVersion: pod.InitialResourceVersion,
-			Watch:           true,
-			FieldSelector:   fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String(),
+			Watch:         true,
+			FieldSelector: fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String(),
 		})
 	if err != nil {
 		return err
@@ -172,7 +189,7 @@ func (pod *PodWatchMonitor) Watch() error {
 				pod.ContainerMonitorStates[cs.Name] = "Running"
 			}
 			if cs.State.Terminated != nil {
-				pod.ContainerMonitorStates[cs.Name] = "Running"
+				pod.ContainerMonitorStates[cs.Name] = "Terminated"
 			}
 
 			if oldState != pod.ContainerMonitorStates[cs.Name] {
