@@ -1,8 +1,10 @@
 package kubedog
 
-import "fmt"
+import (
+	"github.com/flant/kubedog/pkg/monitor"
+	"k8s.io/client-go/kubernetes"
+)
 
-func WatchJobTillDone(name, namespace string) error {
-	fmt.Printf("WatchJobTillDone %s %s\n", name, namespace)
-	return nil
+func WatchJobTillDone(name, namespace string, kube kubernetes.Interface) error {
+	return monitor.WatchJobUntilReady("test-job", "myns", kube, monitor.JobWatchFeedStub, monitor.WatchOptions{})
 }
