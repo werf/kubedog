@@ -9,9 +9,13 @@ var (
 		LogChunkFunc:  func(JobLogChunk) error { return nil },
 		PodErrorFunc:  func(JobPodError) error { return nil },
 	}
+
+	PodFeedStub = &PodFeedProto{
+		ContainerLogChunkFunc: func(*ContainerLogChunk) error { return nil },
+		PodErrorFunc:          func(PodError) error { return nil },
+	}
 )
 
-// Prototype-struct helper to create feed with callbacks specified in-place of creation (such as JobFeedStub)
 type JobFeedProto struct {
 	StartedFunc   func() error
 	SucceededFunc func() error
@@ -52,6 +56,24 @@ func (proto *JobFeedProto) LogChunk(arg JobLogChunk) error {
 	return nil
 }
 func (proto *JobFeedProto) PodError(arg JobPodError) error {
+	if proto.PodErrorFunc != nil {
+		return proto.PodErrorFunc(arg)
+	}
+	return nil
+}
+
+type PodFeedProto struct {
+	ContainerLogChunkFunc func(*ContainerLogChunk) error
+	PodErrorFunc          func(PodError) error
+}
+
+func (proto *PodFeedProto) ContainerLogChunk(arg *ContainerLogChunk) error {
+	if proto.ContainerLogChunkFunc != nil {
+		return proto.ContainerLogChunkFunc(arg)
+	}
+	return nil
+}
+func (proto *PodFeedProto) PodError(arg PodError) error {
 	if proto.PodErrorFunc != nil {
 		return proto.PodErrorFunc(arg)
 	}

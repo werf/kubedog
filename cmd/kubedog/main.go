@@ -55,6 +55,22 @@ func main() {
 	deploymentCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
 	watchCmd.AddCommand(deploymentCmd)
 
+	podCmd := &cobra.Command{
+		Use:   "pod NAME",
+		Short: "Watch pod",
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			name := args[0]
+			err := kubedog.WatchPod(name, namespace, kube.Kubernetes)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error watching pod `%s` in namespace `%s`: %s\n", name, namespace, err)
+				os.Exit(1)
+			}
+		},
+	}
+	podCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
+	watchCmd.AddCommand(podCmd)
+
 	err = rootCmd.Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
