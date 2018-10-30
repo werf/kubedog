@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
@@ -54,7 +56,7 @@ func (pod *PodWatchMonitor) FollowContainerLogs(containerName string) error {
 
 	req := client.Core().
 		Pods(pod.Namespace).
-		GetLogs(pod.ResourceName, &v1.PodLogOptions{
+		GetLogs(pod.ResourceName, &corev1.PodLogOptions{
 			Container:  containerName,
 			Timestamps: true,
 			Follow:     true,
@@ -140,29 +142,32 @@ func (pod *PodWatchMonitor) Watch() error {
 
 	client := pod.Kube
 
-	watcher, err := client.Core().Pods(pod.Namespace).
-		Watch(metav1.ListOptions{
-			Watch:         true,
-			FieldSelector: fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String(),
-		})
-	if err != nil {
-		return err
+	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
+		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String()
+		return options
+	}
+	lw := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return client.Core().Pods(pod.Namespace).List(tweakListOptions(options))
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return client.Core().Pods(pod.Namespace).Watch(tweakListOptions(options))
+		},
 	}
 
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), pod.Timeout)
 	defer cancel()
-
-	_, err = watchtools.UntilWithoutRetry(ctx, watcher, func(e watch.Event) (bool, error) {
+	_, err := watchtools.UntilWithSync(ctx, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
 		if debug() {
-			fmt.Printf("Pod `%s` watcher event: %#v\n", pod.ResourceName, e)
+			fmt.Printf("Pod `%s` watcher: %#v\n", pod.ResourceName, e.Type)
 		}
 
-		object, ok := e.Object.(*v1.Pod)
+		object, ok := e.Object.(*corev1.Pod)
 		if !ok {
-			return true, fmt.Errorf("Expected %s to be a *core.Pod, got %T", pod.ResourceName, e.Object)
+			return true, fmt.Errorf("expected %s to be a *corev1.Pod, got %T", pod.ResourceName, e.Object)
 		}
 
-		allContainerStatuses := make([]v1.ContainerStatus, 0)
+		allContainerStatuses := make([]corev1.ContainerStatus, 0)
 		for _, cs := range object.Status.InitContainerStatuses {
 			allContainerStatuses = append(allContainerStatuses, cs)
 		}
