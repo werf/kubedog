@@ -26,7 +26,8 @@ type JobFeed interface {
 }
 
 type JobLogChunk struct {
-	PodLogChunk
+	ContainerLogChunk
+	PodName string
 	JobName string
 }
 
@@ -44,10 +45,10 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			ResourceName: name,
 		},
 
-		Started:     make(chan bool, 0),
-		Succeeded:   make(chan bool, 0),
-		AddedPod:    make(chan *PodWatchMonitor, 10),
-		PodLogChunk: make(chan *PodLogChunk, 1000),
+		Started:           make(chan bool, 0),
+		Succeeded:         make(chan bool, 0),
+		AddedPod:          make(chan *PodWatchMonitor, 10),
+		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
 		PodError: make(chan PodError, 0),
 		Error:    make(chan error, 0),
@@ -98,14 +99,14 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 				return err
 			}
 
-		case chunk := <-job.PodLogChunk:
+		case chunk := <-job.ContainerLogChunk:
 			if debug() {
-				fmt.Printf("Job's `%s` pod `%s` log chunk\n", job.ResourceName, chunk.PodName)
+				fmt.Printf("Job's `%s` pod `%s` log chunk\n", job.ResourceName)
 			}
 
 			err := feed.LogChunk(JobLogChunk{
-				PodLogChunk: *chunk,
-				JobName:     job.ResourceName,
+				ContainerLogChunk: *chunk,
+				JobName:           job.ResourceName,
 			})
 			if err != nil {
 				return err
@@ -132,13 +133,13 @@ type JobWatchMonitor struct {
 
 	State string
 
-	Started      chan bool
-	Succeeded    chan bool
-	FailedReason chan string
-	Error        chan error
-	AddedPod     chan *PodWatchMonitor
-	PodLogChunk  chan *PodLogChunk
-	PodError     chan PodError
+	Started           chan bool
+	Succeeded         chan bool
+	FailedReason      chan string
+	Error             chan error
+	AddedPod          chan *PodWatchMonitor
+	ContainerLogChunk chan *ContainerLogChunk
+	PodError          chan PodError
 
 	MonitoredPods []*PodWatchMonitor
 
@@ -277,19 +278,12 @@ func (job *JobWatchMonitor) watchPods() error {
 				ResourceName: podObject.Name,
 			},
 
-			PodLogChunk: job.PodLogChunk,
-			PodError:    job.PodError,
-			Error:       job.Error,
+			ContainerLogChunk: job.ContainerLogChunk,
+			PodError:          job.PodError,
+			Error:             job.Error,
 
 			ContainerMonitorStates:          make(map[string]string),
 			ProcessedContainerLogTimestamps: make(map[string]time.Time),
-		}
-
-		for _, containerConf := range podObject.Spec.InitContainers {
-			pod.InitContainersNames = append(pod.InitContainersNames, containerConf.Name)
-		}
-		for _, containerConf := range podObject.Spec.Containers {
-			pod.ContainersNames = append(pod.ContainersNames, containerConf.Name)
 		}
 
 		job.MonitoredPods = append(job.MonitoredPods, pod)
