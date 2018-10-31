@@ -1,21 +1,5 @@
 package monitor
 
-var (
-	JobFeedStub = &JobFeedProto{
-		StartedFunc:   func() error { return nil },
-		SucceededFunc: func() error { return nil },
-		FailedFunc:    func(string) error { return nil },
-		AddedPodFunc:  func(string) error { return nil },
-		LogChunkFunc:  func(JobLogChunk) error { return nil },
-		PodErrorFunc:  func(JobPodError) error { return nil },
-	}
-
-	PodFeedStub = &PodFeedProto{
-		ContainerLogChunkFunc: func(*ContainerLogChunk) error { return nil },
-		PodErrorFunc:          func(PodError) error { return nil },
-	}
-)
-
 type JobFeedProto struct {
 	StartedFunc   func() error
 	SucceededFunc func() error
@@ -55,7 +39,7 @@ func (proto *JobFeedProto) LogChunk(arg JobLogChunk) error {
 	}
 	return nil
 }
-func (proto *JobFeedProto) PodError(arg JobPodError) error {
+func (proto *JobFeedProto) ContainerError(arg JobPodError) error {
 	if proto.PodErrorFunc != nil {
 		return proto.PodErrorFunc(arg)
 	}
@@ -63,8 +47,10 @@ func (proto *JobFeedProto) PodError(arg JobPodError) error {
 }
 
 type PodFeedProto struct {
+	SucceededFunc         func() error
+	FailedFunc            func() error
 	ContainerLogChunkFunc func(*ContainerLogChunk) error
-	PodErrorFunc          func(PodError) error
+	PodErrorFunc          func(ContainerError) error
 }
 
 func (proto *PodFeedProto) ContainerLogChunk(arg *ContainerLogChunk) error {
@@ -73,9 +59,21 @@ func (proto *PodFeedProto) ContainerLogChunk(arg *ContainerLogChunk) error {
 	}
 	return nil
 }
-func (proto *PodFeedProto) PodError(arg PodError) error {
+func (proto *PodFeedProto) ContainerError(arg ContainerError) error {
 	if proto.PodErrorFunc != nil {
 		return proto.PodErrorFunc(arg)
+	}
+	return nil
+}
+func (proto *PodFeedProto) Succeeded() error {
+	if proto.SucceededFunc != nil {
+		return proto.SucceededFunc()
+	}
+	return nil
+}
+func (proto *PodFeedProto) Failed() error {
+	if proto.FailedFunc != nil {
+		return proto.FailedFunc()
 	}
 	return nil
 }
