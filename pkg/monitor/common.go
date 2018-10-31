@@ -23,8 +23,9 @@ type WatchMonitor struct {
 }
 
 type WatchOptions struct {
-	ParentContext context.Context
-	Timeout       time.Duration
+	ParentContext   context.Context
+	Timeout         time.Duration
+	WaitForResource bool
 }
 
 type WatchMonitorState string

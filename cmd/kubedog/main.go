@@ -45,7 +45,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := kubedog.WatchDeploymentTillReady(name, namespace)
+			err := kubedog.WatchDeploymentTillReady(name, namespace, kube.Kubernetes)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error watching deployment `%s` in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
