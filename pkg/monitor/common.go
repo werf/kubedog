@@ -1,22 +1,33 @@
 package monitor
 
 import (
+	"context"
+	"errors"
 	"os"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
 )
 
+var (
+	ErrWatchTimeout = errors.New("timed out watching resource")
+	StopWatch       = errors.New("stop watch monitor now")
+)
+
 type WatchMonitor struct {
-	Kube         kubernetes.Interface
-	Timeout      time.Duration
-	Namespace    string
-	ResourceName string
+	Kube          kubernetes.Interface
+	Namespace     string
+	ResourceName  string
+	Context       context.Context
+	ContextCancel context.CancelFunc
 }
 
 type WatchOptions struct {
-	Timeout time.Duration
+	ParentContext context.Context
+	Timeout       time.Duration
 }
+
+type WatchMonitorState string
 
 func debug() bool {
 	return os.Getenv("KUBEDOG_MONITOR_DEBUG") == "1"

@@ -6,5 +6,5 @@ import (
 )
 
 func WatchJobTillDone(name, namespace string, kube kubernetes.Interface) error {
-	return monitor.MonitorJob(name, namespace, kube, monitor.JobFeedStub, monitor.WatchOptions{})
+	return monitor.MonitorJob(name, namespace, kube, &monitor.JobFeedProto{}, monitor.WatchOptions{})
 }

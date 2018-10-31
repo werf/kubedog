@@ -3,7 +3,6 @@ package monitor
 import (
 	"context"
 	"fmt"
-	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +21,7 @@ type JobFeed interface {
 	Failed(reason string) error
 	AddedPod(podName string) error
 	LogChunk(JobLogChunk) error
-	PodError(JobPodError) error
+	ContainerError(JobPodError) error
 }
 
 type JobLogChunk struct {
@@ -32,7 +31,7 @@ type JobLogChunk struct {
 }
 
 type JobPodError struct {
-	PodError
+	ContainerError
 	JobName string
 }
 
@@ -40,7 +39,6 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 	job := &JobWatchMonitor{
 		WatchMonitor: WatchMonitor{
 			Kube:         kube,
-			Timeout:      opts.Timeout,
 			Namespace:    namespace,
 			ResourceName: name,
 		},
@@ -50,8 +48,8 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 		AddedPod:          make(chan *PodWatchMonitor, 10),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
-		PodError: make(chan PodError, 0),
-		Error:    make(chan error, 0),
+		ContainerError: make(chan ContainerError, 0),
+		Error:          make(chan error, 0),
 	}
 
 	go func() {
@@ -112,14 +110,14 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 				return err
 			}
 
-		case podError := <-job.PodError:
+		case podError := <-job.ContainerError:
 			if debug() {
 				fmt.Printf("Job's `%s` pod error: %#v", job.ResourceName, podError)
 			}
 
-			err := feed.PodError(JobPodError{
-				JobName:  job.ResourceName,
-				PodError: podError,
+			err := feed.ContainerError(JobPodError{
+				JobName:        job.ResourceName,
+				ContainerError: podError,
 			})
 			if err != nil {
 				return err
@@ -139,7 +137,7 @@ type JobWatchMonitor struct {
 	Error             chan error
 	AddedPod          chan *PodWatchMonitor
 	ContainerLogChunk chan *ContainerLogChunk
-	PodError          chan PodError
+	ContainerError    chan ContainerError
 
 	MonitoredPods []*PodWatchMonitor
 
@@ -162,7 +160,7 @@ func (job *JobWatchMonitor) Watch() error {
 		},
 	}
 
-	ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), job.Timeout)
+	ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), 0)
 	defer cancel()
 	_, err := watchtools.UntilWithSync(ctx, lw, &batchv1.Job{}, nil, func(e watch.Event) (bool, error) {
 		if debug() {
@@ -251,7 +249,7 @@ func (job *JobWatchMonitor) watchPods() error {
 		},
 	}
 
-	ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), job.Timeout)
+	ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), 0)
 	defer cancel()
 	_, err = watchtools.UntilWithSync(ctx, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
 		if debug() {
@@ -270,22 +268,7 @@ func (job *JobWatchMonitor) watchPods() error {
 			}
 		}
 
-		pod := &PodWatchMonitor{
-			WatchMonitor: WatchMonitor{
-				Kube:         job.Kube,
-				Timeout:      job.Timeout,
-				Namespace:    job.Namespace,
-				ResourceName: podObject.Name,
-			},
-
-			ContainerLogChunk: job.ContainerLogChunk,
-			PodError:          job.PodError,
-			Error:             job.Error,
-
-			ContainerMonitorStates:          make(map[string]string),
-			ProcessedContainerLogTimestamps: make(map[string]time.Time),
-		}
-
+		pod := NewPodWatchMonitor(context.Background(), podObject.Name, job.Namespace, job.Kube)
 		job.MonitoredPods = append(job.MonitoredPods, pod)
 
 		if debug() {
