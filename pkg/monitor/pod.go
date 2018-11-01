@@ -41,7 +41,7 @@ type ContainerError struct {
 
 func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, opts WatchOptions) error {
 	errorChan := make(chan error, 0)
-	doneChan := make(chan bool, 0)
+	doneChan := make(chan struct{}, 0)
 
 	parentContext := opts.ParentContext
 	if parentContext == nil {
@@ -57,7 +57,7 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 		if err != nil {
 			errorChan <- err
 		} else {
-			doneChan <- true
+			doneChan <- struct{}{}
 		}
 	}()
 
@@ -127,13 +127,6 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 	}
 }
 
-const (
-	WatchInitial        WatchMonitorState = "WatchInitial"
-	ContainerRunning    WatchMonitorState = "ContainerRunning"
-	ContainerWaiting    WatchMonitorState = "ContainerWaiting"
-	ContainerTerminated WatchMonitorState = "ContainerTerminated"
-)
-
 type PodWatchMonitor struct {
 	WatchMonitor
 
@@ -174,7 +167,7 @@ func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 
 		objectUpdated: make(chan *corev1.Pod, 0),
 		errors:        make(chan error, 0),
-		containerDone: make(chan string, 0),
+		containerDone: make(chan string, 10),
 	}
 }
 
@@ -192,13 +185,13 @@ func (pod *PodWatchMonitor) Watch() error {
 	for {
 		select {
 		case containerName := <-pod.containerDone:
-			MonitoredContainers := make([]string, 0)
+			monitoredContainers := make([]string, 0)
 			for _, name := range pod.MonitoredContainers {
 				if name != containerName {
-					MonitoredContainers = append(MonitoredContainers, name)
+					monitoredContainers = append(monitoredContainers, name)
 				}
 			}
-			pod.MonitoredContainers = MonitoredContainers
+			pod.MonitoredContainers = monitoredContainers
 
 			done, err := pod.handlePodState(pod.lastObject)
 			if err != nil {
@@ -424,6 +417,8 @@ func (pod *PodWatchMonitor) runInformer() error {
 
 	go func() {
 		_, err := watchtools.UntilWithSync(pod.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
+			// FIXME: handle DELETE event
+
 			if debug() {
 				fmt.Printf("Pod `%s` informer event: %#v\n", pod.ResourceName, e.Type)
 			}

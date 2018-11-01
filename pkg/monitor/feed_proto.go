@@ -1,17 +1,17 @@
 package monitor
 
 type JobFeedProto struct {
-	StartedFunc   func() error
-	SucceededFunc func() error
-	FailedFunc    func(string) error
-	AddedPodFunc  func(string) error
-	LogChunkFunc  func(JobLogChunk) error
-	PodErrorFunc  func(JobPodError) error
+	AddedFunc       func() error
+	SucceededFunc   func() error
+	FailedFunc      func(string) error
+	AddedPodFunc    func(string) error
+	PodLogChunkFunc func(*PodLogChunk) error
+	PodErrorFunc    func(PodError) error
 }
 
-func (proto *JobFeedProto) Started() error {
-	if proto.StartedFunc != nil {
-		return proto.StartedFunc()
+func (proto *JobFeedProto) Added() error {
+	if proto.AddedFunc != nil {
+		return proto.AddedFunc()
 	}
 	return nil
 }
@@ -33,13 +33,13 @@ func (proto *JobFeedProto) AddedPod(arg string) error {
 	}
 	return nil
 }
-func (proto *JobFeedProto) LogChunk(arg JobLogChunk) error {
-	if proto.LogChunkFunc != nil {
-		return proto.LogChunkFunc(arg)
+func (proto *JobFeedProto) PodLogChunk(arg *PodLogChunk) error {
+	if proto.PodLogChunkFunc != nil {
+		return proto.PodLogChunk(arg)
 	}
 	return nil
 }
-func (proto *JobFeedProto) ContainerError(arg JobPodError) error {
+func (proto *JobFeedProto) PodError(arg PodError) error {
 	if proto.PodErrorFunc != nil {
 		return proto.PodErrorFunc(arg)
 	}
