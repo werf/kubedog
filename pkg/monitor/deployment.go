@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -20,18 +21,19 @@ import (
 	//deployutil "k8s.io/kubernetes/pkg/controller/deployment/util"
 )
 
-// DeploymentRollout interface for rollout process callbacks
-type DeploymentRollout interface {
-	Started() error
-	Succeeded() error
-	Failed() error
-	//LogChunk(*PodLogChunk) error
-	//PodError(PodError) error
-	// ...
+// DeploymentFeed interface for rollout process callbacks
+type DeploymentFeed interface {
+	Added() error
+	Completed() error
+	Failed(reason string) error
+	AddedReplicaSet(rsName string) error
+	AddedPod(podName string, rsName string, isNew bool) error
+	PodLogChunk(*PodLogChunk) error
+	PodError(PodError) error
 }
 
 // WatchDeploymentRollout is for monitor deployment rollout
-func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Interface, feed DeploymentRollout, opts WatchOptions) error {
+func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Interface, feed DeploymentFeed, opts WatchOptions) error {
 	if debug() {
 		fmt.Printf("> DeploymentRollout\n")
 	}
@@ -43,8 +45,10 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 	if parentContext == nil {
 		parentContext = context.Background()
 	}
+	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
+	defer cancel()
 
-	deploymentMon := NewDeploymentWatchMonitor(parentContext, name, namespace, kube, opts)
+	deploymentMon := NewDeploymentWatchMonitor(ctx, name, namespace, kube, opts)
 
 	go func() {
 		fmt.Printf("  goroutine: start deploy/%s monitor watcher\n", name)
@@ -62,16 +66,22 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 
 	for {
 		select {
-		case <-deploymentMon.RolloutStarted:
+		case <-deploymentMon.Added:
 			if debug() {
-				fmt.Printf("    deploy/%s rollout started\n", name)
+				fmt.Printf("    deploy/%s added\n", name)
 			}
 
-			return feed.Started()
+			err := feed.Added()
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
 
-		case <-deploymentMon.RolloutSucceeded:
+		case <-deploymentMon.Completed:
 			if debug() {
-				fmt.Printf("    deploy/%s rollout succeeded: desired: %d, current: %d/%d, up-to-date: %d, available: %d\n",
+				fmt.Printf("    deploy/%s completed: desired: %d, current: %d/%d, up-to-date: %d, available: %d\n",
 					name,
 					deploymentMon.FinalDeploymentStatus.Replicas,
 					deploymentMon.FinalDeploymentStatus.ReadyReplicas,
@@ -81,20 +91,83 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 				)
 			}
 
-			return feed.Succeeded()
-
-		case <-deploymentMon.RolloutFailed:
-			if debug() {
-				fmt.Printf("    deploy/%s rollout failed. Monitor state: `%s`", name, deploymentMon.State)
+			err := feed.Completed()
+			if err == StopWatch {
+				return nil
 			}
-			return feed.Failed()
-
-		case chunk := <-deploymentMon.ContainerLogChunk:
-			if debug() {
-				fmt.Printf("    deploy/%s pod container `%s` log chunk\n%+v\n", name, chunk.ContainerName, chunk.LogLines)
+			if err != nil {
+				return err
 			}
 
-			// feed.LogChunk(...)
+		case reason := <-deploymentMon.Failed:
+			if debug() {
+				fmt.Printf("    deploy/%s failed. Monitor state: `%s`", name, deploymentMon.State)
+			}
+
+			err := feed.Failed(reason)
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+		case rsName := <-deploymentMon.AddedReplicaSet:
+			if debug() {
+				fmt.Printf("    deploy/%s got new replicaset `%s`\n", deploymentMon.ResourceName, rsName)
+			}
+
+			err := feed.AddedReplicaSet(rsName)
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+		case podName := <-deploymentMon.AddedPod:
+			// TODO add replicaset name
+			if debug() {
+				fmt.Printf("    deploy/%s got new pod `%s`\n", deploymentMon.ResourceName, podName)
+			}
+
+			err := feed.AddedPod(podName, "", true)
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+		case chunk := <-deploymentMon.PodLogChunk:
+			// TODO add replicaset name
+			if debug() {
+				fmt.Printf("    deploy/%s pod `%s` log chunk\n", deploymentMon.ResourceName, chunk.PodName)
+				for _, line := range chunk.LogLines {
+					fmt.Printf("po/%s [%s] %s\n", line.Timestamp, chunk.PodName, line.Data)
+				}
+			}
+
+			err := feed.PodLogChunk(chunk)
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+		case podError := <-deploymentMon.PodError:
+			if debug() {
+				fmt.Printf("    deploy/%s pod error: %#v", deploymentMon.ResourceName, podError)
+			}
+
+			err := feed.PodError(podError)
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
 
 		case err := <-errorChan:
 			return fmt.Errorf("deploy/%s error: %v", name, err)
@@ -108,30 +181,33 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 type DeploymentWatchMonitor struct {
 	WatchMonitor
 
-	Manifest      *extensions.Deployment
-	NewReplicaSet *extensions.ReplicaSet
+	PreviousManifest *extensions.Deployment
+	CurrentManifest  *extensions.Deployment
+	CurrentComplete  bool
 
 	State                 string
 	Conditions            []string
-	WaitForResource       bool
 	FinalDeploymentStatus extensions.DeploymentStatus
 
-	RolloutStarted   chan bool
-	RolloutSucceeded chan bool
-	RolloutFailed    chan bool
+	Added           chan bool
+	Completed       chan bool
+	Failed          chan string
+	AddedReplicaSet chan string
+	AddedPod        chan string
+	PodLogChunk     chan *PodLogChunk
+	PodError        chan PodError
 
-	AddedPod          chan *PodWatchMonitor
-	ContainerLogChunk chan *ContainerLogChunk
-
-	//PodError          chan PodError
-	resourceAvailable chan *extensions.Deployment
-	resourceModified  chan bool
-	newReplicaSet     chan *extensions.ReplicaSet
-	errors            chan error
+	resourceAdded    chan *extensions.Deployment
+	resourceModified chan *extensions.Deployment
+	resourceDeleted  chan *extensions.Deployment
+	replicaSetAdded  chan *extensions.ReplicaSet
+	podAdded         chan *corev1.Pod
+	podDone          chan string
+	errors           chan error
 
 	FailedReason chan error
 
-	MonitoredPods []*PodWatchMonitor
+	MonitoredPods []string
 }
 
 // NewDeploymentWatchMonitor ...
@@ -148,21 +224,24 @@ func NewDeploymentWatchMonitor(ctx context.Context, name, namespace string, kube
 			Context:      ctx,
 		},
 
-		WaitForResource: opts.WaitForResource,
+		Added:           make(chan bool, 0),
+		Completed:       make(chan bool, 1),
+		Failed:          make(chan string, 1),
+		AddedReplicaSet: make(chan string, 10),
+		AddedPod:        make(chan string, 10),
+		PodLogChunk:     make(chan *PodLogChunk, 1000),
+		PodError:        make(chan PodError, 0),
 
-		RolloutStarted:    make(chan bool, 0),
-		RolloutSucceeded:  make(chan bool, 0),
-		RolloutFailed:     make(chan bool, 0),
-		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
-
-		AddedPod:      make(chan *PodWatchMonitor, 10),
-		MonitoredPods: make([]*PodWatchMonitor, 0),
+		MonitoredPods: make([]string, 0),
 
 		//PodError: make(chan PodError, 0),
-		resourceAvailable: make(chan *extensions.Deployment, 0),
-		resourceModified:  make(chan bool, 0),
-		newReplicaSet:     make(chan *extensions.ReplicaSet, 0),
-		errors:            make(chan error, 0),
+		resourceAdded:    make(chan *extensions.Deployment, 0),
+		resourceModified: make(chan *extensions.Deployment, 1),
+		resourceDeleted:  make(chan *extensions.Deployment, 1),
+		replicaSetAdded:  make(chan *extensions.ReplicaSet, 1),
+		podAdded:         make(chan *corev1.Pod, 1),
+		podDone:          make(chan string, 1),
+		errors:           make(chan error, 0),
 	}
 }
 
@@ -177,43 +256,62 @@ func (d *DeploymentWatchMonitor) Watch() (err error) {
 	if debug() {
 		fmt.Printf("> DeploymentWatchMonitor.Watch()\n")
 	}
-	//client := d.Kube
 
-	go d.getOrWaitForDeployment()
-WAIT_FOR_RESOURCE:
+	go d.runDeploymentInformer()
+
 	for {
 		select {
 		// getOrWait returns existed deployment or a new deployment over d.ResourceAvailable channel
-		case deployment := <-d.resourceAvailable:
-			d.Manifest = deployment
-			break WAIT_FOR_RESOURCE
-		// error occured if no namespace or deployment available
-		// or if event watcher has errors
-		case err = <-d.errors:
-			return fmt.Errorf("retrieve deploy/%s manifest error: %v", d.ResourceName, err)
-		}
-	}
+		case object := <-d.resourceAdded:
+			d.handleDeploymentState(object)
 
-	go d.waitForNewReplicaSet()
-WAIT_FOR_NEW_REPLICA_SET:
-	for {
-		select {
-		case replicaSet := <-d.newReplicaSet:
-			d.NewReplicaSet = replicaSet
-			fmt.Printf("")
-			break WAIT_FOR_NEW_REPLICA_SET
-		case err = <-d.errors:
-			return fmt.Errorf("retrieve deploy/%s new replica set error: %v", d.ResourceName, err)
-		}
-	}
-	// select{for{ d.NewReplicaSet }}
+			switch d.State {
+			case "":
+				d.State = "Started"
+				d.Added <- true
+			}
 
-	// go d.runReplicaSetWatcher()
-	// listen on channels
-	for {
-		select {
-		// d.RolloutSucceeded
-		// d.RolloutFailed
+			go d.runReplicaSetsInformer()
+			go d.runPodsInformer()
+			// go d.waitForNewReplicaSet()
+		case object := <-d.resourceModified:
+			complete, err := d.handleDeploymentState(object)
+			if err != nil {
+				return err
+			}
+			if complete {
+				d.Completed <- true
+				// ROLLOUT MODE
+				return nil
+			}
+		case <-d.resourceDeleted:
+			d.State = "Deleted"
+			// TODO create DeploymentErrors!
+			d.Failed <- "resource deleted"
+		case rs := <-d.replicaSetAdded:
+			if debug() {
+				fmt.Printf("rs/%s added\n", rs.Name)
+			}
+			d.AddedReplicaSet <- rs.Name
+		case pod := <-d.podAdded:
+			if debug() {
+				fmt.Printf("po/%s added\n", pod.Name)
+			}
+			d.AddedPod <- pod.Name
+
+			err := d.runPodWatcher(pod.Name)
+			if err != nil {
+				return err
+			}
+		case podName := <-d.podDone:
+			monitoredPods := make([]string, 0)
+			for _, name := range d.MonitoredPods {
+				if name != podName {
+					monitoredPods = append(monitoredPods, name)
+				}
+			}
+			d.MonitoredPods = monitoredPods
+
 		case <-d.Context.Done():
 			return ErrWatchTimeout
 		case err := <-d.errors:
@@ -224,30 +322,10 @@ WAIT_FOR_NEW_REPLICA_SET:
 	return err
 }
 
-func (d *DeploymentWatchMonitor) getOrWaitForDeployment() {
+// runDeploymentInformer watch for deployment events
+func (d *DeploymentWatchMonitor) runDeploymentInformer() {
 	client := d.Kube
 
-	// send deployment if namespace and deployment already exists
-	// or send an error
-	if !d.WaitForResource {
-		_, err := client.CoreV1().Namespaces().Get(d.Namespace, metav1.GetOptions{})
-		if err != nil {
-			d.errors <- fmt.Errorf("Cannot get namespace `%s`: %v", d.Namespace, err)
-			return
-		}
-		deployment, err := client.Extensions().
-			Deployments(d.Namespace).
-			Get(d.ResourceName, metav1.GetOptions{})
-		if err != nil {
-			fmt.Printf("get deployment error: %T [%v]", err, err)
-			d.errors <- fmt.Errorf("deployment `%s` in namespace `%s` get error: %v", d.ResourceName, d.Namespace, err)
-			return
-		}
-		d.resourceAvailable <- deployment
-		return
-	}
-
-	// watch for deployment events
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
 		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", d.ResourceName).String()
 		return options
@@ -264,55 +342,29 @@ func (d *DeploymentWatchMonitor) getOrWaitForDeployment() {
 	go func() {
 		_, err := watchtools.UntilWithSync(d.Context, lw, &extensions.Deployment{}, nil, func(e watch.Event) (bool, error) {
 			if debug() {
-				fmt.Printf("    Deployment `%s` watcher Event: %#v\n", d.ResourceName, e.Type)
+				fmt.Printf("    deploy/%s event: %#v\n", d.ResourceName, e.Type)
 			}
 
-			object, ok := e.Object.(*extensions.Deployment)
-			if !ok {
-				return true, fmt.Errorf("expect %s type *appvs1.Deployment, got %T", d.ResourceName, e.Object)
+			var object *extensions.Deployment
+
+			if e.Type != watch.Error {
+				var ok bool
+				object, ok = e.Object.(*extensions.Deployment)
+				if !ok {
+					return true, fmt.Errorf("expected %s to be a *extension.Deployment, got %T", d.ResourceName, e.Object)
+				}
 			}
 
-			switch d.State {
-			case "":
-				if e.Type == watch.Added {
-					if debug() {
-						fmt.Printf("Deployment `%s` is ADDED\n", d.ResourceName)
-					}
-					d.State = "Started"
-					d.resourceAvailable <- object
-
-					//return true, nil
-
-					// newRs, err := deployutil.GetNewReplicaSet(object, client)
-					// if err != nil {
-					// 	return false, err
-					// }
-
-					//fmt.Printf("Got new replica set ")
-
-					// add pod monitor to MonitoredPods
-					// go func() {
-					// 	err := d.watchPods()
-					// 	if err != nil {
-					// 		d.Error <- err
-					// 	}
-					// }()
-				}
-
-				return d.handleStatusConditions(object)
-			case "Started":
-				if e.Type == watch.Deleted {
-					d.State = "Deleted"
-					d.RolloutFailed <- true
-					return true, nil
-				}
-				if e.Type == watch.Modified {
-					d.resourceModified <- true
-				}
-				return d.handleStatusConditions(object)
-			default:
-				return true, fmt.Errorf("unknown deploy/%s watcher state: %s", d.ResourceName, d.State)
+			switch e.Type {
+			case watch.Added:
+				d.resourceAdded <- object
+			case watch.Modified:
+				d.resourceModified <- object
+			case watch.Deleted:
+				d.resourceDeleted <- object
 			}
+
+			return false, nil
 		})
 
 		if err != nil {
@@ -320,205 +372,96 @@ func (d *DeploymentWatchMonitor) getOrWaitForDeployment() {
 		}
 
 		if debug() {
-			fmt.Printf("      deploy/%s UntilWithSync DONE\n", d.ResourceName)
+			fmt.Printf("      deploy/%s informer DONE\n", d.ResourceName)
 		}
 	}()
+
+	return
 }
 
-func (d *DeploymentWatchMonitor) handleStatusConditions(object *extensions.Deployment) (watchDone bool, err error) {
-	msgs := []string{}
-	msgs = append(msgs, fmt.Sprintf("    deploy/%s\n      conditions:", d.ResourceName))
-	for _, c := range object.Status.Conditions {
-		msgs = append(msgs, fmt.Sprintf("        - %s - %s - %s: \"%s\"", c.Type, c.Status, c.Reason, c.Message))
-	}
-
-	deployment := object
-	if d.Manifest != nil {
-		deployment = d.Manifest
-	}
-	msgs = append(msgs, fmt.Sprintf("      status:\n        complete: %v\n        progressing: %v\n        timed-out: %v",
-		DeploymentComplete(deployment, &object.Status),
-		DeploymentProgressing(deployment, &object.Status),
-		DeploymentTimedOut(deployment, &object.Status),
-	))
-
-	msgs = append(msgs, fmt.Sprintf("        generation: %d", object.Generation))
-	msgs = append(msgs, fmt.Sprintf("        observed g: %d", object.Status.ObservedGeneration))
-
-	if debug() {
-		fmt.Printf("%s\n", strings.Join(msgs, "\n"))
-	}
-
-	//d.FinalDeploymentStatus = object.Status
-	//d.Succeeded <- true
-
-	// for _, c := range object.Status.Conditions {
-	// 	if c.Type == extensions.DeploymentAvailable && c.Status == corev1.ConditionTrue {
-	// 		d.State = "Available"
-	// 		d.FinalDeploymentStatus = object.Status
-	// 		d.Succeeded <- true
-	// 	}
-	// 	// if c.Type == appsv1.DeploymentProgressing && c.Status == corev1.ConditionTrue {
-	// 	// 	d.FinalDeploymentStatus = object.Status
-	// 	// }
-	// 	// } else {
-	// 	// 	d.State = "..."
-	// 	// 	return true, nil
-	// 	// }
-	// }
-
-	return false, nil
-}
-
-func (d *DeploymentWatchMonitor) waitForNewReplicaSet() {
+// runDeploymentInformer watch for deployment events
+func (d *DeploymentWatchMonitor) runReplicaSetsInformer() {
 	client := d.Kube
 
-	_, allOlds, newRs, err := GetAllReplicaSets(d.Manifest, client)
+	if d.CurrentManifest == nil {
+		// This shouldn't happen!
+		// TODO add error
+		return
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(d.CurrentManifest.Spec.Selector)
 	if err != nil {
-		fmt.Printf("waitForNewReplicaSet error: %v\n", err)
+		// TODO rescue this error!
+		return
 	}
 
-	fmt.Printf("      replicaSets:\n")
-	for i, rs := range allOlds {
-		fmt.Printf("        - old %d: rs/%s replicas: %d  ver: %s, gen: %d, obsgen: %d\n", i, rs.Name, *rs.Spec.Replicas, rs.ResourceVersion, rs.Generation, rs.Status.ObservedGeneration)
+	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
+		options.LabelSelector = selector.String()
+		return options
 	}
-	if newRs != nil {
-		fmt.Printf("        - new: rs/%s replicas: %d  ver: %s, gen: %d, obsgen: %d\n", newRs.Name, *newRs.Spec.Replicas, newRs.ResourceVersion, newRs.Generation, newRs.Status.ObservedGeneration)
+	lw := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return client.Extensions().ReplicaSets(d.Namespace).List(tweakListOptions(options))
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return client.Extensions().ReplicaSets(d.Namespace).Watch(tweakListOptions(options))
+		},
 	}
 
-	// Get list of ReplicaSets, check if new rs is there
-	// if no new rs, then listen for deployment modified channel and get list again, check for new again until new rs appeared
-
-	for {
-		select {
-		case <-d.resourceModified:
-			_, allOlds, newRs, err := GetAllReplicaSets(d.Manifest, client)
-			if err != nil {
-				fmt.Printf("waitForNewReplicaSet error: %v\n", err)
+	go func() {
+		_, err := watchtools.UntilWithSync(d.Context, lw, &extensions.ReplicaSet{}, nil, func(e watch.Event) (bool, error) {
+			if debug() {
+				fmt.Printf("    deploy/%s replica set event: %#v\n", d.ResourceName, e.Type)
 			}
 
-			fmt.Printf("      replicaSets:\n")
-			for i, rs := range allOlds {
-				fmt.Printf("        - old %d: rs/%s replicas: %d  ver: %s, gen: %d, obsgen: %d\n", i, rs.Name, *rs.Spec.Replicas, rs.ResourceVersion, rs.Generation, rs.Status.ObservedGeneration)
+			var object *extensions.ReplicaSet
+
+			if e.Type != watch.Error {
+				var ok bool
+				object, ok = e.Object.(*extensions.ReplicaSet)
+				if !ok {
+					return true, fmt.Errorf("expected rs for %s to be a *extensions.ReplicaSet, got %T", d.ResourceName, e.Object)
+				}
 			}
-			if newRs != nil {
-				fmt.Printf("        - new: rs/%s replicas: %d  ver: %s, gen: %d, obsgen: %d\n", newRs.Name, *newRs.Spec.Replicas, newRs.ResourceVersion, newRs.Generation, newRs.Status.ObservedGeneration)
+
+			switch e.Type {
+			case watch.Added:
+				d.replicaSetAdded <- object
+				// case watch.Modified:
+				// 	d.resourceModified <- object
+				// case watch.Deleted:
+				// 	d.resourceDeleted <- object
 			}
-		case <-d.Context.Done():
-			return
+
+			return false, nil
+		})
+
+		if err != nil {
+			d.errors <- err
 		}
-	}
 
-	// //d.Manifest.Status.ObservedGeneration
+		if debug() {
+			fmt.Printf("      deploy/%s new replicaSets informer DONE\n", d.ResourceName)
+		}
+	}()
 
-	// // send deployment if namespace and deployment already exists
-	// // or send an error
-	// if !d.WaitForResource {
-	// 	_, err := client.CoreV1().Namespaces().Get(d.Namespace, metav1.GetOptions{})
-	// 	if err != nil {
-	// 		d.errors <- fmt.Errorf("Cannot get namespace `%s`: %v", d.Namespace, err)
-	// 		return
-	// 	}
-	// 	deployment, err := client.Extensions().
-	// 		Deployments(d.Namespace).
-	// 		Get(d.ResourceName, metav1.GetOptions{})
-	// 	if err != nil {
-	// 		fmt.Printf("get deployment error: %T [%v]", err, err)
-	// 		d.errors <- fmt.Errorf("deployment `%s` in namespace `%s` get error: %v", d.ResourceName, d.Namespace, err)
-	// 		return
-	// 	}
-	// 	d.resourceAvailable <- deployment
-	// 	return
-	// }
-
-	// // watch for deployment events
-	// tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-	// 	options.FieldSelector = fields.OneTermEqualSelector("metadata.name", d.ResourceName).String()
-	// 	return options
-	// }
-	// lw := &cache.ListWatch{
-	// 	ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-	// 		return client.Extensions().Deployments(d.Namespace).List(tweakListOptions(options))
-	// 	},
-	// 	WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-	// 		return client.Extensions().Deployments(d.Namespace).Watch(tweakListOptions(options))
-	// 	},
-	// }
-
-	// go func() {
-	// 	_, err := watchtools.UntilWithSync(d.Context, lw, &extensions.Deployment{}, nil, func(e watch.Event) (bool, error) {
-	// 		if debug() {
-	// 			fmt.Printf("    Deployment `%s` watcher Event: %#v\n", d.ResourceName, e.Type)
-	// 		}
-
-	// 		object, ok := e.Object.(*extensions.Deployment)
-	// 		if !ok {
-	// 			return true, fmt.Errorf("expect %s type *appvs1.Deployment, got %T", d.ResourceName, e.Object)
-	// 		}
-
-	// 		switch d.State {
-	// 		case "":
-	// 			if e.Type == watch.Added {
-	// 				if debug() {
-	// 					fmt.Printf("Deployment `%s` is ADDED\n", d.ResourceName)
-	// 				}
-	// 				d.State = "Started"
-	// 				d.resourceAvailable <- object
-
-	// 				//return true, nil
-
-	// 				// newRs, err := deployutil.GetNewReplicaSet(object, client)
-	// 				// if err != nil {
-	// 				// 	return false, err
-	// 				// }
-
-	// 				//fmt.Printf("Got new replica set ")
-
-	// 				// add pod monitor to MonitoredPods
-	// 				// go func() {
-	// 				// 	err := d.watchPods()
-	// 				// 	if err != nil {
-	// 				// 		d.Error <- err
-	// 				// 	}
-	// 				// }()
-	// 			}
-
-	// 			return d.handleStatusConditions(object)
-	// 		case "Started":
-	// 			if e.Type == watch.Deleted {
-	// 				d.State = "Deleted"
-	// 				d.RolloutFailed <- true
-	// 				return true, nil
-	// 			}
-	// 			return d.handleStatusConditions(object)
-	// 		default:
-	// 			return true, fmt.Errorf("unknown deploy/%s watcher state: %s", d.ResourceName, d.State)
-	// 		}
-
-	// 	})
-
-	// 	if err != nil {
-	// 		d.errors <- err
-	// 	}
-
-	// 	if debug() {
-	// 		fmt.Printf("      deploy/%s UntilWithSync DONE\n", d.ResourceName)
-	// 	}
-	// }()
+	return
 }
 
-func (d *DeploymentWatchMonitor) watchPods() error {
+// runDeploymentInformer watch for deployment events
+func (d *DeploymentWatchMonitor) runPodsInformer() {
 	client := d.Kube
 
-	deploymentManifest, err := client.AppsV1beta2().
-		Deployments(d.Namespace).
-		Get(d.ResourceName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("deployment `%s` in namespace `%s` get error: %v", d.ResourceName, d.Namespace, err)
+	if d.CurrentManifest == nil {
+		// This shouldn't happen!
+		// TODO add error
+		return
 	}
-	selector, err := metav1.LabelSelectorAsSelector(deploymentManifest.Spec.Selector)
+
+	selector, err := metav1.LabelSelectorAsSelector(d.CurrentManifest.Spec.Selector)
 	if err != nil {
-		return err
+		// TODO rescue this error!
+		return
 	}
 
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
@@ -534,55 +477,271 @@ func (d *DeploymentWatchMonitor) watchPods() error {
 		},
 	}
 
-	_, err = watchtools.UntilWithSync(d.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-		if debug() {
-			fmt.Printf("Deployment `%s` pods watcher: %#v\n", d.ResourceName, e.Type)
-		}
-
-		podObject, ok := e.Object.(*corev1.Pod)
-		if !ok {
-			return true, fmt.Errorf("Expected %s to be a *corev1.Pod, got %T", d.ResourceName, e.Object)
-		}
-
-		for _, pod := range d.MonitoredPods {
-			if pod.ResourceName == podObject.Name {
-				// Already under monitoring
-				return false, nil
+	go func() {
+		_, err := watchtools.UntilWithSync(d.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
+			if debug() {
+				fmt.Printf("    deploy/%s pod event: %#v\n", d.ResourceName, e.Type)
 			}
+
+			var object *corev1.Pod
+
+			if e.Type != watch.Error {
+				var ok bool
+				object, ok = e.Object.(*corev1.Pod)
+				if !ok {
+					return true, fmt.Errorf("expected %s to be a *extension.Deployment, got %T", d.ResourceName, e.Object)
+				}
+			}
+
+			switch e.Type {
+			case watch.Added:
+				d.podAdded <- object
+				// case watch.Modified:
+				// 	d.resourceModified <- object
+				// case watch.Deleted:
+				// 	d.resourceDeleted <- object
+			}
+
+			return false, nil
+		})
+
+		if err != nil {
+			d.errors <- err
 		}
-
-		pod := &PodWatchMonitor{
-			WatchMonitor: WatchMonitor{
-				Kube:         d.Kube,
-				Namespace:    d.Namespace,
-				ResourceName: podObject.Name,
-			},
-
-			ContainerLogChunk: d.ContainerLogChunk,
-
-			ProcessedContainerLogTimestamps: make(map[string]time.Time),
-		}
-
-		d.MonitoredPods = append(d.MonitoredPods, pod)
 
 		if debug() {
-			fmt.Printf("Starting deployment's `%s` pod `%s` monitor\n", d.ResourceName, d.ResourceName)
+			fmt.Printf("      deploy/%s new pods informer DONE\n", d.ResourceName)
 		}
+	}()
 
-		go func() {
-			err := pod.Watch()
-			if err != nil {
-				d.errors <- err
-			}
-		}()
-
-		d.AddedPod <- pod
-
-		return false, nil
-	})
-
-	return err
+	return
 }
+
+func (d *DeploymentWatchMonitor) runPodWatcher(podName string) error {
+	errorChan := make(chan error, 0)
+	doneChan := make(chan struct{}, 0)
+
+	pod := NewPodWatchMonitor(d.Context, podName, d.Namespace, d.Kube)
+	d.MonitoredPods = append(d.MonitoredPods, podName)
+
+	//job.AddedPod <- pod.ResourceName
+
+	go func() {
+		if debug() {
+			fmt.Printf("Starting Deployment's `%s` Pod `%s` monitor\n", d.ResourceName, pod.ResourceName)
+		}
+
+		err := pod.Watch()
+		if err != nil {
+			errorChan <- err
+		} else {
+			doneChan <- struct{}{}
+		}
+
+		if debug() {
+			fmt.Printf("Done Deployment's `%s` Pod `%s` monitor\n", d.ResourceName, pod.ResourceName)
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case chunk := <-pod.ContainerLogChunk:
+				podChunk := &PodLogChunk{ContainerLogChunk: chunk, PodName: pod.ResourceName}
+				d.PodLogChunk <- podChunk
+			case containerError := <-pod.ContainerError:
+				podError := PodError{ContainerError: containerError, PodName: pod.ResourceName}
+				d.PodError <- podError
+			case <-pod.Succeeded:
+			case <-pod.Failed:
+			case err := <-errorChan:
+				d.errors <- err
+				return
+			case <-doneChan:
+				d.podDone <- pod.ResourceName
+				return
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (d *DeploymentWatchMonitor) handleDeploymentState(object *extensions.Deployment) (completed bool, err error) {
+	prevComplete := false
+	// calc new status
+	if d.CurrentManifest != nil {
+		prevComplete = d.CurrentComplete
+		newStatus := object.Status
+		d.CurrentComplete = DeploymentComplete(d.CurrentManifest, &newStatus)
+		d.PreviousManifest = d.CurrentManifest
+	} else {
+		d.CurrentComplete = false
+	}
+	d.CurrentManifest = object
+
+	if prevComplete == false && d.CurrentComplete == true {
+		completed = true
+	}
+
+	msgs := []string{}
+	//msgs = append(msgs, fmt.Sprintf("    deploy/%s", d.ResourceName)) //\n      conditions:
+	for _, c := range object.Status.Conditions {
+		msgs = append(msgs, fmt.Sprintf("        - %s - %s - %s: \"%s\"", c.Type, c.Status, c.Reason, c.Message))
+	}
+
+	deployment := object
+	if d.CurrentManifest != nil {
+		deployment = d.CurrentManifest
+	}
+	if d.PreviousManifest != nil {
+		deployment = d.PreviousManifest
+	}
+	msgs = append(msgs, fmt.Sprintf("        cpl: %v, prg: %v, tim: %v,    gn: %d, ogn: %d, des: %d, rdy: %d, upd: %d, avl: %d, uav: %d",
+		yesNo(DeploymentComplete(deployment, &object.Status)),
+		yesNo(DeploymentProgressing(deployment, &object.Status)),
+		yesNo(DeploymentTimedOut(deployment, &object.Status)),
+		object.Generation,
+		object.Status.ObservedGeneration,
+		object.Status.Replicas,
+		object.Status.ReadyReplicas,
+		object.Status.UpdatedReplicas,
+		object.Status.AvailableReplicas,
+		object.Status.UnavailableReplicas,
+	))
+	if debug() {
+		fmt.Printf("%s\n", strings.Join(msgs, "\n"))
+	}
+	d.getReplicaSets()
+
+	if completed && debug() {
+		fmt.Printf("Deployment COMPLETE.\n")
+	}
+
+	return
+}
+
+// for _, c := range object.Status.Conditions {
+// 	if c.Type == extensions.DeploymentAvailable && c.Status == corev1.ConditionTrue {
+// 		d.State = "Available"
+// 		d.FinalDeploymentStatus = object.Status
+// 		d.Succeeded <- true
+// 	}
+// 	// if c.Type == appsv1.DeploymentProgressing && c.Status == corev1.ConditionTrue {
+// 	// 	d.FinalDeploymentStatus = object.Status
+// 	// }
+// 	// } else {
+// 	// 	d.State = "..."
+// 	// 	return true, nil
+// 	// }
+// }
+
+func (d *DeploymentWatchMonitor) getReplicaSets() {
+	client := d.Kube
+	_, allOlds, newRs, err := GetAllReplicaSets(d.CurrentManifest, client)
+	if err != nil {
+		fmt.Printf("waitForNewReplicaSet error: %v\n", err)
+	}
+	for i, rs := range allOlds {
+		fmt.Printf("        - old %2d: rs/%s gn: %d, ogn: %d, des: %d, rdy: %d, fll: %d, avl: %d\n",
+			i, rs.Name,
+			rs.Generation,
+			rs.Status.ObservedGeneration,
+			rs.Status.Replicas,
+			rs.Status.ReadyReplicas,
+			rs.Status.FullyLabeledReplicas,
+			rs.Status.AvailableReplicas,
+		)
+	}
+	if newRs != nil {
+		fmt.Printf("        - new   : rs/%s gn: %d, ogn: %d, des: %d, rdy: %d, fll: %d, avl: %d\n",
+			newRs.Name,
+			newRs.Generation,
+			newRs.Status.ObservedGeneration,
+			newRs.Status.Replicas,
+			newRs.Status.ReadyReplicas,
+			newRs.Status.FullyLabeledReplicas,
+			newRs.Status.AvailableReplicas,
+		)
+	}
+}
+
+// func (d *DeploymentWatchMonitor) watchPods() error {
+// 	client := d.Kube
+
+// 	deploymentManifest, err := client.AppsV1beta2().
+// 		Deployments(d.Namespace).
+// 		Get(d.ResourceName, metav1.GetOptions{})
+// 	if err != nil {
+// 		return fmt.Errorf("deployment `%s` in namespace `%s` get error: %v", d.ResourceName, d.Namespace, err)
+// 	}
+// 	selector, err := metav1.LabelSelectorAsSelector(deploymentManifest.Spec.Selector)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
+// 		options.LabelSelector = selector.String()
+// 		return options
+// 	}
+// 	lw := &cache.ListWatch{
+// 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+// 			return client.Core().Pods(d.Namespace).List(tweakListOptions(options))
+// 		},
+// 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+// 			return client.Core().Pods(d.Namespace).Watch(tweakListOptions(options))
+// 		},
+// 	}
+
+// 	_, err = watchtools.UntilWithSync(d.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
+// 		if debug() {
+// 			fmt.Printf("Deployment `%s` pods watcher: %#v\n", d.ResourceName, e.Type)
+// 		}
+
+// 		podObject, ok := e.Object.(*corev1.Pod)
+// 		if !ok {
+// 			return true, fmt.Errorf("Expected %s to be a *corev1.Pod, got %T", d.ResourceName, e.Object)
+// 		}
+
+// 		for _, pod := range d.MonitoredPods {
+// 			if pod.ResourceName == podObject.Name {
+// 				// Already under monitoring
+// 				return false, nil
+// 			}
+// 		}
+
+// 		pod := &PodWatchMonitor{
+// 			WatchMonitor: WatchMonitor{
+// 				Kube:         d.Kube,
+// 				Namespace:    d.Namespace,
+// 				ResourceName: podObject.Name,
+// 			},
+
+// 			ContainerLogChunk: d.ContainerLogChunk,
+
+// 			ProcessedContainerLogTimestamps: make(map[string]time.Time),
+// 		}
+
+// 		d.MonitoredPods = append(d.MonitoredPods, pod)
+
+// 		if debug() {
+// 			fmt.Printf("Starting deployment's `%s` pod `%s` monitor\n", d.ResourceName, d.ResourceName)
+// 		}
+
+// 		go func() {
+// 			err := pod.Watch()
+// 			if err != nil {
+// 				d.errors <- err
+// 			}
+// 		}()
+
+// 		d.AddedPod <- pod
+
+// 		return false, nil
+// 	})
+
+// 	return err
+// }
 
 // DeploymentComplete considers a deployment to be complete once all of its desired replicas
 // are updated and available, and no old pods are running.
@@ -816,3 +975,111 @@ func GetControllerOf(controllee metav1.Object) *metav1.OwnerReference {
 	}
 	return nil
 }
+
+func yesNo(v bool) string {
+	if v {
+		return "YES"
+	} else {
+		return " no"
+	}
+}
+
+type podListFunc func(string, metav1.ListOptions) (*corev1.PodList, error)
+
+// rsListFromClient returns an rsListFunc that wraps the given client.
+func podListFromClient(c kubernetes.Interface) podListFunc {
+	return func(namespace string, options metav1.ListOptions) (*corev1.PodList, error) {
+		podList, err := c.CoreV1().Pods(namespace).List(options)
+		if err != nil {
+			return nil, err
+		}
+		return podList, nil
+		//var ret []*corev1.Pod
+		//for i := range podList.Items {
+		//		ret = append(ret, &podList.Items[i])
+		//	}
+		//	return ret, err
+	}
+}
+
+// c kubernetes.Interface) ([]*extensions.ReplicaSet, []*extensions.ReplicaSet, *extensions.ReplicaSet, error) {
+// rsList, err := ListReplicaSets(deployment, rsListFromClient(c))
+// if err != nil {
+// 	return nil, nil, nil, err
+// }
+
+// ListPods returns a list of pods the given deployment targets.
+// This needs a list of ReplicaSets for the Deployment,
+// which can be found with ListReplicaSets().
+// Note that this does NOT attempt to reconcile ControllerRef (adopt/orphan),
+// because only the controller itself should do that.
+// However, it does filter out anything whose ControllerRef doesn't match.
+func ListPods(deployment *extensions.Deployment, rsList []*extensions.ReplicaSet, getPodList podListFunc) (*corev1.PodList, error) {
+	namespace := deployment.Namespace
+	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
+	if err != nil {
+		return nil, err
+	}
+	options := metav1.ListOptions{LabelSelector: selector.String()}
+	all, err := getPodList(namespace, options)
+	if err != nil {
+		return all, err
+	}
+	// Only include those whose ControllerRef points to a ReplicaSet that is in
+	// turn owned by this Deployment.
+	rsMap := make(map[types.UID]bool, len(rsList))
+	for _, rs := range rsList {
+		rsMap[rs.UID] = true
+	}
+	owned := &corev1.PodList{Items: make([]corev1.Pod, 0, len(all.Items))}
+	for i := range all.Items {
+		pod := &all.Items[i]
+		controllerRef := metav1.GetControllerOf(pod)
+		if controllerRef != nil && rsMap[controllerRef.UID] {
+			owned.Items = append(owned.Items, *pod)
+		}
+	}
+	return owned, nil
+}
+
+// 			// get all RSes
+// 			_, allOlds, newRs, err := GetAllReplicaSets(d.CurrentManifest, client)
+
+// 			// get all pods for RSes
+// 			//               rs name    pod name
+// 			oldPods := make(map[string]corev1.Pod)
+
+// 			//get all pods
+// 			podList, err := ListPods(object, allOlds, podListFromClient(client))
+// 			if err != nil {
+// 				return true, err
+// 			}
+
+// 			for _, pod := range podList.Items {
+// 				oldPods[pod.Name] = pod
+// 			}
+
+// 			newPods := make(map[string]corev1.Pod)
+// 			if newRs != nil {
+// 				rss := make([]*extensions.ReplicaSet, 1)
+// 				rss[0] = newRs
+
+// 				podList, err := ListPods(object, rss, podListFromClient(client))
+// 				if err != nil {
+// 					return true, err
+// 				}
+
+// 				for _, pod := range podList.Items {
+// 					newPods[pod.Name] = pod
+// 				}
+// 			}
+
+// 			// if debug() {
+// 			// 	// All Ready, hasPending, Fails
+// 			// 	for _, pod := range newPods {
+// 			// 		fmt.Printf("        po/%s %s\n", pod.Name, pod.Status.Phase)
+// 			// 		for _, cs := range pod.Status.ContainerStatuses {
+// 			// 			cs.State.
+// 			// 		}
+// 			// 	}
+// 			// }
