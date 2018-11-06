@@ -18,7 +18,8 @@ func WatchJobTillDone(name, namespace string, kube kubernetes.Interface, opts mo
 			return nil
 		},
 		PodLogChunkFunc: func(chunk *monitor.PodLogChunk) error {
-			setLogHeader(formatJobHeader(name, chunk.PodName, chunk.ContainerName))
+			// tail -f on multiple files prints similar headers
+			setLogHeader(fmt.Sprintf("==> Job `%s` Pod `%s` container `%s` <==", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}
@@ -27,21 +28,4 @@ func WatchJobTillDone(name, namespace string, kube kubernetes.Interface, opts mo
 	}
 
 	return monitor.MonitorJob(name, namespace, kube, feed, opts)
-}
-
-var currentLogHeader = ""
-
-func setLogHeader(logHeader string) {
-	if currentLogHeader != logHeader {
-		if currentLogHeader != "" {
-			fmt.Println()
-		}
-		fmt.Printf("%s\n", logHeader)
-		currentLogHeader = logHeader
-	}
-}
-
-func formatJobHeader(jobName, podName, containerName string) string {
-	// tail -f on multiple files prints similar headers
-	return fmt.Sprintf("==> Job `%s` Pod `%s` container `%s` <==", jobName, podName, containerName)
 }

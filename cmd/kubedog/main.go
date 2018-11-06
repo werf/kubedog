@@ -64,7 +64,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := kubedog.WatchPod(name, namespace, kube.Kubernetes)
+			err := kubedog.WatchPodTillDone(name, namespace, kube.Kubernetes, monitor.WatchOptions{Timeout: time.Second * time.Duration(timeoutSeconds)})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error watching pod `%s` in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
