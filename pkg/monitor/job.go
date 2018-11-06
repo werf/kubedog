@@ -455,6 +455,7 @@ func (job *JobWatchMonitor) runPodWatcher(podName string) error {
 			case containerError := <-pod.ContainerError:
 				podError := PodError{ContainerError: containerError, PodName: pod.ResourceName}
 				job.PodError <- podError
+			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
 			case err := <-errorChan:
