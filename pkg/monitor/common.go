@@ -14,6 +14,16 @@ var (
 	StopWatch       = errors.New("stop watch monitor now")
 )
 
+const (
+	WatchInitial        WatchMonitorState = "WatchInitial"
+	ResourceAdded       WatchMonitorState = "ResourceAdded"
+	ResourceSucceeded   WatchMonitorState = "ResourceSucceeded"
+	ResourceFailed      WatchMonitorState = "ResourceFailed"
+	ContainerRunning    WatchMonitorState = "ContainerRunning"
+	ContainerWaiting    WatchMonitorState = "ContainerWaiting"
+	ContainerTerminated WatchMonitorState = "ContainerTerminated"
+)
+
 type WatchMonitor struct {
 	Kube          kubernetes.Interface
 	Namespace     string
