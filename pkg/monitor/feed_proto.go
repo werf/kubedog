@@ -47,10 +47,11 @@ func (proto *JobFeedProto) PodError(arg PodError) error {
 }
 
 type PodFeedProto struct {
+	AddedFunc             func() error
 	SucceededFunc         func() error
 	FailedFunc            func() error
 	ContainerLogChunkFunc func(*ContainerLogChunk) error
-	PodErrorFunc          func(ContainerError) error
+	ContainerErrorFunc    func(ContainerError) error
 }
 
 func (proto *PodFeedProto) ContainerLogChunk(arg *ContainerLogChunk) error {
@@ -60,8 +61,14 @@ func (proto *PodFeedProto) ContainerLogChunk(arg *ContainerLogChunk) error {
 	return nil
 }
 func (proto *PodFeedProto) ContainerError(arg ContainerError) error {
-	if proto.PodErrorFunc != nil {
-		return proto.PodErrorFunc(arg)
+	if proto.ContainerErrorFunc != nil {
+		return proto.ContainerErrorFunc(arg)
+	}
+	return nil
+}
+func (proto *PodFeedProto) Added() error {
+	if proto.AddedFunc != nil {
+		return proto.AddedFunc()
 	}
 	return nil
 }

@@ -18,6 +18,7 @@ import (
 )
 
 type PodFeed interface {
+	Added() error
 	Succeeded() error
 	Failed() error
 	ContainerLogChunk(*ContainerLogChunk) error
@@ -92,6 +93,19 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 				return nil
 			}
 
+		case <-pod.Added:
+			if debug() {
+				fmt.Printf("Pod `%s` added\n", pod.ResourceName)
+			}
+
+			err := feed.Added()
+			if err == StopWatch {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
 		case <-pod.Succeeded:
 			if debug() {
 				fmt.Printf("Pod `%s` succeeded\n", pod.ResourceName)
@@ -130,8 +144,9 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 type PodWatchMonitor struct {
 	WatchMonitor
 
-	Succeeded         chan bool
-	Failed            chan bool
+	Added             chan struct{}
+	Succeeded         chan struct{}
+	Failed            chan struct{}
 	ContainerLogChunk chan *ContainerLogChunk
 	ContainerError    chan ContainerError
 
@@ -140,10 +155,12 @@ type PodWatchMonitor struct {
 	ProcessedContainerLogTimestamps map[string]time.Time
 	MonitoredContainers             []string
 
-	lastObject    *corev1.Pod
-	objectUpdated chan *corev1.Pod
-	errors        chan error
-	containerDone chan string
+	lastObject     *corev1.Pod
+	objectAdded    chan *corev1.Pod
+	objectModified chan *corev1.Pod
+	objectDeleted  chan *corev1.Pod
+	containerDone  chan string
+	errors         chan error
 }
 
 func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubernetes.Interface) *PodWatchMonitor {
@@ -155,8 +172,9 @@ func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 			Context:      ctx,
 		},
 
-		Succeeded:         make(chan bool, 0),
-		Failed:            make(chan bool, 0),
+		Added:             make(chan struct{}, 0),
+		Succeeded:         make(chan struct{}, 0),
+		Failed:            make(chan struct{}, 0),
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
@@ -165,19 +183,16 @@ func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
 		MonitoredContainers:             make([]string, 0),
 
-		objectUpdated: make(chan *corev1.Pod, 0),
-		errors:        make(chan error, 0),
-		containerDone: make(chan string, 10),
+		objectAdded:    make(chan *corev1.Pod, 0),
+		objectModified: make(chan *corev1.Pod, 0),
+		objectDeleted:  make(chan *corev1.Pod, 0),
+		errors:         make(chan error, 0),
+		containerDone:  make(chan string, 10),
 	}
 }
 
 func (pod *PodWatchMonitor) Watch() error {
-	err := pod.runContainersWatchers()
-	if err != nil {
-		return err
-	}
-
-	err = pod.runInformer()
+	err := pod.runInformer()
 	if err != nil {
 		return err
 	}
@@ -201,42 +216,17 @@ func (pod *PodWatchMonitor) Watch() error {
 				return nil
 			}
 
-		case object := <-pod.objectUpdated:
+		case object := <-pod.objectAdded:
 			pod.lastObject = object
 
-			allContainerStatuses := make([]corev1.ContainerStatus, 0)
-			for _, cs := range object.Status.InitContainerStatuses {
-				allContainerStatuses = append(allContainerStatuses, cs)
-			}
-			for _, cs := range object.Status.ContainerStatuses {
-				allContainerStatuses = append(allContainerStatuses, cs)
-			}
+			switch pod.State {
+			case WatchInitial:
+				pod.State = ResourceAdded
+				pod.Added <- struct{}{}
 
-			for _, cs := range allContainerStatuses {
-				oldState := pod.ContainerMonitorStates[cs.Name]
-
-				if cs.State.Waiting != nil {
-					pod.ContainerMonitorStates[cs.Name] = ContainerWaiting
-
-					switch cs.State.Waiting.Reason {
-					case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff": // FIXME: change to constants
-						pod.ContainerError <- ContainerError{
-							ContainerName: cs.Name,
-							Message:       fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message),
-						}
-					}
-				}
-				if cs.State.Running != nil {
-					pod.ContainerMonitorStates[cs.Name] = ContainerRunning
-				}
-				if cs.State.Terminated != nil {
-					pod.ContainerMonitorStates[cs.Name] = ContainerTerminated
-				}
-
-				if oldState != pod.ContainerMonitorStates[cs.Name] {
-					if debug() {
-						fmt.Printf("Pod `%s` container `%s` state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerMonitorStates[cs.Name])
-					}
+				err := pod.runContainersWatchers()
+				if err != nil {
+					return err
 				}
 			}
 
@@ -248,6 +238,23 @@ func (pod *PodWatchMonitor) Watch() error {
 				return nil
 			}
 
+		case object := <-pod.objectModified:
+			pod.lastObject = object
+
+			done, err := pod.handlePodState(object)
+			if err != nil {
+				return err
+			}
+			if done {
+				return nil
+			}
+
+		case <-pod.objectDeleted:
+			if debug() {
+				fmt.Printf("Pod `%s` resource gone: stop watching\n", pod.ResourceName)
+			}
+			return nil
+
 		case <-pod.Context.Done():
 			return ErrWatchTimeout
 
@@ -258,17 +265,62 @@ func (pod *PodWatchMonitor) Watch() error {
 }
 
 func (pod *PodWatchMonitor) handlePodState(object *corev1.Pod) (done bool, err error) {
+	err = pod.handleContainersState(object)
+	if err != nil {
+		return false, err
+	}
+
 	if len(pod.MonitoredContainers) == 0 {
 		if object.Status.Phase == corev1.PodSucceeded {
-			pod.Succeeded <- true
+			pod.Succeeded <- struct{}{}
 			done = true
 		} else if object.Status.Phase == corev1.PodFailed {
-			pod.Failed <- true
+			pod.Failed <- struct{}{}
 			done = true
 		}
 	}
 
 	return
+}
+
+func (pod *PodWatchMonitor) handleContainersState(object *corev1.Pod) error {
+	allContainerStatuses := make([]corev1.ContainerStatus, 0)
+	for _, cs := range object.Status.InitContainerStatuses {
+		allContainerStatuses = append(allContainerStatuses, cs)
+	}
+	for _, cs := range object.Status.ContainerStatuses {
+		allContainerStatuses = append(allContainerStatuses, cs)
+	}
+
+	for _, cs := range allContainerStatuses {
+		oldState := pod.ContainerMonitorStates[cs.Name]
+
+		if cs.State.Waiting != nil {
+			pod.ContainerMonitorStates[cs.Name] = ContainerWaiting
+
+			switch cs.State.Waiting.Reason {
+			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff":
+				pod.ContainerError <- ContainerError{
+					ContainerName: cs.Name,
+					Message:       fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message),
+				}
+			}
+		}
+		if cs.State.Running != nil {
+			pod.ContainerMonitorStates[cs.Name] = ContainerRunning
+		}
+		if cs.State.Terminated != nil {
+			pod.ContainerMonitorStates[cs.Name] = ContainerTerminated
+		}
+
+		if oldState != pod.ContainerMonitorStates[cs.Name] {
+			if debug() {
+				fmt.Printf("Pod `%s` container `%s` state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerMonitorStates[cs.Name])
+			}
+		}
+	}
+
+	return nil
 }
 
 func (pod *PodWatchMonitor) followContainerLogs(containerName string) error {
@@ -417,18 +469,27 @@ func (pod *PodWatchMonitor) runInformer() error {
 
 	go func() {
 		_, err := watchtools.UntilWithSync(pod.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-			// FIXME: handle DELETE event
-
 			if debug() {
 				fmt.Printf("Pod `%s` informer event: %#v\n", pod.ResourceName, e.Type)
 			}
 
-			object, ok := e.Object.(*corev1.Pod)
-			if !ok {
-				return true, fmt.Errorf("expected %s to be a *corev1.Pod, got %T", pod.ResourceName, e.Object)
+			var object *corev1.Pod
+
+			if e.Type != watch.Error {
+				var ok bool
+				object, ok = e.Object.(*corev1.Pod)
+				if !ok {
+					return true, fmt.Errorf("expected %s to be a *corev1.Pod, got %T", pod.ResourceName, e.Object)
+				}
 			}
 
-			pod.objectUpdated <- object
+			if e.Type == watch.Added {
+				pod.objectAdded <- object
+			} else if e.Type == watch.Modified {
+				pod.objectModified <- object
+			} else if e.Type == watch.Deleted {
+				pod.objectDeleted <- object
+			}
 
 			return false, nil
 		})

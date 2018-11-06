@@ -36,7 +36,7 @@ type PodError struct {
 
 func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed, opts WatchOptions) error {
 	errorChan := make(chan error, 0)
-	doneChan := make(chan bool, 0)
+	doneChan := make(chan struct{}, 0)
 
 	parentContext := opts.ParentContext
 	if parentContext == nil {
@@ -52,7 +52,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 		if err != nil {
 			errorChan <- err
 		} else {
-			doneChan <- true
+			doneChan <- struct{}{}
 		}
 	}()
 
@@ -151,8 +151,8 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 type JobWatchMonitor struct {
 	WatchMonitor
 
-	Added       chan bool
-	Succeeded   chan bool
+	Added       chan struct{}
+	Succeeded   chan struct{}
 	Failed      chan string
 	AddedPod    chan string
 	PodLogChunk chan *PodLogChunk
@@ -179,8 +179,8 @@ func NewJobWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 			Context:      ctx,
 		},
 
-		Added:       make(chan bool, 0),
-		Succeeded:   make(chan bool, 0),
+		Added:       make(chan struct{}, 0),
+		Succeeded:   make(chan struct{}, 0),
 		Failed:      make(chan string, 0),
 		AddedPod:    make(chan string, 10),
 		PodLogChunk: make(chan *PodLogChunk, 1000),
@@ -213,7 +213,7 @@ func (job *JobWatchMonitor) Watch() error {
 			switch job.State {
 			case WatchInitial:
 				job.State = ResourceAdded
-				job.Added <- true
+				job.Added <- struct{}{}
 
 				err = job.runPodsWatcher()
 				if err != nil {
@@ -331,7 +331,7 @@ func (job *JobWatchMonitor) handleJobState(object *batchv1.Job) (done bool, err 
 			if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
 				job.State = ResourceSucceeded
 				job.FinalJobStatus = object.Status
-				job.Succeeded <- true
+				job.Succeeded <- struct{}{}
 				done = true
 			} else if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue {
 				job.State = ResourceFailed
