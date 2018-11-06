@@ -35,7 +35,7 @@ func (proto *JobFeedProto) AddedPod(arg string) error {
 }
 func (proto *JobFeedProto) PodLogChunk(arg *PodLogChunk) error {
 	if proto.PodLogChunkFunc != nil {
-		return proto.PodLogChunk(arg)
+		return proto.PodLogChunkFunc(arg)
 	}
 	return nil
 }

@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/flant/kubedog/pkg/kube"
 	"github.com/flant/kubedog/pkg/kubedog"
+	"github.com/flant/kubedog/pkg/monitor"
 	"github.com/spf13/cobra"
 )
 
@@ -17,8 +19,11 @@ func main() {
 	}
 
 	var namespace string
+	var timeoutSeconds uint
 
 	rootCmd := &cobra.Command{Use: "kubedog"}
+	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
+	rootCmd.PersistentFlags().UintVarP(&timeoutSeconds, "timeout", "t", 300, "watch timeout in seconds")
 
 	watchCmd := &cobra.Command{Use: "watch"}
 	rootCmd.AddCommand(watchCmd)
@@ -29,14 +34,13 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := kubedog.WatchJobTillDone(name, namespace, kube.Kubernetes)
+			err := kubedog.WatchJobTillDone(name, namespace, kube.Kubernetes, monitor.WatchOptions{Timeout: time.Second * time.Duration(timeoutSeconds)})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error watching job `%s` in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},
 	}
-	jobCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
 	watchCmd.AddCommand(jobCmd)
 
 	deploymentCmd := &cobra.Command{
@@ -52,7 +56,6 @@ func main() {
 			}
 		},
 	}
-	deploymentCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
 	watchCmd.AddCommand(deploymentCmd)
 
 	podCmd := &cobra.Command{
@@ -68,7 +71,6 @@ func main() {
 			}
 		},
 	}
-	podCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
 	watchCmd.AddCommand(podCmd)
 
 	err = rootCmd.Execute()
