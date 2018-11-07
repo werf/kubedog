@@ -86,7 +86,7 @@ func (proto *PodFeedProto) Failed() error {
 }
 
 type DeploymentFeedProto struct {
-	AddedFunc           func() error
+	AddedFunc           func(bool) error
 	CompletedFunc       func() error
 	FailedFunc          func(string) error
 	AddedReplicaSetFunc func(string) error
@@ -95,9 +95,9 @@ type DeploymentFeedProto struct {
 	PodErrorFunc        func(PodError) error
 }
 
-func (proto *DeploymentFeedProto) Added() error {
+func (proto *DeploymentFeedProto) Added(completed bool) error {
 	if proto.AddedFunc != nil {
-		return proto.AddedFunc()
+		return proto.AddedFunc(completed)
 	}
 	return nil
 }
