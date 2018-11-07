@@ -12,11 +12,17 @@ import (
 type DeploymentFeedStubImpl struct {
 }
 
-func (d *DeploymentFeedStubImpl) Added() error {
+func (d *DeploymentFeedStubImpl) Added(complete bool) error {
 	//if debug() {
-	fmt.Printf("Deployment is added.\n")
 	//}
-	return nil
+	// rollout policy — return if deployment is already completed, do not wait
+	if complete {
+		fmt.Printf("Deployment is added as complete.\n")
+		return tracker.StopTrack
+	} else {
+		fmt.Printf("Deployment is added.\n")
+		return nil
+	}
 }
 
 func (d *DeploymentFeedStubImpl) Completed() error {
