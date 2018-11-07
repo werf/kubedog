@@ -1,4 +1,4 @@
-package monitor
+package tracker
 
 import (
 	"context"
@@ -34,7 +34,7 @@ type PodError struct {
 	PodName string
 }
 
-func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed, opts WatchOptions) error {
+func TrackJob(name, namespace string, kube kubernetes.Interface, feed JobFeed, opts Options) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
 
@@ -45,10 +45,10 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	job := NewJobWatchMonitor(ctx, name, namespace, kube)
+	job := NewJobTracker(ctx, name, namespace, kube)
 
 	go func() {
-		err := job.Watch()
+		err := job.Track()
 		if err != nil {
 			errorChan <- err
 		} else {
@@ -64,7 +64,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			}
 
 			err := feed.Added()
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -77,7 +77,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			}
 
 			err := feed.Succeeded()
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -90,7 +90,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			}
 
 			err := feed.Failed(reason)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -103,7 +103,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			}
 
 			err := feed.AddedPod(podName)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -119,7 +119,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			}
 
 			err := feed.PodLogChunk(chunk)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -132,7 +132,7 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 			}
 
 			err := feed.PodError(podError)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -148,8 +148,8 @@ func MonitorJob(name, namespace string, kube kubernetes.Interface, feed JobFeed,
 	}
 }
 
-type JobWatchMonitor struct {
-	WatchMonitor
+type JobTracker struct {
+	Tracker
 
 	Added       chan struct{}
 	Succeeded   chan struct{}
@@ -158,8 +158,8 @@ type JobWatchMonitor struct {
 	PodLogChunk chan *PodLogChunk
 	PodError    chan PodError
 
-	State          WatchMonitorState
-	MonitoredPods  []string
+	State          TrackerState
+	TrackedPods    []string
 	FinalJobStatus batchv1.JobStatus
 
 	lastObject     *batchv1.Job
@@ -170,9 +170,9 @@ type JobWatchMonitor struct {
 	errors         chan error
 }
 
-func NewJobWatchMonitor(ctx context.Context, name, namespace string, kube kubernetes.Interface) *JobWatchMonitor {
-	return &JobWatchMonitor{
-		WatchMonitor: WatchMonitor{
+func NewJobTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *JobTracker {
+	return &JobTracker{
+		Tracker: Tracker{
 			Kube:         kube,
 			Namespace:    namespace,
 			ResourceName: name,
@@ -186,8 +186,8 @@ func NewJobWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 		PodLogChunk: make(chan *PodLogChunk, 1000),
 		PodError:    make(chan PodError, 0),
 
-		State:         WatchInitial,
-		MonitoredPods: make([]string, 0),
+		State:       Initial,
+		TrackedPods: make([]string, 0),
 
 		objectAdded:    make(chan *batchv1.Job, 0),
 		objectModified: make(chan *batchv1.Job, 0),
@@ -197,7 +197,7 @@ func NewJobWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 	}
 }
 
-func (job *JobWatchMonitor) Watch() error {
+func (job *JobTracker) Track() error {
 	var err error
 
 	err = job.runInformer()
@@ -211,11 +211,11 @@ func (job *JobWatchMonitor) Watch() error {
 			job.lastObject = object
 
 			switch job.State {
-			case WatchInitial:
+			case Initial:
 				job.State = ResourceAdded
 				job.Added <- struct{}{}
 
-				err = job.runPodsWatcher()
+				err = job.runPodsTrackers()
 				if err != nil {
 					return err
 				}
@@ -248,12 +248,12 @@ func (job *JobWatchMonitor) Watch() error {
 
 		case podName := <-job.podDone:
 			monitoredPods := make([]string, 0)
-			for _, name := range job.MonitoredPods {
+			for _, name := range job.TrackedPods {
 				if name != podName {
 					monitoredPods = append(monitoredPods, name)
 				}
 			}
-			job.MonitoredPods = monitoredPods
+			job.TrackedPods = monitoredPods
 
 			done, err := job.handleJobState(job.lastObject)
 			if err != nil {
@@ -264,7 +264,7 @@ func (job *JobWatchMonitor) Watch() error {
 			}
 
 		case <-job.Context.Done():
-			return ErrWatchTimeout
+			return ErrTrackTimeout
 
 		case err := <-job.errors:
 			return err
@@ -272,7 +272,7 @@ func (job *JobWatchMonitor) Watch() error {
 	}
 }
 
-func (job *JobWatchMonitor) runInformer() error {
+func (job *JobTracker) runInformer() error {
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
 		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", job.ResourceName).String()
 		return options
@@ -325,8 +325,8 @@ func (job *JobWatchMonitor) runInformer() error {
 	return nil
 }
 
-func (job *JobWatchMonitor) handleJobState(object *batchv1.Job) (done bool, err error) {
-	if len(job.MonitoredPods) == 0 {
+func (job *JobTracker) handleJobState(object *batchv1.Job) (done bool, err error) {
+	if len(job.TrackedPods) == 0 {
 		for _, c := range object.Status.Conditions {
 			if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
 				job.State = ResourceSucceeded
@@ -344,7 +344,7 @@ func (job *JobWatchMonitor) handleJobState(object *batchv1.Job) (done bool, err 
 	return
 }
 
-func (job *JobWatchMonitor) runPodsWatcher() error {
+func (job *JobTracker) runPodsTrackers() error {
 	jobManifest, err := job.Kube.Batch().
 		Jobs(job.Namespace).
 		Get(job.ResourceName, metav1.GetOptions{})
@@ -361,7 +361,7 @@ func (job *JobWatchMonitor) runPodsWatcher() error {
 		return err
 	}
 	for _, item := range list.Items {
-		err := job.runPodWatcher(item.Name)
+		err := job.runPodTracker(item.Name)
 		if err != nil {
 			return err
 		}
@@ -392,14 +392,14 @@ func (job *JobWatchMonitor) runPodsWatcher() error {
 			}
 
 			if e.Type == watch.Added {
-				for _, podName := range job.MonitoredPods {
+				for _, podName := range job.TrackedPods {
 					if podName == object.Name {
-						// Already under monitored
+						// Already under tracking
 						return false, nil
 					}
 				}
 
-				err := job.runPodWatcher(object.Name)
+				err := job.runPodTracker(object.Name)
 				if err != nil {
 					return true, err
 				}
@@ -420,12 +420,12 @@ func (job *JobWatchMonitor) runPodsWatcher() error {
 	return nil
 }
 
-func (job *JobWatchMonitor) runPodWatcher(podName string) error {
+func (job *JobTracker) runPodTracker(podName string) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
 
-	pod := NewPodWatchMonitor(job.Context, podName, job.Namespace, job.Kube)
-	job.MonitoredPods = append(job.MonitoredPods, podName)
+	pod := NewPodTracker(job.Context, podName, job.Namespace, job.Kube)
+	job.TrackedPods = append(job.TrackedPods, podName)
 
 	job.AddedPod <- pod.ResourceName
 
@@ -434,7 +434,7 @@ func (job *JobWatchMonitor) runPodWatcher(podName string) error {
 			fmt.Printf("Starting Job's `%s` Pod `%s` monitor\n", job.ResourceName, pod.ResourceName)
 		}
 
-		err := pod.Watch()
+		err := pod.Track()
 		if err != nil {
 			errorChan <- err
 		} else {

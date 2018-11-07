@@ -1,4 +1,4 @@
-package kubedog
+package rollout
 
 import "fmt"
 

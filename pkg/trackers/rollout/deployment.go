@@ -1,11 +1,11 @@
-package kubedog
+package rollout
 
 import (
 	"fmt"
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/flant/kubedog/pkg/monitor"
+	"github.com/flant/kubedog/pkg/tracker"
 )
 
 // DeploymentFeedStub example structure
@@ -31,7 +31,7 @@ func (d *DeploymentFeedStubImpl) Failed(reason string) error {
 	//if debug() {
 	fmt.Printf("Deployment is failed: %v\n", reason)
 	//}
-	return monitor.StopWatch
+	return tracker.StopTrack
 }
 
 func (d *DeploymentFeedStubImpl) AddedReplicaSet(rsName string) error {
@@ -49,22 +49,22 @@ func (d *DeploymentFeedStubImpl) AddedPod(podName string, rsName string, isRsNew
 	return nil
 }
 
-func (d *DeploymentFeedStubImpl) PodLogChunk(chunk *monitor.PodLogChunk) error {
+func (d *DeploymentFeedStubImpl) PodLogChunk(chunk *tracker.PodLogChunk) error {
 	//if debug() {
 	fmt.Printf("Deployment got new log chunk: %+v\n", chunk)
 	//}
 	return nil
 }
 
-func (d *DeploymentFeedStubImpl) PodError(podError monitor.PodError) error {
+func (d *DeploymentFeedStubImpl) PodError(podError tracker.PodError) error {
 	//if debug() {
 	fmt.Printf("Deployment got pod error: %+v\n", podError)
 	//}
 	return nil
 }
 
-// WatchDeploymentTillReady ...
-func WatchDeploymentTillReady(name, namespace string, kube kubernetes.Interface) error {
-	fmt.Printf("WatchDeploymentTillReady %s %s\n", name, namespace)
-	return monitor.WatchDeploymentRollout(name, namespace, kube, &DeploymentFeedStubImpl{}, monitor.WatchOptions{WaitForResource: true})
+// TrackDeployment ...
+func TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
+	fmt.Printf("rollout.TrackDeployment %s %s\n", name, namespace)
+	return tracker.TrackDeployment(name, namespace, kube, &DeploymentFeedStubImpl{}, opts)
 }

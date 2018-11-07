@@ -1,4 +1,4 @@
-package monitor
+package tracker
 
 import (
 	"context"
@@ -32,10 +32,10 @@ type DeploymentFeed interface {
 	PodError(PodError) error
 }
 
-// WatchDeploymentRollout is for monitor deployment rollout
-func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Interface, feed DeploymentFeed, opts WatchOptions) error {
+// TrackDeployment is for monitor deployment rollout
+func TrackDeployment(name string, namespace string, kube kubernetes.Interface, feed DeploymentFeed, opts Options) error {
 	if debug() {
-		fmt.Printf("> DeploymentRollout\n")
+		fmt.Printf("> TrackDeployment\n")
 	}
 
 	errorChan := make(chan error, 0)
@@ -48,11 +48,11 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	deploymentMon := NewDeploymentWatchMonitor(ctx, name, namespace, kube, opts)
+	deploymentTracker := NewDeploymentTracker(ctx, name, namespace, kube, opts)
 
 	go func() {
-		fmt.Printf("  goroutine: start deploy/%s monitor watcher\n", name)
-		err := deploymentMon.Watch()
+		fmt.Printf("  goroutine: start deploy/%s tracker\n", name)
+		err := deploymentTracker.Track()
 		if err != nil {
 			errorChan <- err
 		} else {
@@ -61,108 +61,108 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 	}()
 
 	if debug() {
-		fmt.Printf("  deploy/%s: for-select deploymentWatchMonitor channels\n", name)
+		fmt.Printf("  deploy/%s: for-select DeploymentTracker channels\n", name)
 	}
 
 	for {
 		select {
-		case <-deploymentMon.Added:
+		case <-deploymentTracker.Added:
 			if debug() {
 				fmt.Printf("    deploy/%s added\n", name)
 			}
 
 			err := feed.Added()
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-		case <-deploymentMon.Completed:
+		case <-deploymentTracker.Completed:
 			if debug() {
 				fmt.Printf("    deploy/%s completed: desired: %d, current: %d/%d, up-to-date: %d, available: %d\n",
 					name,
-					deploymentMon.FinalDeploymentStatus.Replicas,
-					deploymentMon.FinalDeploymentStatus.ReadyReplicas,
-					deploymentMon.FinalDeploymentStatus.UnavailableReplicas,
-					deploymentMon.FinalDeploymentStatus.UpdatedReplicas,
-					deploymentMon.FinalDeploymentStatus.AvailableReplicas,
+					deploymentTracker.FinalDeploymentStatus.Replicas,
+					deploymentTracker.FinalDeploymentStatus.ReadyReplicas,
+					deploymentTracker.FinalDeploymentStatus.UnavailableReplicas,
+					deploymentTracker.FinalDeploymentStatus.UpdatedReplicas,
+					deploymentTracker.FinalDeploymentStatus.AvailableReplicas,
 				)
 			}
 
 			err := feed.Completed()
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-		case reason := <-deploymentMon.Failed:
+		case reason := <-deploymentTracker.Failed:
 			if debug() {
-				fmt.Printf("    deploy/%s failed. Monitor state: `%s`", name, deploymentMon.State)
+				fmt.Printf("    deploy/%s failed. Tracker state: `%s`", name, deploymentTracker.State)
 			}
 
 			err := feed.Failed(reason)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-		case rsName := <-deploymentMon.AddedReplicaSet:
+		case rsName := <-deploymentTracker.AddedReplicaSet:
 			if debug() {
-				fmt.Printf("    deploy/%s got new replicaset `%s`\n", deploymentMon.ResourceName, rsName)
+				fmt.Printf("    deploy/%s got new replicaset `%s`\n", deploymentTracker.ResourceName, rsName)
 			}
 
 			err := feed.AddedReplicaSet(rsName)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-		case podName := <-deploymentMon.AddedPod:
+		case podName := <-deploymentTracker.AddedPod:
 			// TODO add replicaset name
 			if debug() {
-				fmt.Printf("    deploy/%s got new pod `%s`\n", deploymentMon.ResourceName, podName)
+				fmt.Printf("    deploy/%s got new pod `%s`\n", deploymentTracker.ResourceName, podName)
 			}
 
 			err := feed.AddedPod(podName, "", true)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-		case chunk := <-deploymentMon.PodLogChunk:
+		case chunk := <-deploymentTracker.PodLogChunk:
 			// TODO add replicaset name
 			if debug() {
-				fmt.Printf("    deploy/%s pod `%s` log chunk\n", deploymentMon.ResourceName, chunk.PodName)
+				fmt.Printf("    deploy/%s pod `%s` log chunk\n", deploymentTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
 					fmt.Printf("po/%s [%s] %s\n", line.Timestamp, chunk.PodName, line.Data)
 				}
 			}
 
 			err := feed.PodLogChunk(chunk)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-		case podError := <-deploymentMon.PodError:
+		case podError := <-deploymentTracker.PodError:
 			if debug() {
-				fmt.Printf("    deploy/%s pod error: %#v", deploymentMon.ResourceName, podError)
+				fmt.Printf("    deploy/%s pod error: %#v", deploymentTracker.ResourceName, podError)
 			}
 
 			err := feed.PodError(podError)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -177,9 +177,9 @@ func WatchDeploymentRollout(name string, namespace string, kube kubernetes.Inter
 	}
 }
 
-// DeploymentWatchMonitor ...
-type DeploymentWatchMonitor struct {
-	WatchMonitor
+// DeploymentTracker ...
+type DeploymentTracker struct {
+	Tracker
 
 	PreviousManifest *extensions.Deployment
 	CurrentManifest  *extensions.Deployment
@@ -207,18 +207,17 @@ type DeploymentWatchMonitor struct {
 
 	FailedReason chan error
 
-	MonitoredPods []string
+	TrackedPods []string
 }
 
-// NewDeploymentWatchMonitor ...
-func NewDeploymentWatchMonitor(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts WatchOptions) *DeploymentWatchMonitor {
+// NewDeploymentTracker ...
+func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts Options) *DeploymentTracker {
 	if debug() {
-		fmt.Printf("> NewDeploymentWatchMonitor\n")
+		fmt.Printf("> NewDeploymentTracker\n")
 	}
-	return &DeploymentWatchMonitor{
-		WatchMonitor: WatchMonitor{
-			Kube: kube,
-			//Timeout:      opts.Timeout,
+	return &DeploymentTracker{
+		Tracker: Tracker{
+			Kube:         kube,
 			Namespace:    namespace,
 			ResourceName: name,
 			Context:      ctx,
@@ -232,7 +231,7 @@ func NewDeploymentWatchMonitor(ctx context.Context, name, namespace string, kube
 		PodLogChunk:     make(chan *PodLogChunk, 1000),
 		PodError:        make(chan PodError, 0),
 
-		MonitoredPods: make([]string, 0),
+		TrackedPods: make([]string, 0),
 
 		//PodError: make(chan PodError, 0),
 		resourceAdded:    make(chan *extensions.Deployment, 0),
@@ -245,16 +244,16 @@ func NewDeploymentWatchMonitor(ctx context.Context, name, namespace string, kube
 	}
 }
 
-// Watch for deployment rollout process
+// Track for deployment rollout process
 // watch only for one deployment resource with name d.ResourceName within the namespace with name d.Namespace
 // Watcher can wait for namespace creation and then for deployment creation
 // watcher receives added event if deployment is started
 // watch is infinite by default
 // there is option StopOnAvailable — if true, watcher stops after deployment has available status
 // you can define custom stop triggers using custom DeploymentFeed.
-func (d *DeploymentWatchMonitor) Watch() (err error) {
+func (d *DeploymentTracker) Track() (err error) {
 	if debug() {
-		fmt.Printf("> DeploymentWatchMonitor.Watch()\n")
+		fmt.Printf("> DeploymentTracker.Track()\n")
 	}
 
 	go d.runDeploymentInformer()
@@ -299,21 +298,21 @@ func (d *DeploymentWatchMonitor) Watch() (err error) {
 			}
 			d.AddedPod <- pod.Name
 
-			err := d.runPodWatcher(pod.Name)
+			err := d.runPodTracker(pod.Name)
 			if err != nil {
 				return err
 			}
 		case podName := <-d.podDone:
-			monitoredPods := make([]string, 0)
-			for _, name := range d.MonitoredPods {
+			trackedPods := make([]string, 0)
+			for _, name := range d.TrackedPods {
 				if name != podName {
-					monitoredPods = append(monitoredPods, name)
+					trackedPods = append(trackedPods, name)
 				}
 			}
-			d.MonitoredPods = monitoredPods
+			d.TrackedPods = trackedPods
 
 		case <-d.Context.Done():
-			return ErrWatchTimeout
+			return ErrTrackTimeout
 		case err := <-d.errors:
 			return err
 		}
@@ -323,7 +322,7 @@ func (d *DeploymentWatchMonitor) Watch() (err error) {
 }
 
 // runDeploymentInformer watch for deployment events
-func (d *DeploymentWatchMonitor) runDeploymentInformer() {
+func (d *DeploymentTracker) runDeploymentInformer() {
 	client := d.Kube
 
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
@@ -380,7 +379,7 @@ func (d *DeploymentWatchMonitor) runDeploymentInformer() {
 }
 
 // runDeploymentInformer watch for deployment events
-func (d *DeploymentWatchMonitor) runReplicaSetsInformer() {
+func (d *DeploymentTracker) runReplicaSetsInformer() {
 	client := d.Kube
 
 	if d.CurrentManifest == nil {
@@ -449,7 +448,7 @@ func (d *DeploymentWatchMonitor) runReplicaSetsInformer() {
 }
 
 // runDeploymentInformer watch for deployment events
-func (d *DeploymentWatchMonitor) runPodsInformer() {
+func (d *DeploymentTracker) runPodsInformer() {
 	client := d.Kube
 
 	if d.CurrentManifest == nil {
@@ -517,21 +516,21 @@ func (d *DeploymentWatchMonitor) runPodsInformer() {
 	return
 }
 
-func (d *DeploymentWatchMonitor) runPodWatcher(podName string) error {
+func (d *DeploymentTracker) runPodTracker(podName string) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
 
-	pod := NewPodWatchMonitor(d.Context, podName, d.Namespace, d.Kube)
-	d.MonitoredPods = append(d.MonitoredPods, podName)
+	pod := NewPodTracker(d.Context, podName, d.Namespace, d.Kube)
+	d.TrackedPods = append(d.TrackedPods, podName)
 
 	//job.AddedPod <- pod.ResourceName
 
 	go func() {
 		if debug() {
-			fmt.Printf("Starting Deployment's `%s` Pod `%s` monitor\n", d.ResourceName, pod.ResourceName)
+			fmt.Printf("Starting Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, pod.ResourceName)
 		}
 
-		err := pod.Watch()
+		err := pod.Track()
 		if err != nil {
 			errorChan <- err
 		} else {
@@ -539,7 +538,7 @@ func (d *DeploymentWatchMonitor) runPodWatcher(podName string) error {
 		}
 
 		if debug() {
-			fmt.Printf("Done Deployment's `%s` Pod `%s` monitor\n", d.ResourceName, pod.ResourceName)
+			fmt.Printf("Done Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, pod.ResourceName)
 		}
 	}()
 
@@ -567,7 +566,7 @@ func (d *DeploymentWatchMonitor) runPodWatcher(podName string) error {
 	return nil
 }
 
-func (d *DeploymentWatchMonitor) handleDeploymentState(object *extensions.Deployment) (completed bool, err error) {
+func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment) (completed bool, err error) {
 	prevComplete := false
 	// calc new status
 	if d.CurrentManifest != nil {
@@ -636,7 +635,7 @@ func (d *DeploymentWatchMonitor) handleDeploymentState(object *extensions.Deploy
 // 	// }
 // }
 
-func (d *DeploymentWatchMonitor) getReplicaSets() {
+func (d *DeploymentTracker) getReplicaSets() {
 	client := d.Kube
 	_, allOlds, newRs, err := GetAllReplicaSets(d.CurrentManifest, client)
 	if err != nil {
@@ -666,7 +665,7 @@ func (d *DeploymentWatchMonitor) getReplicaSets() {
 	}
 }
 
-// func (d *DeploymentWatchMonitor) watchPods() error {
+// func (d *DeploymentTracker) watchPods() error {
 // 	client := d.Kube
 
 // 	deploymentManifest, err := client.AppsV1beta2().
@@ -703,7 +702,7 @@ func (d *DeploymentWatchMonitor) getReplicaSets() {
 // 			return true, fmt.Errorf("Expected %s to be a *corev1.Pod, got %T", d.ResourceName, e.Object)
 // 		}
 
-// 		for _, pod := range d.MonitoredPods {
+// 		for _, pod := range d.TrackedPods {
 // 			if pod.ResourceName == podObject.Name {
 // 				// Already under monitoring
 // 				return false, nil
@@ -711,7 +710,7 @@ func (d *DeploymentWatchMonitor) getReplicaSets() {
 // 		}
 
 // 		pod := &PodWatchMonitor{
-// 			WatchMonitor: WatchMonitor{
+// 			Tracker: Tracker{
 // 				Kube:         d.Kube,
 // 				Namespace:    d.Namespace,
 // 				ResourceName: podObject.Name,
@@ -722,7 +721,7 @@ func (d *DeploymentWatchMonitor) getReplicaSets() {
 // 			ProcessedContainerLogTimestamps: make(map[string]time.Time),
 // 		}
 
-// 		d.MonitoredPods = append(d.MonitoredPods, pod)
+// 		d.TrackedPods = append(d.TrackedPods, pod)
 
 // 		if debug() {
 // 			fmt.Printf("Starting deployment's `%s` pod `%s` monitor\n", d.ResourceName, d.ResourceName)

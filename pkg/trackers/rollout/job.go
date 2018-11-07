@@ -1,23 +1,24 @@
-package kubedog
+package rollout
 
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/monitor"
+	"github.com/flant/kubedog/pkg/tracker"
 	"k8s.io/client-go/kubernetes"
 )
 
-func WatchJobTillDone(name, namespace string, kube kubernetes.Interface, opts monitor.WatchOptions) error {
-	feed := &monitor.JobFeedProto{
+// TrackJob
+func TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
+	feed := &tracker.JobFeedProto{
 		FailedFunc: func(reason string) error {
 			fmt.Printf("Job `%s` failed: %s\n", name, reason)
 			return nil
 		},
-		PodErrorFunc: func(podError monitor.PodError) error {
+		PodErrorFunc: func(podError tracker.PodError) error {
 			fmt.Printf("Job `%s` Pod `%s` container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return nil
 		},
-		PodLogChunkFunc: func(chunk *monitor.PodLogChunk) error {
+		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
 			// tail -f on multiple files prints similar headers
 			setLogHeader(fmt.Sprintf("==> Job `%s` Pod `%s` container `%s` <==", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
@@ -27,5 +28,5 @@ func WatchJobTillDone(name, namespace string, kube kubernetes.Interface, opts mo
 		},
 	}
 
-	return monitor.MonitorJob(name, namespace, kube, feed, opts)
+	return tracker.TrackJob(name, namespace, kube, feed, opts)
 }

@@ -1,4 +1,4 @@
-package monitor
+package tracker
 
 import (
 	"context"
@@ -40,7 +40,7 @@ type ContainerError struct {
 	ContainerName string
 }
 
-func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, opts WatchOptions) error {
+func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, opts Options) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
 
@@ -51,10 +51,10 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	pod := NewPodWatchMonitor(ctx, name, namespace, kube)
+	pod := NewPodTracker(ctx, name, namespace, kube)
 
 	go func() {
-		err := pod.Watch()
+		err := pod.Track()
 		if err != nil {
 			errorChan <- err
 		} else {
@@ -73,7 +73,7 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 			}
 
 			err := feed.ContainerLogChunk(chunk)
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -89,7 +89,7 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 			if err != nil {
 				return err
 			}
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 
@@ -99,7 +99,7 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 			}
 
 			err := feed.Added()
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 			if err != nil {
@@ -115,7 +115,7 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 			if err != nil {
 				return err
 			}
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 
@@ -128,7 +128,7 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 			if err != nil {
 				return err
 			}
-			if err == StopWatch {
+			if err == StopTrack {
 				return nil
 			}
 
@@ -141,8 +141,8 @@ func MonitorPod(name, namespace string, kube kubernetes.Interface, feed PodFeed,
 	}
 }
 
-type PodWatchMonitor struct {
-	WatchMonitor
+type PodTracker struct {
+	Tracker
 
 	Added             chan struct{}
 	Succeeded         chan struct{}
@@ -150,10 +150,10 @@ type PodWatchMonitor struct {
 	ContainerLogChunk chan *ContainerLogChunk
 	ContainerError    chan ContainerError
 
-	State                           WatchMonitorState
-	ContainerMonitorStates          map[string]WatchMonitorState
+	State                           TrackerState
+	ContainerTrackerStates          map[string]TrackerState
 	ProcessedContainerLogTimestamps map[string]time.Time
-	MonitoredContainers             []string
+	TrackedContainers               []string
 
 	lastObject     *corev1.Pod
 	objectAdded    chan *corev1.Pod
@@ -163,9 +163,9 @@ type PodWatchMonitor struct {
 	errors         chan error
 }
 
-func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubernetes.Interface) *PodWatchMonitor {
-	return &PodWatchMonitor{
-		WatchMonitor: WatchMonitor{
+func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *PodTracker {
+	return &PodTracker{
+		Tracker: Tracker{
 			Kube:         kube,
 			Namespace:    namespace,
 			ResourceName: name,
@@ -178,10 +178,10 @@ func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
-		State: WatchInitial,
-		ContainerMonitorStates:          make(map[string]WatchMonitorState),
+		State: Initial,
+		ContainerTrackerStates:          make(map[string]TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
-		MonitoredContainers:             make([]string, 0),
+		TrackedContainers:               make([]string, 0),
 
 		objectAdded:    make(chan *corev1.Pod, 0),
 		objectModified: make(chan *corev1.Pod, 0),
@@ -191,7 +191,7 @@ func NewPodWatchMonitor(ctx context.Context, name, namespace string, kube kubern
 	}
 }
 
-func (pod *PodWatchMonitor) Watch() error {
+func (pod *PodTracker) Track() error {
 	err := pod.runInformer()
 	if err != nil {
 		return err
@@ -200,13 +200,13 @@ func (pod *PodWatchMonitor) Watch() error {
 	for {
 		select {
 		case containerName := <-pod.containerDone:
-			monitoredContainers := make([]string, 0)
-			for _, name := range pod.MonitoredContainers {
+			trackedContainers := make([]string, 0)
+			for _, name := range pod.TrackedContainers {
 				if name != containerName {
-					monitoredContainers = append(monitoredContainers, name)
+					trackedContainers = append(trackedContainers, name)
 				}
 			}
-			pod.MonitoredContainers = monitoredContainers
+			pod.TrackedContainers = trackedContainers
 
 			done, err := pod.handlePodState(pod.lastObject)
 			if err != nil {
@@ -220,11 +220,11 @@ func (pod *PodWatchMonitor) Watch() error {
 			pod.lastObject = object
 
 			switch pod.State {
-			case WatchInitial:
+			case Initial:
 				pod.State = ResourceAdded
 				pod.Added <- struct{}{}
 
-				err := pod.runContainersWatchers()
+				err := pod.runContainersTrackers()
 				if err != nil {
 					return err
 				}
@@ -251,12 +251,12 @@ func (pod *PodWatchMonitor) Watch() error {
 
 		case <-pod.objectDeleted:
 			if debug() {
-				fmt.Printf("Pod `%s` resource gone: stop watching\n", pod.ResourceName)
+				fmt.Printf("Pod `%s` resource gone: stop tracking\n", pod.ResourceName)
 			}
 			return nil
 
 		case <-pod.Context.Done():
-			return ErrWatchTimeout
+			return ErrTrackTimeout
 
 		case err := <-pod.errors:
 			return err
@@ -264,13 +264,13 @@ func (pod *PodWatchMonitor) Watch() error {
 	}
 }
 
-func (pod *PodWatchMonitor) handlePodState(object *corev1.Pod) (done bool, err error) {
+func (pod *PodTracker) handlePodState(object *corev1.Pod) (done bool, err error) {
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
 	}
 
-	if len(pod.MonitoredContainers) == 0 {
+	if len(pod.TrackedContainers) == 0 {
 		if object.Status.Phase == corev1.PodSucceeded {
 			pod.Succeeded <- struct{}{}
 			done = true
@@ -283,7 +283,7 @@ func (pod *PodWatchMonitor) handlePodState(object *corev1.Pod) (done bool, err e
 	return
 }
 
-func (pod *PodWatchMonitor) handleContainersState(object *corev1.Pod) error {
+func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
 	allContainerStatuses := make([]corev1.ContainerStatus, 0)
 	for _, cs := range object.Status.InitContainerStatuses {
 		allContainerStatuses = append(allContainerStatuses, cs)
@@ -293,10 +293,10 @@ func (pod *PodWatchMonitor) handleContainersState(object *corev1.Pod) error {
 	}
 
 	for _, cs := range allContainerStatuses {
-		oldState := pod.ContainerMonitorStates[cs.Name]
+		oldState := pod.ContainerTrackerStates[cs.Name]
 
 		if cs.State.Waiting != nil {
-			pod.ContainerMonitorStates[cs.Name] = ContainerWaiting
+			pod.ContainerTrackerStates[cs.Name] = ContainerWaiting
 
 			switch cs.State.Waiting.Reason {
 			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff":
@@ -307,15 +307,15 @@ func (pod *PodWatchMonitor) handleContainersState(object *corev1.Pod) error {
 			}
 		}
 		if cs.State.Running != nil {
-			pod.ContainerMonitorStates[cs.Name] = ContainerRunning
+			pod.ContainerTrackerStates[cs.Name] = ContainerRunning
 		}
 		if cs.State.Terminated != nil {
-			pod.ContainerMonitorStates[cs.Name] = ContainerTerminated
+			pod.ContainerTrackerStates[cs.Name] = ContainerTerminated
 		}
 
-		if oldState != pod.ContainerMonitorStates[cs.Name] {
+		if oldState != pod.ContainerTrackerStates[cs.Name] {
 			if debug() {
-				fmt.Printf("Pod `%s` container `%s` state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerMonitorStates[cs.Name])
+				fmt.Printf("Pod `%s` container `%s` state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerTrackerStates[cs.Name])
 			}
 		}
 	}
@@ -323,7 +323,7 @@ func (pod *PodWatchMonitor) handleContainersState(object *corev1.Pod) error {
 	return nil
 }
 
-func (pod *PodWatchMonitor) followContainerLogs(containerName string) error {
+func (pod *PodTracker) followContainerLogs(containerName string) error {
 	req := pod.Kube.Core().
 		Pods(pod.Namespace).
 		GetLogs(pod.ResourceName, &corev1.PodLogOptions{
@@ -380,7 +380,7 @@ func (pod *PodWatchMonitor) followContainerLogs(containerName string) error {
 
 		select {
 		case <-pod.Context.Done():
-			return ErrWatchTimeout
+			return ErrTrackTimeout
 		default:
 		}
 	}
@@ -388,30 +388,30 @@ func (pod *PodWatchMonitor) followContainerLogs(containerName string) error {
 	return nil
 }
 
-func (pod *PodWatchMonitor) watchContainer(containerName string) error {
+func (pod *PodTracker) trackContainer(containerName string) error {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			state := pod.ContainerMonitorStates[containerName]
+			state := pod.ContainerTrackerStates[containerName]
 
 			switch state {
 			case ContainerRunning, ContainerTerminated:
 				return pod.followContainerLogs(containerName)
-			case WatchInitial, ContainerWaiting:
+			case Initial, ContainerWaiting:
 			default:
-				return fmt.Errorf("unknown Pod's `%s` Container `%s` watch state `%s`", pod.ResourceName, containerName, state)
+				return fmt.Errorf("unknown Pod's `%s` Container `%s` tracker state `%s`", pod.ResourceName, containerName, state)
 			}
 
 		case <-pod.Context.Done():
-			return ErrWatchTimeout
+			return ErrTrackTimeout
 		}
 	}
 }
 
-func (pod *PodWatchMonitor) runContainersWatchers() error {
+func (pod *PodTracker) runContainersTrackers() error {
 	podManifest, err := pod.Kube.Core().
 		Pods(pod.Namespace).
 		Get(pod.ResourceName, metav1.GetOptions{})
@@ -429,21 +429,21 @@ func (pod *PodWatchMonitor) runContainersWatchers() error {
 	for i := range allContainersNames {
 		containerName := allContainersNames[i]
 
-		pod.ContainerMonitorStates[containerName] = WatchInitial
-		pod.MonitoredContainers = append(pod.MonitoredContainers, containerName)
+		pod.ContainerTrackerStates[containerName] = Initial
+		pod.TrackedContainers = append(pod.TrackedContainers, containerName)
 
 		go func() {
 			if debug() {
-				fmt.Printf("Starting to watch Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
+				fmt.Printf("Starting to track Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
 			}
 
-			err := pod.watchContainer(containerName)
+			err := pod.trackContainer(containerName)
 			if err != nil {
 				pod.errors <- err
 			}
 
 			if debug() {
-				fmt.Printf("Done watch Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
+				fmt.Printf("Done tracking Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
 			}
 
 			pod.containerDone <- containerName
@@ -453,7 +453,7 @@ func (pod *PodWatchMonitor) runContainersWatchers() error {
 	return nil
 }
 
-func (pod *PodWatchMonitor) runInformer() error {
+func (pod *PodTracker) runInformer() error {
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
 		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String()
 		return options
