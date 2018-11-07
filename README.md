@@ -201,6 +201,6 @@ Import package:
 import "github.com/flant/kubedog/pkg/tracker"
 ```
 
-## More tracker functions
+## More tracker kinds
 
 More trackers for resource kinds such as `DaemonSet` and `StatefulSet` will be added soon.
