@@ -20,7 +20,7 @@ go install github.com/flant/kubedog/cmd/kubedog
 
 Kubedog cli utility is a tool that can be used to track what is going on with the specified resource.
 
-There are 2 modes of resource tracking: follow and rollout. The commands are `kubedog follow ...` and `kubedog rollout ...` respectively.
+There are 2 modes of resource tracking: follow and rollout. The commands are `kubedog track --follow ...` and `kubedog track --rollout ...` respectively. Rollout is the default mode.
 
 In the rollout and follow modes kubedog will print to the screen logs and other information related to the specified resource. Kubedog aimed to give enough information about resource for the end user, so that no additional kubectl invocation needed to debug and see what is going on with the resource. All data related to the resource will be unified into a single stream of events.
 
@@ -30,31 +30,29 @@ Rollout mode can be used in CI/CD deploy pipeline to make sure that some resourc
 
 ### Examples
 
-#### Follow Pod
+#### Track Pod
 
 Follow specified Pod till it is terminated successfully or failed:
 
 ```
-kubedog follow pod POD_NAME --namespace NAMESPACE --timeout SECONDS
+kubedog track pod POD_NAME --namespace NAMESPACE --follow
 ```
 
-#### Follow Job
+#### Track Job
 
-Follow specified Job till it is terminated successfully or failed:
+Track specified Job till it is terminated successfully or failed:
 
 ```
-kubedog follow job JOB_NAME --namespace NAMESPACE --timeout SECONDS
+kubedog track job JOB_NAME --namespace NAMESPACE --timeout SECONDS
 ```
 
-#### Rollout Deployment
+#### Track Deployment
 
 Track specified Deployment until it is ready or some error occured. In the case of the error such as `ErrImagePull`, `CrashLoopBackOff` or timeout kubedog will exit with non-zero code.
 
 ```
 kubedog rollout deployment DEPLOYMENT_NAME --namespace NAMESPACE --timeout SECONDS
 ```
-
-Deployment follower fill print info till `CTRL-C` interruption.
 
 ## Trackers
 
