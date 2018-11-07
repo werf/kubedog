@@ -1,10 +1,10 @@
-package rollout
+package log
 
 import "fmt"
 
 var currentLogHeader = ""
 
-func setLogHeader(logHeader string) {
+func SetLogHeader(logHeader string) {
 	if currentLogHeader != logHeader {
 		if currentLogHeader != "" {
 			fmt.Println()

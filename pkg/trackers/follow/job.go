@@ -1,4 +1,4 @@
-package rollout
+package follow
 
 import (
 	"fmt"
@@ -16,11 +16,11 @@ func TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Op
 		},
 		SucceededFunc: func() error {
 			fmt.Printf("# Job `%s` succeeded\n", name)
-			return tracker.StopTrack
+			return nil
 		},
 		FailedFunc: func(reason string) error {
 			fmt.Printf("# Job `%s` failed: %s\n", name, reason)
-			return tracker.StopTrack
+			return nil
 		},
 		AddedPodFunc: func(podName string) error {
 			fmt.Printf("# Job `%s` Pod `%s` added\n", name, podName)

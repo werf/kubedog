@@ -84,3 +84,56 @@ func (proto *PodFeedProto) Failed() error {
 	}
 	return nil
 }
+
+type DeploymentFeedProto struct {
+	AddedFunc           func() error
+	CompletedFunc       func() error
+	FailedFunc          func(string) error
+	AddedReplicaSetFunc func(string) error
+	AddedPodFunc        func(string, string, bool) error
+	PodLogChunkFunc     func(*PodLogChunk) error
+	PodErrorFunc        func(PodError) error
+}
+
+func (proto *DeploymentFeedProto) Added() error {
+	if proto.AddedFunc != nil {
+		return proto.AddedFunc()
+	}
+	return nil
+}
+func (proto *DeploymentFeedProto) Completed() error {
+	if proto.CompletedFunc != nil {
+		return proto.CompletedFunc()
+	}
+	return nil
+}
+func (proto *DeploymentFeedProto) Failed(arg string) error {
+	if proto.FailedFunc != nil {
+		return proto.FailedFunc(arg)
+	}
+	return nil
+}
+func (proto *DeploymentFeedProto) AddedReplicaSet(arg string) error {
+	if proto.AddedReplicaSetFunc != nil {
+		return proto.AddedReplicaSetFunc(arg)
+	}
+	return nil
+}
+func (proto *DeploymentFeedProto) AddedPod(arg1 string, arg2 string, arg3 bool) error {
+	if proto.AddedPodFunc != nil {
+		return proto.AddedPodFunc(arg1, arg2, arg3)
+	}
+	return nil
+}
+func (proto *DeploymentFeedProto) PodLogChunk(arg *PodLogChunk) error {
+	if proto.PodLogChunkFunc != nil {
+		return proto.PodLogChunkFunc(arg)
+	}
+	return nil
+}
+func (proto *DeploymentFeedProto) PodError(arg PodError) error {
+	if proto.PodErrorFunc != nil {
+		return proto.PodErrorFunc(arg)
+	}
+	return nil
+}
