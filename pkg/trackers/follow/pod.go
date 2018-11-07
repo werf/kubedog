@@ -1,4 +1,4 @@
-package rollout
+package follow
 
 import (
 	"fmt"
@@ -9,8 +9,6 @@ import (
 )
 
 func TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
-	//FIXME: check pod readyness condition and exit
-
 	feed := &tracker.PodFeedProto{
 		AddedFunc: func() error {
 			fmt.Printf("# Pod `%s` added\n", name)
@@ -18,11 +16,11 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Op
 		},
 		SucceededFunc: func() error {
 			fmt.Printf("# Pod `%s` succeeded\n", name)
-			return tracker.StopTrack
+			return nil
 		},
 		FailedFunc: func() error {
 			fmt.Printf("# Pod `%s` failed\n", name)
-			return tracker.StopTrack
+			return nil
 		},
 		ContainerErrorFunc: func(containerError tracker.ContainerError) error {
 			fmt.Printf("# Pod `%s` Container `%s` error: %s\n", name, containerError.ContainerName, containerError.Message)
