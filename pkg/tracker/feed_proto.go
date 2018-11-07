@@ -50,6 +50,7 @@ type PodFeedProto struct {
 	AddedFunc             func() error
 	SucceededFunc         func() error
 	FailedFunc            func() error
+	ReadyFunc             func() error
 	ContainerLogChunkFunc func(*ContainerLogChunk) error
 	ContainerErrorFunc    func(ContainerError) error
 }
@@ -81,6 +82,12 @@ func (proto *PodFeedProto) Succeeded() error {
 func (proto *PodFeedProto) Failed() error {
 	if proto.FailedFunc != nil {
 		return proto.FailedFunc()
+	}
+	return nil
+}
+func (proto *PodFeedProto) Ready() error {
+	if proto.ReadyFunc != nil {
+		return proto.ReadyFunc()
 	}
 	return nil
 }

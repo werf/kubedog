@@ -247,13 +247,13 @@ func (job *JobTracker) Track() error {
 			return nil
 
 		case podName := <-job.podDone:
-			monitoredPods := make([]string, 0)
+			trackedPods := make([]string, 0)
 			for _, name := range job.TrackedPods {
 				if name != podName {
-					monitoredPods = append(monitoredPods, name)
+					trackedPods = append(trackedPods, name)
 				}
 			}
-			job.TrackedPods = monitoredPods
+			job.TrackedPods = trackedPods
 
 			done, err := job.handleJobState(job.lastObject)
 			if err != nil {
@@ -431,7 +431,7 @@ func (job *JobTracker) runPodTracker(podName string) error {
 
 	go func() {
 		if debug() {
-			fmt.Printf("Starting Job's `%s` Pod `%s` monitor\n", job.ResourceName, pod.ResourceName)
+			fmt.Printf("Starting Job's `%s` Pod `%s` tracker\n", job.ResourceName, pod.ResourceName)
 		}
 
 		err := pod.Track()
@@ -442,7 +442,7 @@ func (job *JobTracker) runPodTracker(podName string) error {
 		}
 
 		if debug() {
-			fmt.Printf("Done Job's `%s` Pod `%s` monitor done\n", job.ResourceName, pod.ResourceName)
+			fmt.Printf("Done Job's `%s` Pod `%s` tracker done\n", job.ResourceName, pod.ResourceName)
 		}
 	}()
 
@@ -458,6 +458,7 @@ func (job *JobTracker) runPodTracker(podName string) error {
 			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
+			case <-pod.Ready:
 			case err := <-errorChan:
 				job.errors <- err
 				return

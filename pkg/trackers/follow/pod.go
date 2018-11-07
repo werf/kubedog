@@ -22,6 +22,10 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Op
 			fmt.Printf("# Pod `%s` failed\n", name)
 			return nil
 		},
+		ReadyFunc: func() error {
+			fmt.Printf("# Pod `%s` ready\n", name)
+			return nil
+		},
 		ContainerErrorFunc: func(containerError tracker.ContainerError) error {
 			fmt.Printf("# Pod `%s` Container `%s` error: %s\n", name, containerError.ContainerName, containerError.Message)
 			return nil

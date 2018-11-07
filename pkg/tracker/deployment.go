@@ -556,6 +556,7 @@ func (d *DeploymentTracker) runPodTracker(podName string) error {
 				d.PodError <- podError
 			case <-pod.Succeeded:
 			case <-pod.Failed:
+			case <-pod.Ready:
 			case err := <-errorChan:
 				d.errors <- err
 				return
