@@ -21,6 +21,7 @@ type PodFeed interface {
 	Added() error
 	Succeeded() error
 	Failed() error
+	Ready() error
 	ContainerLogChunk(*ContainerLogChunk) error
 	ContainerError(ContainerError) error
 }
@@ -86,11 +87,11 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, o
 			}
 
 			err := feed.ContainerError(containerError)
-			if err != nil {
-				return err
-			}
 			if err == StopTrack {
 				return nil
+			}
+			if err != nil {
+				return err
 			}
 
 		case <-pod.Added:
@@ -112,11 +113,11 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, o
 			}
 
 			err := feed.Succeeded()
-			if err != nil {
-				return err
-			}
 			if err == StopTrack {
 				return nil
+			}
+			if err != nil {
+				return err
 			}
 
 		case <-pod.Failed:
@@ -125,11 +126,24 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, o
 			}
 
 			err := feed.Failed()
+			if err == StopTrack {
+				return nil
+			}
 			if err != nil {
 				return err
 			}
+
+		case <-pod.Ready:
+			if debug() {
+				fmt.Printf("Pod `%s` ready\n", pod.ResourceName)
+			}
+
+			err := feed.Ready()
 			if err == StopTrack {
 				return nil
+			}
+			if err != nil {
+				return err
 			}
 
 		case err := <-errorChan:
@@ -147,6 +161,7 @@ type PodTracker struct {
 	Added             chan struct{}
 	Succeeded         chan struct{}
 	Failed            chan struct{}
+	Ready             chan struct{}
 	ContainerLogChunk chan *ContainerLogChunk
 	ContainerError    chan ContainerError
 
@@ -175,6 +190,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		Added:             make(chan struct{}, 0),
 		Succeeded:         make(chan struct{}, 0),
 		Failed:            make(chan struct{}, 0),
+		Ready:             make(chan struct{}, 0),
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
@@ -268,6 +284,12 @@ func (pod *PodTracker) handlePodState(object *corev1.Pod) (done bool, err error)
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
+	}
+
+	for _, cond := range object.Status.Conditions {
+		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+			pod.Ready <- struct{}{}
+		}
 	}
 
 	if len(pod.TrackedContainers) == 0 {
