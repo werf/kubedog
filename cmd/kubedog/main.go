@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/flant/kubedog/pkg/kube"
-	"github.com/flant/kubedog/pkg/kubedog"
-	"github.com/flant/kubedog/pkg/monitor"
+	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/trackers/rollout"
 	"github.com/spf13/cobra"
 )
 
@@ -20,58 +20,63 @@ func main() {
 
 	var namespace string
 	var timeoutSeconds uint
+	var subCmd *cobra.Command
+
+	makeTrackerOptions := func() tracker.Options {
+		return tracker.Options{Timeout: time.Second * time.Duration(timeoutSeconds)}
+	}
 
 	rootCmd := &cobra.Command{Use: "kubedog"}
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
 	rootCmd.PersistentFlags().UintVarP(&timeoutSeconds, "timeout", "t", 300, "watch timeout in seconds")
 
-	watchCmd := &cobra.Command{Use: "watch"}
-	rootCmd.AddCommand(watchCmd)
+	subCmd = &cobra.Command{Use: "rollout"}
+	rootCmd.AddCommand(subCmd)
 
 	jobCmd := &cobra.Command{
 		Use:   "job NAME",
-		Short: "Watch job until job terminated",
+		Short: "Track Job rollout (until Job done)",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := kubedog.WatchJobTillDone(name, namespace, kube.Kubernetes, monitor.WatchOptions{Timeout: time.Second * time.Duration(timeoutSeconds)})
+			err := rollout.TrackJob(name, namespace, kube.Kubernetes, makeTrackerOptions())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error watching job `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintf(os.Stderr, "Error tracking Job `%s` rollout in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},
 	}
-	watchCmd.AddCommand(jobCmd)
+	subCmd.AddCommand(jobCmd)
 
 	deploymentCmd := &cobra.Command{
 		Use:   "deployment NAME",
-		Short: "Watch deployment until deployment is ready",
+		Short: "Track Deployment rollout (until Deployment ready)",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := kubedog.WatchDeploymentTillReady(name, namespace, kube.Kubernetes)
+			err := rollout.TrackDeployment(name, namespace, kube.Kubernetes, makeTrackerOptions())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error watching deployment `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintf(os.Stderr, "Error tracking Deployment `%s` rollout in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},
 	}
-	watchCmd.AddCommand(deploymentCmd)
+	subCmd.AddCommand(deploymentCmd)
 
 	podCmd := &cobra.Command{
 		Use:   "pod NAME",
-		Short: "Watch pod",
+		Short: "Track Pod rollout (until Pod ready)",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := kubedog.WatchPodTillDone(name, namespace, kube.Kubernetes, monitor.WatchOptions{Timeout: time.Second * time.Duration(timeoutSeconds)})
+			err := rollout.TrackPod(name, namespace, kube.Kubernetes, makeTrackerOptions())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error watching pod `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintf(os.Stderr, "Error tracking Pod `%s` rollout in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},
 	}
-	watchCmd.AddCommand(podCmd)
+	subCmd.AddCommand(podCmd)
 
 	err = rootCmd.Execute()
 	if err != nil {

@@ -1,14 +1,14 @@
-package kubedog
+package rollout
 
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/monitor"
+	"github.com/flant/kubedog/pkg/tracker"
 	"k8s.io/client-go/kubernetes"
 )
 
-func WatchPodTillDone(name, namespace string, kube kubernetes.Interface, opts monitor.WatchOptions) error {
-	feed := &monitor.PodFeedProto{
+func TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
+	feed := &tracker.PodFeedProto{
 		AddedFunc: func() error {
 			fmt.Printf("Pod `%s` added\n", name)
 			return nil
@@ -21,11 +21,11 @@ func WatchPodTillDone(name, namespace string, kube kubernetes.Interface, opts mo
 			fmt.Printf("Pod `%s` failed\n", name)
 			return nil
 		},
-		ContainerErrorFunc: func(containerError monitor.ContainerError) error {
+		ContainerErrorFunc: func(containerError tracker.ContainerError) error {
 			fmt.Printf("Pod `%s` container `%s` error: %s\n", name, containerError.ContainerName, containerError.Message)
 			return nil
 		},
-		ContainerLogChunkFunc: func(chunk *monitor.ContainerLogChunk) error {
+		ContainerLogChunkFunc: func(chunk *tracker.ContainerLogChunk) error {
 			setLogHeader(fmt.Sprintf("==> Pod `%s` container `%s` <==", name, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
@@ -34,5 +34,5 @@ func WatchPodTillDone(name, namespace string, kube kubernetes.Interface, opts mo
 		},
 	}
 
-	return monitor.MonitorPod(name, namespace, kube, feed, opts)
+	return tracker.TrackPod(name, namespace, kube, feed, opts)
 }
