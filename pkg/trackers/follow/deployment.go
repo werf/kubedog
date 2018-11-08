@@ -10,16 +10,16 @@ import (
 
 func TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.DeploymentFeedProto{
-		AddedFunc: func(completed bool) error {
-			if completed {
-				fmt.Printf("# Deployment `%s` added (completed)\n", name)
+		AddedFunc: func(ready bool) error {
+			if ready {
+				fmt.Printf("# Deployment `%s` added (ready)\n", name)
 			} else {
 				fmt.Printf("# Deployment `%s` added\n", name)
 			}
 			return nil
 		},
-		CompletedFunc: func() error {
-			fmt.Printf("# Deployment `%s` completed\n", name)
+		ReadyFunc: func() error {
+			fmt.Printf("# Deployment `%s` ready\n", name)
 			return nil
 		},
 		FailedFunc: func(reason string) error {
