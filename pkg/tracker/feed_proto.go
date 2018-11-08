@@ -94,7 +94,7 @@ func (proto *PodFeedProto) Ready() error {
 
 type DeploymentFeedProto struct {
 	AddedFunc           func(bool) error
-	CompletedFunc       func() error
+	ReadyFunc           func() error
 	FailedFunc          func(string) error
 	AddedReplicaSetFunc func(string) error
 	AddedPodFunc        func(string, string, bool) error
@@ -102,15 +102,15 @@ type DeploymentFeedProto struct {
 	PodErrorFunc        func(PodError) error
 }
 
-func (proto *DeploymentFeedProto) Added(completed bool) error {
+func (proto *DeploymentFeedProto) Added(ready bool) error {
 	if proto.AddedFunc != nil {
-		return proto.AddedFunc(completed)
+		return proto.AddedFunc(ready)
 	}
 	return nil
 }
-func (proto *DeploymentFeedProto) Completed() error {
-	if proto.CompletedFunc != nil {
-		return proto.CompletedFunc()
+func (proto *DeploymentFeedProto) Ready() error {
+	if proto.ReadyFunc != nil {
+		return proto.ReadyFunc()
 	}
 	return nil
 }

@@ -19,13 +19,19 @@ import (
 
 // DeploymentFeed interface for rollout process callbacks
 type DeploymentFeed interface {
-	Added(completed bool) error
-	Completed() error
+	Added(ready bool) error
+	Ready() error
 	Failed(reason string) error
 	AddedReplicaSet(rsName string) error
 	AddedPod(podName string, rsName string, isNew bool) error
 	PodLogChunk(*PodLogChunk) error
 	PodError(PodError) error
+}
+
+type ReplicaSetPod struct {
+	Name   string
+	RsName string
+	RsNew  bool
 }
 
 // TrackDeployment is for monitor deployment rollout
@@ -62,12 +68,12 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 
 	for {
 		select {
-		case completed := <-deploymentTracker.Added:
+		case isReady := <-deploymentTracker.Added:
 			if debug() {
 				fmt.Printf("    deploy/%s added\n", name)
 			}
 
-			err := feed.Added(completed)
+			err := feed.Added(isReady)
 			if err == StopTrack {
 				return nil
 			}
@@ -75,9 +81,9 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 				return err
 			}
 
-		case <-deploymentTracker.Completed:
+		case <-deploymentTracker.Ready:
 			if debug() {
-				fmt.Printf("    deploy/%s completed: desired: %d, current: %d/%d, up-to-date: %d, available: %d\n",
+				fmt.Printf("    deploy/%s ready: desired: %d, current: %d/%d, up-to-date: %d, available: %d\n",
 					name,
 					deploymentTracker.FinalDeploymentStatus.Replicas,
 					deploymentTracker.FinalDeploymentStatus.ReadyReplicas,
@@ -87,7 +93,7 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 				)
 			}
 
-			err := feed.Completed()
+			err := feed.Ready()
 			if err == StopTrack {
 				return nil
 			}
@@ -121,13 +127,12 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 				return err
 			}
 
-		case podName := <-deploymentTracker.AddedPod:
-			// TODO add replicaset name
+		case rsPod := <-deploymentTracker.AddedPod:
 			if debug() {
-				fmt.Printf("    deploy/%s got new pod `%s`\n", deploymentTracker.ResourceName, podName)
+				fmt.Printf("    deploy/%s got new pod `%s`\n", deploymentTracker.ResourceName, rsPod.Name)
 			}
 
-			err := feed.AddedPod(podName, "", true)
+			err := feed.AddedPod(rsPod.Name, rsPod.RsName, rsPod.RsNew)
 			if err == StopTrack {
 				return nil
 			}
@@ -136,7 +141,6 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 			}
 
 		case chunk := <-deploymentTracker.PodLogChunk:
-			// TODO add replicaset name
 			if debug() {
 				fmt.Printf("    deploy/%s pod `%s` log chunk\n", deploymentTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
@@ -179,17 +183,18 @@ type DeploymentTracker struct {
 
 	PreviousManifest *extensions.Deployment
 	CurrentManifest  *extensions.Deployment
-	CurrentComplete  bool
+	CurrentReady     bool
 
 	State                 string
 	Conditions            []string
 	FinalDeploymentStatus extensions.DeploymentStatus
+	NewReplicaSetName     string
 
 	Added           chan bool
-	Completed       chan bool
+	Ready           chan bool
 	Failed          chan string
 	AddedReplicaSet chan string
-	AddedPod        chan string
+	AddedPod        chan ReplicaSetPod
 	PodLogChunk     chan *PodLogChunk
 	PodError        chan PodError
 
@@ -220,10 +225,10 @@ func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kube
 		},
 
 		Added:           make(chan bool, 0),
-		Completed:       make(chan bool, 1),
+		Ready:           make(chan bool, 1),
 		Failed:          make(chan string, 1),
 		AddedReplicaSet: make(chan string, 10),
-		AddedPod:        make(chan string, 10),
+		AddedPod:        make(chan ReplicaSetPod, 10),
 		PodLogChunk:     make(chan *PodLogChunk, 1000),
 		PodError:        make(chan PodError, 0),
 
@@ -258,32 +263,32 @@ func (d *DeploymentTracker) Track() (err error) {
 		select {
 		// getOrWait returns existed deployment or a new deployment over d.ResourceAvailable channel
 		case object := <-d.resourceAdded:
-			complete, err := d.handleDeploymentState(object)
+			ready, err := d.handleDeploymentState(object)
 			if err != nil {
 				fmt.Printf("handle deployment state error: %v", err)
 				return err
 			}
 			if debug() {
-				fmt.Printf("deployment `%s` initial complete state: %v\n", d.ResourceName, complete)
+				fmt.Printf("deployment `%s` initial ready state: %v\n", d.ResourceName, ready)
 			}
 
 			switch d.State {
 			case "":
 				d.State = "Started"
-				d.Added <- complete
+				d.Added <- ready
 			}
 
 			d.runReplicaSetsInformer()
 			d.runPodsInformer()
 
 		case object := <-d.resourceModified:
-			complete, err := d.handleDeploymentState(object)
+			ready, err := d.handleDeploymentState(object)
 			if err != nil {
 				return err
 			}
-			if complete {
-				d.Completed <- true
-				// ROLLOUT mode: tracker stops just after deployment set to complete.
+			if ready {
+				d.Ready <- true
+				// ROLLOUT mode: tracker stops just after deployment set to ready.
 				return nil
 			}
 		case <-d.resourceDeleted:
@@ -294,12 +299,29 @@ func (d *DeploymentTracker) Track() (err error) {
 			if debug() {
 				fmt.Printf("rs/%s added\n", rs.Name)
 			}
+			d.NewReplicaSetName = rs.Name
 			d.AddedReplicaSet <- rs.Name
 		case pod := <-d.podAdded:
 			if debug() {
 				fmt.Printf("po/%s added\n", pod.Name)
 			}
-			d.AddedPod <- pod.Name
+
+			rsName := ""
+			for _, ref := range pod.OwnerReferences {
+				if ref.Kind == "ReplicaSet" {
+					rsName = ref.Name
+				}
+			}
+
+			rsNew := rsName == d.NewReplicaSetName
+
+			rsPod := ReplicaSetPod{
+				Name:   pod.Name,
+				RsName: rsName,
+				RsNew: rsNew,
+			}
+
+			d.AddedPod <- rsPod
 
 			err := d.runPodTracker(pod.Name)
 			if err != nil {
@@ -526,8 +548,6 @@ func (d *DeploymentTracker) runPodTracker(podName string) error {
 	pod := NewPodTracker(d.Context, podName, d.Namespace, d.Kube)
 	d.TrackedPods = append(d.TrackedPods, podName)
 
-	//job.AddedPod <- pod.ResourceName
-
 	go func() {
 		if debug() {
 			fmt.Printf("Starting Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, pod.ResourceName)
@@ -570,29 +590,29 @@ func (d *DeploymentTracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment) (completed bool, err error) {
+func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment) (ready bool, err error) {
 	if debug() {
 		fmt.Printf("%s\n%s\n", getDeploymentStatus(d.Kube, d.CurrentManifest, object), getReplicaSetsStatus(d.Kube, object))
 	}
 
-	prevComplete := false
+	prevReady := false
 	newStatus := object.Status
 	// calc new status
 	if d.CurrentManifest != nil {
-		prevComplete = d.CurrentComplete
-		d.CurrentComplete = utils.DeploymentComplete(d.CurrentManifest, &newStatus)
+		prevReady = d.CurrentReady
+		d.CurrentReady = utils.DeploymentComplete(d.CurrentManifest, &newStatus)
 		d.PreviousManifest = d.CurrentManifest
 	} else {
-		d.CurrentComplete = utils.DeploymentComplete(object, &newStatus)
+		d.CurrentReady = utils.DeploymentComplete(object, &newStatus)
 	}
 	d.CurrentManifest = object
 
-	if prevComplete == false && d.CurrentComplete == true {
-		completed = true
+	if prevReady == false && d.CurrentReady == true {
+		ready = true
 	}
 
-	if completed && debug() {
-		fmt.Printf("Deployment COMPLETE.\n")
+	if ready && debug() {
+		fmt.Printf("Deployment READY.\n")
 	}
 
 	return
