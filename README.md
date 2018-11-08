@@ -28,31 +28,7 @@ Follow mode can be used as simple `tail -f` tool, but for kubernetes resources.
 
 Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog ensures to exit with non-zero error code if something wrong with the specified resource.
 
-### Examples
-
-#### Track Pod
-
-Follow specified Pod till it is terminated successfully or failed:
-
-```
-kubedog track pod POD_NAME --namespace NAMESPACE --follow
-```
-
-#### Track Job
-
-Track specified Job till it is terminated successfully or failed:
-
-```
-kubedog track job JOB_NAME --namespace NAMESPACE --timeout SECONDS
-```
-
-#### Track Deployment
-
-Track specified Deployment until it is ready or some error occured. In the case of the error such as `ErrImagePull`, `CrashLoopBackOff` or timeout kubedog will exit with non-zero code.
-
-```
-kubedog rollout deployment DEPLOYMENT_NAME --namespace NAMESPACE --timeout SECONDS
-```
+See `kubedog --help` for more info.
 
 ## Trackers
 
