@@ -20,13 +20,15 @@ go install github.com/flant/kubedog/cmd/kubedog
 
 Kubedog cli utility is a tool that can be used to track what is going on with the specified resource.
 
-There are 2 modes of resource tracking: follow and rollout. The commands are `kubedog track --follow ...` and `kubedog track --rollout ...` respectively. Rollout is the default mode.
+There are 2 modes of resource tracking: follow and rollout. The commands are `kubedog follow ...` and `kubedog rollout track ...` respectively.
 
 In the rollout and follow modes kubedog will print to the screen logs and other information related to the specified resource. Kubedog aimed to give enough information about resource for the end user, so that no additional kubectl invocation needed to debug and see what is going on with the resource. All data related to the resource will be unified into a single stream of events.
 
 Follow mode can be used as simple `tail -f` tool, but for kubernetes resources.
 
 Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog ensures to exit with non-zero error code if something wrong with the specified resource.
+
+![Demo Animation](doc/cli-1.gif)
 
 See `kubedog --help` for more info.
 
