@@ -8,9 +8,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
-	//FIXME: check pod readyness condition and exit
-
+func TrackPodTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.PodFeedProto{
 		AddedFunc: func() error {
 			fmt.Printf("# Pod `%s` added\n", name)

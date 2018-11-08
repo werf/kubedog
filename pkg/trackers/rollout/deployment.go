@@ -9,8 +9,8 @@ import (
 	"github.com/flant/kubedog/pkg/tracker"
 )
 
-// TrackDeployment ...
-func TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
+// TrackDeploymentTillReady ...
+func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.DeploymentFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
@@ -23,7 +23,7 @@ func TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tra
 		},
 		ReadyFunc: func() error {
 			fmt.Printf("# Deployment `%s` ready\n", name)
-			return nil
+			return tracker.StopTrack
 		},
 		FailedFunc: func(reason string) error {
 			fmt.Printf("# Deployment `%s` failed: %s\n", name, reason)

@@ -8,7 +8,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
+func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.JobFeedProto{
 		AddedFunc: func() error {
 			fmt.Printf("# Job `%s` added\n", name)
