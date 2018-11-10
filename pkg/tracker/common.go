@@ -35,9 +35,9 @@ type Tracker struct {
 }
 
 type Options struct {
-	ParentContext   context.Context
-	Timeout         time.Duration
-	WaitForResource bool
+	ParentContext context.Context
+	Timeout       time.Duration
+	LogsFromTime  time.Time
 }
 
 func debug() bool {

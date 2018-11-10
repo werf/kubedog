@@ -39,11 +39,11 @@ func TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tra
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.PodError) error {
-			fmt.Printf("# Job `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Printf("# Deployment `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return nil
 		},
 		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
-			log.SetLogHeader(fmt.Sprintf("# Job `%s` Pod `%s` Container `%s`", name, chunk.PodName, chunk.ContainerName))
+			log.SetLogHeader(fmt.Sprintf("# Deployment `%s` Pod `%s` Container `%s`", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}

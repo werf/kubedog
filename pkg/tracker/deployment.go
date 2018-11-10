@@ -3,6 +3,7 @@ package tracker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
@@ -144,7 +145,7 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 			if debug() {
 				fmt.Printf("    deploy/%s pod `%s` log chunk\n", deploymentTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
-					fmt.Printf("po/%s [%s] %s\n", line.Timestamp, chunk.PodName, line.Data)
+					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Data)
 				}
 			}
 
@@ -158,7 +159,7 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 
 		case podError := <-deploymentTracker.PodError:
 			if debug() {
-				fmt.Printf("    deploy/%s pod error: %#v", deploymentTracker.ResourceName, podError)
+				fmt.Printf("    deploy/%s pod error: %s\n", deploymentTracker.ResourceName, podError.Message)
 			}
 
 			err := feed.PodError(podError)
@@ -180,6 +181,7 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 // DeploymentTracker ...
 type DeploymentTracker struct {
 	Tracker
+	LogsFromTime time.Time
 
 	PreviousManifest *extensions.Deployment
 	CurrentManifest  *extensions.Deployment
@@ -224,6 +226,8 @@ func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kube
 			Context:      ctx,
 		},
 
+		LogsFromTime: opts.LogsFromTime,
+
 		Added:           make(chan bool, 0),
 		Ready:           make(chan bool, 1),
 		Failed:          make(chan string, 1),
@@ -245,7 +249,7 @@ func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kube
 	}
 }
 
-// Track for deployment rollout process
+// Track starts tracking of deployment rollout process.
 // watch only for one deployment resource with name d.ResourceName within the namespace with name d.Namespace
 // Watcher can wait for namespace creation and then for deployment creation
 // watcher receives added event if deployment is started
@@ -318,7 +322,7 @@ func (d *DeploymentTracker) Track() (err error) {
 			rsPod := ReplicaSetPod{
 				Name:   pod.Name,
 				RsName: rsName,
-				RsNew: rsNew,
+				RsNew:  rsNew,
 			}
 
 			d.AddedPod <- rsPod
@@ -386,6 +390,10 @@ func (d *DeploymentTracker) runDeploymentInformer() {
 				d.resourceModified <- object
 			case watch.Deleted:
 				d.resourceDeleted <- object
+			case watch.Error:
+				err := fmt.Errorf("deployment error: %v", e.Object)
+				//d.errors <- err
+				return true, err
 			}
 
 			return false, nil
@@ -546,11 +554,14 @@ func (d *DeploymentTracker) runPodTracker(podName string) error {
 	doneChan := make(chan struct{}, 0)
 
 	pod := NewPodTracker(d.Context, podName, d.Namespace, d.Kube)
+	if !d.LogsFromTime.IsZero() {
+		pod.LogsFromTime = d.LogsFromTime
+	}
 	d.TrackedPods = append(d.TrackedPods, podName)
 
 	go func() {
 		if debug() {
-			fmt.Printf("Starting Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, pod.ResourceName)
+			fmt.Printf("Starting Deployment's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, pod.ResourceName, pod.State)
 		}
 
 		err := pod.Track()
@@ -574,6 +585,7 @@ func (d *DeploymentTracker) runPodTracker(podName string) error {
 			case containerError := <-pod.ContainerError:
 				podError := PodError{ContainerError: containerError, PodName: pod.ResourceName}
 				d.PodError <- podError
+			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
 			case <-pod.Ready:

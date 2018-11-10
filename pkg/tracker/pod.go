@@ -169,6 +169,7 @@ type PodTracker struct {
 	ContainerTrackerStates          map[string]TrackerState
 	ProcessedContainerLogTimestamps map[string]time.Time
 	TrackedContainers               []string
+	LogsFromTime                    time.Time
 
 	lastObject     *corev1.Pod
 	objectAdded    chan *corev1.Pod
@@ -198,6 +199,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		ContainerTrackerStates:          make(map[string]TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
 		TrackedContainers:               make([]string, 0),
+		LogsFromTime:                    time.Time{},
 
 		objectAdded:    make(chan *corev1.Pod, 0),
 		objectModified: make(chan *corev1.Pod, 0),
@@ -346,13 +348,19 @@ func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
 }
 
 func (pod *PodTracker) followContainerLogs(containerName string) error {
+	logOpts := &corev1.PodLogOptions{
+		Container:  containerName,
+		Timestamps: true,
+		Follow:     true,
+	}
+	if !pod.LogsFromTime.IsZero() {
+		logOpts.SinceTime = &metav1.Time{
+			Time: pod.LogsFromTime,
+		}
+	}
 	req := pod.Kube.Core().
 		Pods(pod.Namespace).
-		GetLogs(pod.ResourceName, &corev1.PodLogOptions{
-			Container:  containerName,
-			Timestamps: true,
-			Follow:     true,
-		})
+		GetLogs(pod.ResourceName, logOpts)
 
 	readCloser, err := req.Stream()
 	if err != nil {
