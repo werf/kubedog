@@ -1,10 +1,19 @@
 package log
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
-var currentLogHeader = ""
+var (
+	mutex            = &sync.Mutex{}
+	currentLogHeader = ""
+)
 
 func SetLogHeader(logHeader string) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	if currentLogHeader != logHeader {
 		if currentLogHeader != "" {
 			fmt.Println()
