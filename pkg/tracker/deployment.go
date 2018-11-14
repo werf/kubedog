@@ -54,7 +54,9 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 	deploymentTracker := NewDeploymentTracker(ctx, name, namespace, kube, opts)
 
 	go func() {
-		fmt.Printf("  goroutine: start deploy/%s tracker\n", name)
+		if debug() {
+			fmt.Printf("  goroutine: start deploy/%s tracker\n", name)
+		}
 		err := deploymentTracker.Track()
 		if err != nil {
 			errorChan <- err
@@ -269,7 +271,9 @@ func (d *DeploymentTracker) Track() (err error) {
 		case object := <-d.resourceAdded:
 			ready, err := d.handleDeploymentState(object)
 			if err != nil {
-				fmt.Printf("handle deployment state error: %v", err)
+				if debug() {
+					fmt.Printf("handle deployment state error: %v", err)
+				}
 				return err
 			}
 			if debug() {
