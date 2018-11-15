@@ -24,16 +24,6 @@ type JobFeed interface {
 	PodError(PodError) error
 }
 
-type PodLogChunk struct {
-	*ContainerLogChunk
-	PodName string
-}
-
-type PodError struct {
-	ContainerError
-	PodName string
-}
-
 func TrackJob(name, namespace string, kube kubernetes.Interface, feed JobFeed, opts Options) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)

@@ -20,7 +20,7 @@ func TrackPodTillReady(name, namespace string, kube kubernetes.Interface, opts t
 		},
 		FailedFunc: func() error {
 			fmt.Printf("# Pod `%s` failed\n", name)
-			return tracker.StopTrack
+			return fmt.Errorf("failed")
 		},
 		ReadyFunc: func() error {
 			fmt.Printf("# Pod `%s` ready\n", name)
@@ -31,7 +31,7 @@ func TrackPodTillReady(name, namespace string, kube kubernetes.Interface, opts t
 			return nil
 		},
 		ContainerLogChunkFunc: func(chunk *tracker.ContainerLogChunk) error {
-			log.SetLogHeader(fmt.Sprintf("# Pod `%s` Container `%s`", name, chunk.ContainerName))
+			log.SetLogHeader(fmt.Sprintf("# Pod `%s` Container `%s` log:", name, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}

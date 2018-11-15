@@ -20,7 +20,7 @@ func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tr
 		},
 		FailedFunc: func(reason string) error {
 			fmt.Printf("# Job `%s` failed: %s\n", name, reason)
-			return tracker.StopTrack
+			return fmt.Errorf("failed: %s", reason)
 		},
 		AddedPodFunc: func(podName string) error {
 			fmt.Printf("# Job `%s` Pod `%s` added\n", name, podName)
@@ -28,10 +28,10 @@ func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tr
 		},
 		PodErrorFunc: func(podError tracker.PodError) error {
 			fmt.Printf("# Job `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
-			return nil
+			return fmt.Errorf("Pod `%s` Container `%s` failed: %s", podError.PodName, podError.ContainerName, podError.Message)
 		},
 		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
-			log.SetLogHeader(fmt.Sprintf("# Job `%s` Pod `%s` Container `%s`", name, chunk.PodName, chunk.ContainerName))
+			log.SetLogHeader(fmt.Sprintf("# Job `%s` Pod `%s` Container `%s` log:", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}

@@ -14,12 +14,12 @@ func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface,
 	feed := &tracker.DeploymentFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
-				fmt.Printf("# Deployment is added as ready.\n")
+				fmt.Printf("# Deployment `%s` ready\n", name)
 				return tracker.StopTrack
-			} else {
-				fmt.Printf("# Deployment is added.\n")
-				return nil
 			}
+
+			fmt.Printf("# Deployment `%s` added\n", name)
+			return nil
 		},
 		ReadyFunc: func() error {
 			fmt.Printf("# Deployment `%s` ready\n", name)
@@ -27,26 +27,40 @@ func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface,
 		},
 		FailedFunc: func(reason string) error {
 			fmt.Printf("# Deployment `%s` failed: %s\n", name, reason)
-			return nil
+			return fmt.Errorf("failed: %s", reason)
 		},
-		AddedReplicaSetFunc: func(rsName string) error {
-			fmt.Printf("# Deployment `%s` ReplicaSet `%s` added\n", name, rsName)
-			return nil
-		},
-		AddedPodFunc: func(podName string, rsName string, isNew bool) error {
-			if isNew {
-				fmt.Printf("# Deployment `%s` Pod `%s` added of new ReplicaSet `%s`\n", name, podName, rsName)
-			} else {
-				fmt.Printf("# Deployment `%s` Pod `%s` added of ReplicaSet `%s`\n", name, podName, rsName)
+		AddedReplicaSetFunc: func(rs tracker.ReplicaSet) error {
+			if !rs.IsNew {
+				return nil
 			}
+
+			fmt.Printf("# Deployment `%s` current ReplicaSet `%s` added\n", name, rs.Name)
+
 			return nil
 		},
-		PodErrorFunc: func(podError tracker.PodError) error {
+		AddedPodFunc: func(pod tracker.ReplicaSetPod) error {
+			if !pod.ReplicaSet.IsNew {
+				return nil
+			}
+
+			fmt.Printf("# Deployment `%s` Pod `%s` added of current ReplicaSet `%s`\n", name, pod.Name, pod.ReplicaSet.Name)
+
+			return nil
+		},
+		PodErrorFunc: func(podError tracker.ReplicaSetPodError) error {
+			if !podError.ReplicaSet.IsNew {
+				return nil
+			}
+
 			fmt.Printf("# Deployment `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
-			return nil
+			return fmt.Errorf("Pod `%s` Container `%s` failed: %s", name, podError.ContainerName, podError.Message)
 		},
-		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
-			log.SetLogHeader(fmt.Sprintf("# Deployment `%s` Pod `%s` Container `%s`", name, chunk.PodName, chunk.ContainerName))
+		PodLogChunkFunc: func(chunk *tracker.ReplicaSetPodLogChunk) error {
+			if !chunk.ReplicaSet.IsNew {
+				return nil
+			}
+
+			log.SetLogHeader(fmt.Sprintf("# Deployment `%s` Pod `%s` Container `%s` log:", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}

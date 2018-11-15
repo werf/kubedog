@@ -40,6 +40,16 @@ type Options struct {
 	LogsFromTime  time.Time
 }
 
+type PodLogChunk struct {
+	*ContainerLogChunk
+	PodName string
+}
+
+type PodError struct {
+	ContainerError
+	PodName string
+}
+
 func debug() bool {
 	return os.Getenv("KUBEDOG_TRACKER_DEBUG") == "1"
 }
