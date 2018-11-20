@@ -3,7 +3,6 @@ package kube
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -18,20 +17,26 @@ var (
 	Kubernetes kubernetes.Interface
 )
 
-func Init() error {
+type InitOptions struct {
+	KubeContext string
+	KubeConfig  string
+}
+
+func Init(opts InitOptions) error {
 	var err error
 	var config *rest.Config
 
 	if isRunningOutOfKubeCluster() {
-		var kubeconfig string
-		if kubeconfig = os.Getenv("KUBECONFIG"); kubeconfig == "" {
-			kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
-		}
-
-		// use the current context in kubeconfig
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		config, err = getConfig(opts.KubeContext, opts.KubeConfig).ClientConfig()
 		if err != nil {
-			return fmt.Errorf("out-of-cluster configuration problem: %s", err)
+			baseErrMsg := fmt.Sprintf("out-of-cluster configuration problem")
+			if opts.KubeConfig != "" {
+				baseErrMsg += ", custom kube config path is %q"
+			}
+			if opts.KubeContext != "" {
+				baseErrMsg += ", custom kube context is %q"
+			}
+			return fmt.Errorf("%s: %s", baseErrMsg, err)
 		}
 	} else {
 		config, err = rest.InClusterConfig()
@@ -47,6 +52,23 @@ func Init() error {
 	Kubernetes = clientset
 
 	return nil
+}
+
+func getConfig(context string, kubeconfig string) clientcmd.ClientConfig {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
+
+	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
+
+	if context != "" {
+		overrides.CurrentContext = context
+	}
+
+	if kubeconfig != "" {
+		rules.ExplicitPath = kubeconfig
+	}
+
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides)
 }
 
 func isRunningOutOfKubeCluster() bool {
