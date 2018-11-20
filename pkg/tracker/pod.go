@@ -441,6 +441,7 @@ func (pod *PodTracker) trackContainer(containerName string) error {
 						fmt.Fprintf(os.Stderr, "Pod `%s` Container `%s` logs streaming error: %s\n", pod.ResourceName, containerName, err)
 					}
 				}
+				return nil
 			case Initial:
 			case ContainerTrackerDone:
 				return nil
