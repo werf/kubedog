@@ -15,13 +15,12 @@ var (
 )
 
 const (
-	Initial             TrackerState = "Initial"
-	ResourceAdded       TrackerState = "ResourceAdded"
-	ResourceSucceeded   TrackerState = "ResourceSucceeded"
-	ResourceFailed      TrackerState = "ResourceFailed"
-	ContainerRunning    TrackerState = "ContainerRunning"
-	ContainerWaiting    TrackerState = "ContainerWaiting"
-	ContainerTerminated TrackerState = "ContainerTerminated"
+	Initial                TrackerState = "Initial"
+	ResourceAdded          TrackerState = "ResourceAdded"
+	ResourceSucceeded      TrackerState = "ResourceSucceeded"
+	ResourceFailed         TrackerState = "ResourceFailed"
+	FollowingContainerLogs TrackerState = "FollowingContainerLogs"
+	ContainerTrackerDone   TrackerState = "ContainerTrackerDone"
 )
 
 type TrackerState string
