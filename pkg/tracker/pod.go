@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -268,9 +269,18 @@ func (pod *PodTracker) Track() error {
 			}
 
 		case <-pod.objectDeleted:
+			keys := []string{}
+			for k := range pod.ContainerTrackerStates {
+				keys = append(keys, k)
+			}
+			for _, k := range keys {
+				pod.ContainerTrackerStates[k] = ContainerTrackerDone
+			}
+
 			if debug() {
 				fmt.Printf("Pod `%s` resource gone: stop tracking\n", pod.ResourceName)
 			}
+
 			return nil
 
 		case <-pod.Context.Done():
@@ -320,8 +330,6 @@ func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
 		oldState := pod.ContainerTrackerStates[cs.Name]
 
 		if cs.State.Waiting != nil {
-			pod.ContainerTrackerStates[cs.Name] = ContainerWaiting
-
 			switch cs.State.Waiting.Reason {
 			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff":
 				pod.ContainerError <- ContainerError{
@@ -330,11 +338,9 @@ func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
 				}
 			}
 		}
-		if cs.State.Running != nil {
-			pod.ContainerTrackerStates[cs.Name] = ContainerRunning
-		}
-		if cs.State.Terminated != nil {
-			pod.ContainerTrackerStates[cs.Name] = ContainerTerminated
+
+		if cs.State.Running != nil || cs.State.Terminated != nil {
+			pod.ContainerTrackerStates[cs.Name] = FollowingContainerLogs
 		}
 
 		if oldState != pod.ContainerTrackerStates[cs.Name] {
@@ -428,9 +434,16 @@ func (pod *PodTracker) trackContainer(containerName string) error {
 			state := pod.ContainerTrackerStates[containerName]
 
 			switch state {
-			case ContainerRunning, ContainerTerminated:
-				return pod.followContainerLogs(containerName)
-			case Initial, ContainerWaiting:
+			case FollowingContainerLogs:
+				err := pod.followContainerLogs(containerName)
+				if err != nil {
+					if debug() {
+						fmt.Fprintf(os.Stderr, "Pod `%s` Container `%s` logs streaming error: %s\n", pod.ResourceName, containerName, err)
+					}
+				}
+			case Initial:
+			case ContainerTrackerDone:
+				return nil
 			default:
 				return fmt.Errorf("unknown Pod's `%s` Container `%s` tracker state `%s`", pod.ResourceName, containerName, state)
 			}
