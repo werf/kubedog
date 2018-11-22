@@ -2,6 +2,7 @@ package kube
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"k8s.io/client-go/kubernetes"
@@ -10,11 +11,13 @@ import (
 )
 
 const (
-	kubeTokenFilePath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	kubeTokenFilePath     = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	kubeNamespaceFilePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 )
 
 var (
-	Kubernetes kubernetes.Interface
+	Kubernetes       kubernetes.Interface
+	DefaultNamespace string
 )
 
 type InitOptions struct {
@@ -27,7 +30,15 @@ func Init(opts InitOptions) error {
 	var config *rest.Config
 
 	if isRunningOutOfKubeCluster() {
-		config, err = getConfig(opts.KubeContext, opts.KubeConfig).ClientConfig()
+		clientConfig := getConfig(opts.KubeContext, opts.KubeConfig)
+
+		ns, _, err := clientConfig.Namespace()
+		if err != nil {
+			return fmt.Errorf("cannot determine default kubernetes namespace: %s", err)
+		}
+		DefaultNamespace = ns
+
+		config, err = clientConfig.ClientConfig()
 		if err != nil {
 			baseErrMsg := fmt.Sprintf("out-of-cluster configuration problem")
 			if opts.KubeConfig != "" {
@@ -43,6 +54,12 @@ func Init(opts InitOptions) error {
 		if err != nil {
 			return fmt.Errorf("in-cluster configuration problem: %s", err)
 		}
+
+		data, err := ioutil.ReadFile(kubeNamespaceFilePath)
+		if err != nil {
+			return fmt.Errorf("in-cluster cofiguration problem: error reading %s: %s", kubeNamespaceFilePath, err)
+		}
+		DefaultNamespace = string(data)
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
