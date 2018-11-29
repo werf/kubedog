@@ -2,6 +2,8 @@
 
 Kubedog is a library and cli utility that allows watching and following kubernetes resources in CI/CD deploy pipelines.
 
+This library is used in the [dapp CI/CD tool](https://github.com/flant/dapp) to track resources during deploy process.
+
 ## Installation
 
 Install library:
