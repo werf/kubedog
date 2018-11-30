@@ -92,6 +92,19 @@ func main() {
 		},
 	})
 	followCmd.AddCommand(&cobra.Command{
+		Use:   "statefulset NAME",
+		Short: "Follow Statefulset",
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			name := args[0]
+			err := follow.TrackStatefulset(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error following Statefulset `%s` in namespace `%s`: %s\n", name, namespace, err)
+				os.Exit(1)
+			}
+		},
+	})
+	followCmd.AddCommand(&cobra.Command{
 		Use:   "pod NAME",
 		Short: "Follow Pod",
 		Args:  cobra.MinimumNArgs(1),
@@ -133,6 +146,20 @@ func main() {
 			err := rollout.TrackDeploymentTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error tracking Deployment `%s` in namespace `%s`: %s\n", name, namespace, err)
+				os.Exit(1)
+			}
+		},
+	})
+
+	trackCmd.AddCommand(&cobra.Command{
+		Use:   "statefulset NAME",
+		Short: "Track Statefulset till ready",
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			name := args[0]
+			err := rollout.TrackStatefulSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error tracking StatefulSet `%s` in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},
