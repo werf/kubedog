@@ -11,7 +11,7 @@ import (
 
 // TrackDeploymentTillReady ...
 func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
-	feed := &tracker.DeploymentFeedProto{
+	feed := &tracker.ControllerFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
 				fmt.Printf("# Deployment `%s` ready\n", name)

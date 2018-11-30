@@ -26,11 +26,12 @@ const (
 type TrackerState string
 
 type Tracker struct {
-	Kube          kubernetes.Interface
-	Namespace     string
-	ResourceName  string
-	Context       context.Context
-	ContextCancel context.CancelFunc
+	Kube             kubernetes.Interface
+	Namespace        string
+	ResourceName     string
+	FullResourceName string // full resource name with resource kind (deploy/superapp
+	Context          context.Context
+	ContextCancel    context.CancelFunc
 }
 
 type Options struct {

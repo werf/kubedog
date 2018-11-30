@@ -4,14 +4,25 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+)
+
+const (
+	// RevisionAnnotation is the revision annotation of a deployment's replica sets which records its rollout sequence
+	RevisionAnnotation = "deployment.kubernetes.io/revision"
+	// TimedOutReason is added in a deployment when its newest replica set fails to show any progress
+	// within the given deadline (progressDeadlineSeconds).
+	TimedOutReason = "ProgressDeadlineExceeded"
 )
 
 //func DeploymentCompleteAll(deployment *extensions.Deployment) {
@@ -42,8 +53,6 @@ func DeploymentProgressing(deployment *extensions.Deployment, newStatus *extensi
 		(newStatusOldReplicas < oldStatusOldReplicas) ||
 		newStatus.AvailableReplicas > deployment.Status.AvailableReplicas
 }
-
-const TimedOutReason = "ProgressDeadlineExceeded"
 
 var nowFn = func() time.Time { return time.Now() }
 
@@ -90,6 +99,19 @@ func GetDeploymentCondition(status extensions.DeploymentStatus, condType extensi
 		}
 	}
 	return nil
+}
+
+// Revision returns the revision number of the input object.
+func Revision(obj runtime.Object) (int64, error) {
+	acc, err := meta.Accessor(obj)
+	if err != nil {
+		return 0, err
+	}
+	v, ok := acc.GetAnnotations()[RevisionAnnotation]
+	if !ok {
+		return 0, nil
+	}
+	return strconv.ParseInt(v, 10, 64)
 }
 
 type rsListFunc func(string, metav1.ListOptions) ([]*extensions.ReplicaSet, error)
@@ -143,6 +165,20 @@ func FindNewReplicaSet(deployment *extensions.Deployment, rsList []*extensions.R
 	}
 	// new ReplicaSet does not exist.
 	return nil, nil
+}
+
+func IsReplicaSetNew(deployment *extensions.Deployment, rsMap map[string]*extensions.ReplicaSet, rsName string) (bool, error) {
+	rsList := []*extensions.ReplicaSet{}
+	for _, rs := range rsMap {
+		rsList = append(rsList, rs)
+	}
+
+	newRs, err := FindNewReplicaSet(deployment, rsList)
+	if err != nil {
+		return false, err
+	}
+
+	return (newRs != nil) && (rsName == newRs.Name), nil
 }
 
 // GetNewReplicaSetTemplate returns the desired PodTemplateSpec for the new ReplicaSet corresponding to the given ReplicaSet.
