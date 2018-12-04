@@ -10,23 +10,23 @@ import (
 )
 
 // TrackDeploymentTillReady ...
-func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
+func TrackStatefulSetTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.ControllerFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
-				fmt.Printf("# Deployment `%s` ready\n", name)
+				fmt.Printf("# StatefulSet `%s` ready\n", name)
 				return tracker.StopTrack
 			}
 
-			fmt.Printf("# Deployment `%s` added\n", name)
+			fmt.Printf("# StatefulSet `%s` added\n", name)
 			return nil
 		},
 		ReadyFunc: func() error {
-			fmt.Printf("# Deployment `%s` ready\n", name)
+			fmt.Printf("# StatefulSet `%s` ready\n", name)
 			return tracker.StopTrack
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# Deployment `%s` failed: %s\n", name, reason)
+			fmt.Printf("# StatefulSet `%s` failed: %s\n", name, reason)
 			return fmt.Errorf("failed: %s", reason)
 		},
 		AddedReplicaSetFunc: func(rs tracker.ReplicaSet) error {
@@ -34,7 +34,7 @@ func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface,
 				return nil
 			}
 
-			fmt.Printf("# Deployment `%s` current ReplicaSet `%s` added\n", name, rs.Name)
+			fmt.Printf("# StatefulSet `%s` current ReplicaSet `%s` added\n", name, rs.Name)
 
 			return nil
 		},
@@ -43,7 +43,7 @@ func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface,
 				return nil
 			}
 
-			fmt.Printf("# Deployment `%s` Pod `%s` added of current ReplicaSet `%s`\n", name, pod.Name, pod.ReplicaSet.Name)
+			fmt.Printf("# StatefulSet `%s` Pod `%s` added of current ReplicaSet `%s`\n", name, pod.Name, pod.ReplicaSet.Name)
 
 			return nil
 		},
@@ -52,7 +52,7 @@ func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface,
 				return nil
 			}
 
-			fmt.Printf("# Deployment `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Printf("# StatefulSet `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return fmt.Errorf("Pod `%s` Container `%s` failed: %s", name, podError.ContainerName, podError.Message)
 		},
 		PodLogChunkFunc: func(chunk *tracker.ReplicaSetPodLogChunk) error {
@@ -60,12 +60,12 @@ func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface,
 				return nil
 			}
 
-			log.SetLogHeader(fmt.Sprintf("# Deployment `%s` Pod `%s` Container `%s` log:", name, chunk.PodName, chunk.ContainerName))
+			log.SetLogHeader(fmt.Sprintf("# StatefulSet `%s` Pod `%s` Container `%s` log:", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}
 			return nil
 		},
 	}
-	return tracker.TrackDeployment(name, namespace, kube, feed, opts)
+	return tracker.TrackStatefulSet(name, namespace, kube, feed, opts)
 }
