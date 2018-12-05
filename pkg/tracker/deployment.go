@@ -284,8 +284,6 @@ func (d *DeploymentTracker) Track() (err error) {
 			}
 			if ready {
 				d.Ready <- true
-				// ROLLOUT mode: tracker stops just after deployment set to ready.
-				return nil
 			}
 		case object := <-d.resourceDeleted:
 			d.lastObject = object
@@ -540,6 +538,7 @@ func (d *DeploymentTracker) runPodTracker(podName, rsName string) error {
 	return nil
 }
 
+// TODO get rid of previous object
 func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment) (ready bool, err error) {
 	if debug() {
 		fmt.Printf("%s\n%s\n",

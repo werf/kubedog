@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	extensions "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,10 +18,10 @@ import (
 	"github.com/flant/kubedog/pkg/utils"
 )
 
-// TrackStatefulSet is for monitor StatefulSet rollout
-func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, feed ControllerFeed, opts Options) error {
+// TrackDaemonSet is for monitor DaemonSet rollout
+func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, feed ControllerFeed, opts Options) error {
 	if debug() {
-		fmt.Printf("> TrackStatefulSet\n")
+		fmt.Printf("> TrackDaemonSet\n")
 	}
 
 	errorChan := make(chan error, 0)
@@ -34,13 +34,13 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	StatefulSetTracker := NewStatefulSetTracker(ctx, name, namespace, kube, opts)
+	DaemonSetTracker := NewDaemonSetTracker(ctx, name, namespace, kube, opts)
 
 	go func() {
 		if debug() {
-			fmt.Printf("  goroutine: start statefulset/%s tracker\n", name)
+			fmt.Printf("  goroutine: start Daemonset/%s tracker\n", name)
 		}
-		err := StatefulSetTracker.Track()
+		err := DaemonSetTracker.Track()
 		if err != nil {
 			errorChan <- err
 		} else {
@@ -49,14 +49,14 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 	}()
 
 	if debug() {
-		fmt.Printf("  statefulset/%s: for-select StatefulSetTracker channels\n", name)
+		fmt.Printf("  Daemonset/%s: for-select DaemonSetTracker channels\n", name)
 	}
 
 	for {
 		select {
-		case isReady := <-StatefulSetTracker.Added:
+		case isReady := <-DaemonSetTracker.Added:
 			if debug() {
-				fmt.Printf("    statefulset/%s added\n", name)
+				fmt.Printf("    Daemonset/%s added\n", name)
 			}
 
 			err := feed.Added(isReady)
@@ -67,14 +67,14 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 				return err
 			}
 
-		case <-StatefulSetTracker.Ready:
+		case <-DaemonSetTracker.Ready:
 			if debug() {
-				fmt.Printf("    statefulset/%s ready: desired: %d, current: %d, updated: %d, ready: %d\n",
+				fmt.Printf("    Daemonset/%s ready: desired: %d, current: %d, updated: %d, ready: %d\n",
 					name,
-					StatefulSetTracker.FinalStatefulSetStatus.Replicas,
-					StatefulSetTracker.FinalStatefulSetStatus.CurrentReplicas,
-					StatefulSetTracker.FinalStatefulSetStatus.UpdatedReplicas,
-					StatefulSetTracker.FinalStatefulSetStatus.ReadyReplicas,
+					DaemonSetTracker.FinalDaemonSetStatus.DesiredNumberScheduled,
+					DaemonSetTracker.FinalDaemonSetStatus.CurrentNumberScheduled,
+					DaemonSetTracker.FinalDaemonSetStatus.UpdatedNumberScheduled,
+					DaemonSetTracker.FinalDaemonSetStatus.NumberReady,
 				)
 			}
 
@@ -86,9 +86,9 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 				return err
 			}
 
-		case reason := <-StatefulSetTracker.Failed:
+		case reason := <-DaemonSetTracker.Failed:
 			if debug() {
-				fmt.Printf("    statefulset/%s failed. Tracker state: `%s`", name, StatefulSetTracker.State)
+				fmt.Printf("    Daemonset/%s failed. Tracker state: `%s`", name, DaemonSetTracker.State)
 			}
 
 			err := feed.Failed(reason)
@@ -99,9 +99,9 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 				return err
 			}
 
-		//case rs := <-StatefulSetTracker.AddedReplicaSet:
+		//case rs := <-DaemonSetTracker.AddedReplicaSet:
 		//	if debug() {
-		//		fmt.Printf("    statefulset/%s got new replicaset `%s` (is new: %v)\n", StatefulSetTracker.ResourceName, rs.Name, rs.IsNew)
+		//		fmt.Printf("    Daemonset/%s got new replicaset `%s` (is new: %v)\n", DaemonSetTracker.ResourceName, rs.Name, rs.IsNew)
 		//	}
 		//
 		//	err := feed.AddedReplicaSet(rs)
@@ -112,9 +112,9 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 		//		return err
 		//	}
 
-		case pod := <-StatefulSetTracker.AddedPod:
+		case pod := <-DaemonSetTracker.AddedPod:
 			if debug() {
-				fmt.Printf("    statefulset/%s got new pod `%s`\n", StatefulSetTracker.ResourceName, pod.Name)
+				fmt.Printf("    Daemonset/%s got new pod `%s`\n", DaemonSetTracker.ResourceName, pod.Name)
 			}
 
 			err := feed.AddedPod(pod)
@@ -125,9 +125,9 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 				return err
 			}
 
-		case chunk := <-StatefulSetTracker.PodLogChunk:
+		case chunk := <-DaemonSetTracker.PodLogChunk:
 			if debug() {
-				fmt.Printf("    statefulset/%s pod `%s` log chunk\n", StatefulSetTracker.ResourceName, chunk.PodName)
+				fmt.Printf("    Daemonset/%s pod `%s` log chunk\n", DaemonSetTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
 					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Data)
 				}
@@ -141,9 +141,9 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 				return err
 			}
 
-		case podError := <-StatefulSetTracker.PodError:
+		case podError := <-DaemonSetTracker.PodError:
 			if debug() {
-				fmt.Printf("    statefulset/%s pod error: %s\n", StatefulSetTracker.ResourceName, podError.Message)
+				fmt.Printf("    Daemonset/%s pod error: %s\n", DaemonSetTracker.ResourceName, podError.Message)
 			}
 
 			err := feed.PodError(podError)
@@ -155,24 +155,24 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 			}
 
 		case err := <-errorChan:
-			return fmt.Errorf("statefulset/%s error: %v", name, err)
+			return fmt.Errorf("Daemonset/%s error: %v", name, err)
 		case <-doneChan:
 			return nil
 		}
 	}
 }
 
-// StatefulSetTracker ...
-type StatefulSetTracker struct {
+// DaemonSetTracker ...
+type DaemonSetTracker struct {
 	Tracker
 	LogsFromTime time.Time
 
 	CurrentReady bool
 
-	State                  string
-	Conditions             []string
-	FinalStatefulSetStatus appsv1.StatefulSetStatus
-	lastObject             *appsv1.StatefulSet
+	State                string
+	Conditions           []string
+	FinalDaemonSetStatus extensions.DaemonSetStatus
+	lastObject           *extensions.DaemonSet
 
 	Added       chan bool
 	Ready       chan bool
@@ -181,9 +181,9 @@ type StatefulSetTracker struct {
 	PodLogChunk chan *ReplicaSetPodLogChunk
 	PodError    chan ReplicaSetPodError
 
-	resourceAdded    chan *appsv1.StatefulSet
-	resourceModified chan *appsv1.StatefulSet
-	resourceDeleted  chan *appsv1.StatefulSet
+	resourceAdded    chan *extensions.DaemonSet
+	resourceModified chan *extensions.DaemonSet
+	resourceDeleted  chan *extensions.DaemonSet
 	podAdded         chan *corev1.Pod
 	podDone          chan string
 	errors           chan error
@@ -193,16 +193,16 @@ type StatefulSetTracker struct {
 	TrackedPods []string
 }
 
-// NewStatefulSetTracker ...
-func NewStatefulSetTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts Options) *StatefulSetTracker {
+// NewDaemonSetTracker ...
+func NewDaemonSetTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts Options) *DaemonSetTracker {
 	if debug() {
-		fmt.Printf("> NewStatefulSetTracker\n")
+		fmt.Printf("> NewDaemonSetTracker\n")
 	}
-	return &StatefulSetTracker{
+	return &DaemonSetTracker{
 		Tracker: Tracker{
 			Kube:             kube,
 			Namespace:        namespace,
-			FullResourceName: fmt.Sprintf("statefulset/%s", name),
+			FullResourceName: fmt.Sprintf("Daemonset/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
 		},
@@ -218,41 +218,41 @@ func NewStatefulSetTracker(ctx context.Context, name, namespace string, kube kub
 
 		TrackedPods: make([]string, 0),
 
-		resourceAdded:    make(chan *appsv1.StatefulSet, 1),
-		resourceModified: make(chan *appsv1.StatefulSet, 1),
-		resourceDeleted:  make(chan *appsv1.StatefulSet, 1),
+		resourceAdded:    make(chan *extensions.DaemonSet, 1),
+		resourceModified: make(chan *extensions.DaemonSet, 1),
+		resourceDeleted:  make(chan *extensions.DaemonSet, 1),
 		podAdded:         make(chan *corev1.Pod, 1),
 		podDone:          make(chan string, 1),
 		errors:           make(chan error, 0),
 	}
 }
 
-// Track starts tracking of StatefulSet rollout process.
-// watch only for one StatefulSet resource with name d.ResourceName within the namespace with name d.Namespace
-// Watcher can wait for namespace creation and then for StatefulSet creation
-// watcher receives added event if StatefulSet is started
+// Track starts tracking of DaemonSet rollout process.
+// watch only for one DaemonSet resource with name d.ResourceName within the namespace with name d.Namespace
+// Watcher can wait for namespace creation and then for DaemonSet creation
+// watcher receives added event if DaemonSet is started
 // watch is infinite by default
-// there is option StopOnAvailable — if true, watcher stops after StatefulSet has available status
+// there is option StopOnAvailable — if true, watcher stops after DaemonSet has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
-func (d *StatefulSetTracker) Track() (err error) {
+func (d *DaemonSetTracker) Track() (err error) {
 	if debug() {
-		fmt.Printf("> StatefulSetTracker.Track()\n")
+		fmt.Printf("> DaemonSetTracker.Track()\n")
 	}
 
-	d.runStatefulSetInformer()
+	d.runDaemonSetInformer()
 
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			ready, err := d.handleStatefulSetState(object)
+			ready, err := d.handleDaemonSetStatus(object)
 			if err != nil {
 				if debug() {
-					fmt.Printf("handle StatefulSet state error: %v", err)
+					fmt.Printf("handle DaemonSet state error: %v", err)
 				}
 				return err
 			}
 			if debug() {
-				fmt.Printf("StatefulSet `%s` initial ready state: %v\n", d.ResourceName, ready)
+				fmt.Printf("DaemonSet `%s` initial ready state: %v\n", d.ResourceName, ready)
 			}
 			d.CurrentReady = ready
 			d.lastObject = object
@@ -266,7 +266,7 @@ func (d *StatefulSetTracker) Track() (err error) {
 			d.runPodsInformer()
 
 		case object := <-d.resourceModified:
-			ready, err := d.handleStatefulSetState(object)
+			ready, err := d.handleDaemonSetStatus(object)
 			if err != nil {
 				return err
 			}
@@ -278,7 +278,7 @@ func (d *StatefulSetTracker) Track() (err error) {
 		case object := <-d.resourceDeleted:
 			d.lastObject = object
 			d.State = "Deleted"
-			// TODO create StatefulSetErrors!
+			// TODO create DaemonSetErrors!
 			d.Failed <- "resource deleted"
 
 		case pod := <-d.podAdded:
@@ -317,8 +317,8 @@ func (d *StatefulSetTracker) Track() (err error) {
 	return err
 }
 
-// runStatefulSetInformer watch for StatefulSet events
-func (d *StatefulSetTracker) runStatefulSetInformer() {
+// runDaemonSetInformer watch for DaemonSet events
+func (d *DaemonSetTracker) runDaemonSetInformer() {
 	client := d.Kube
 
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
@@ -327,26 +327,26 @@ func (d *StatefulSetTracker) runStatefulSetInformer() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.AppsV1().StatefulSets(d.Namespace).List(tweakListOptions(options))
+			return client.Extensions().DaemonSets(d.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.AppsV1().StatefulSets(d.Namespace).Watch(tweakListOptions(options))
+			return client.Extensions().DaemonSets(d.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(d.Context, lw, &appsv1.StatefulSet{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(d.Context, lw, &extensions.DaemonSet{}, nil, func(e watch.Event) (bool, error) {
 			if debug() {
-				fmt.Printf("    statefulset/%s event: %#v\n", d.ResourceName, e.Type)
+				fmt.Printf("    Daemonset/%s event: %#v\n", d.ResourceName, e.Type)
 			}
 
-			var object *appsv1.StatefulSet
+			var object *extensions.DaemonSet
 
 			if e.Type != watch.Error {
 				var ok bool
-				object, ok = e.Object.(*appsv1.StatefulSet)
+				object, ok = e.Object.(*extensions.DaemonSet)
 				if !ok {
-					return true, fmt.Errorf("expected %s to be a *appsv1.StatefulSet, got %T", d.ResourceName, e.Object)
+					return true, fmt.Errorf("expected %s to be a *extensions.DaemonSet, got %T", d.ResourceName, e.Object)
 				}
 			}
 
@@ -358,7 +358,7 @@ func (d *StatefulSetTracker) runStatefulSetInformer() {
 			case watch.Deleted:
 				d.resourceDeleted <- object
 			case watch.Error:
-				err := fmt.Errorf("StatefulSet error: %v", e.Object)
+				err := fmt.Errorf("DaemonSet error: %v", e.Object)
 				//d.errors <- err
 				return true, err
 			}
@@ -378,8 +378,8 @@ func (d *StatefulSetTracker) runStatefulSetInformer() {
 	return
 }
 
-// runPodsInformer watch for StatefulSet Pods events
-func (d *StatefulSetTracker) runPodsInformer() {
+// runPodsInformer watch for DaemonSet Pods events
+func (d *DaemonSetTracker) runPodsInformer() {
 	if d.lastObject == nil {
 		// This shouldn't happen!
 		// TODO add error
@@ -393,7 +393,7 @@ func (d *StatefulSetTracker) runPodsInformer() {
 	return
 }
 
-func (d *StatefulSetTracker) runPodTracker(podName string) error {
+func (d *DaemonSetTracker) runPodTracker(podName string) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
 
@@ -405,7 +405,7 @@ func (d *StatefulSetTracker) runPodTracker(podName string) error {
 
 	go func() {
 		if debug() {
-			fmt.Printf("Starting StatefulSet's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, pod.ResourceName, pod.State)
+			fmt.Printf("Starting DaemonSet's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, pod.ResourceName, pod.State)
 		}
 
 		err := pod.Track()
@@ -416,7 +416,7 @@ func (d *StatefulSetTracker) runPodTracker(podName string) error {
 		}
 
 		if debug() {
-			fmt.Printf("Done StatefulSet's `%s` Pod `%s` tracker\n", d.ResourceName, pod.ResourceName)
+			fmt.Printf("Done DaemonSet's `%s` Pod `%s` tracker\n", d.ResourceName, pod.ResourceName)
 		}
 	}()
 
@@ -460,20 +460,19 @@ func (d *StatefulSetTracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *StatefulSetTracker) handleStatefulSetState(object *appsv1.StatefulSet) (ready bool, err error) {
+func (d *DaemonSetTracker) handleDaemonSetStatus(object *extensions.DaemonSet) (ready bool, err error) {
 	if debug() {
-		fmt.Printf("%s\n", getStatefulSetStatus(object))
+		fmt.Printf("%s\n", getDaemonSetStatus(object))
 	}
 
-	d.lastObject = object
 	msg := ""
-	msg, ready, err = StatefulSetRolloutStatus(object)
+	msg, ready, err = DaemonSetRolloutStatus(object)
 
 	if debug() {
-		if ready {
-			fmt.Printf("StatefulSet READY. %s\n", msg)
+		if err == nil && ready {
+			fmt.Printf("DaemonSet READY. %s\n", msg)
 		} else {
-			fmt.Printf("StatefulSet NOT READY. %s\n", msg)
+			fmt.Printf("DaemonSet NOT READY. %s\n", msg)
 		}
 	}
 

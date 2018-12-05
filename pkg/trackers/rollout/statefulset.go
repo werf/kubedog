@@ -9,58 +9,38 @@ import (
 	"github.com/flant/kubedog/pkg/tracker"
 )
 
-// TrackDeploymentTillReady ...
+// TrackStatefulSetTillReady implements rollout track mode for StatefulSet
+//
+// Exit on DaemonSet ready or on errors
 func TrackStatefulSetTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.ControllerFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
-				fmt.Printf("# StatefulSet `%s` ready\n", name)
+				fmt.Printf("sts/%s appears to be ready. Exit\n", name)
 				return tracker.StopTrack
 			}
 
-			fmt.Printf("# StatefulSet `%s` added\n", name)
+			fmt.Printf("sts/%s added\n", name)
 			return nil
 		},
 		ReadyFunc: func() error {
-			fmt.Printf("# StatefulSet `%s` ready\n", name)
+			fmt.Printf("sts/%s become READY\n", name)
 			return tracker.StopTrack
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# StatefulSet `%s` failed: %s\n", name, reason)
+			fmt.Printf("sts/%s FAIL: %s\n", name, reason)
 			return fmt.Errorf("failed: %s", reason)
 		},
-		AddedReplicaSetFunc: func(rs tracker.ReplicaSet) error {
-			if !rs.IsNew {
-				return nil
-			}
-
-			fmt.Printf("# StatefulSet `%s` current ReplicaSet `%s` added\n", name, rs.Name)
-
-			return nil
-		},
 		AddedPodFunc: func(pod tracker.ReplicaSetPod) error {
-			if !pod.ReplicaSet.IsNew {
-				return nil
-			}
-
-			fmt.Printf("# StatefulSet `%s` Pod `%s` added of current ReplicaSet `%s`\n", name, pod.Name, pod.ReplicaSet.Name)
-
+			fmt.Printf("+ sts/%s %s\n", name, pod.Name)
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.ReplicaSetPodError) error {
-			if !podError.ReplicaSet.IsNew {
-				return nil
-			}
-
-			fmt.Printf("# StatefulSet `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
-			return fmt.Errorf("Pod `%s` Container `%s` failed: %s", name, podError.ContainerName, podError.Message)
+			fmt.Printf("sts/%s %s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			return fmt.Errorf("sts/%s %s %s failed: %s", name, podError.PodName, podError.ContainerName, podError.Message)
 		},
 		PodLogChunkFunc: func(chunk *tracker.ReplicaSetPodLogChunk) error {
-			if !chunk.ReplicaSet.IsNew {
-				return nil
-			}
-
-			log.SetLogHeader(fmt.Sprintf("# StatefulSet `%s` Pod `%s` Container `%s` log:", name, chunk.PodName, chunk.ContainerName))
+			log.SetLogHeader(fmt.Sprintf("sts/%s %s %s:", name, chunk.PodName, chunk.ContainerName))
 			for _, line := range chunk.LogLines {
 				fmt.Println(line.Data)
 			}
