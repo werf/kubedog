@@ -93,13 +93,26 @@ func main() {
 	})
 	followCmd.AddCommand(&cobra.Command{
 		Use:   "statefulset NAME",
-		Short: "Follow Statefulset",
+		Short: "Follow StatefulSet",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
-			err := follow.TrackStatefulset(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
+			err := follow.TrackStatefulSet(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error following Statefulset `%s` in namespace `%s`: %s\n", name, namespace, err)
+				os.Exit(1)
+			}
+		},
+	})
+	followCmd.AddCommand(&cobra.Command{
+		Use:   "daemonset NAME",
+		Short: "Follow DaemonSet",
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			name := args[0]
+			err := follow.TrackDaemonSet(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error following DaemonSet `%s` in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},
@@ -160,6 +173,20 @@ func main() {
 			err := rollout.TrackStatefulSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error tracking StatefulSet `%s` in namespace `%s`: %s\n", name, namespace, err)
+				os.Exit(1)
+			}
+		},
+	})
+
+	trackCmd.AddCommand(&cobra.Command{
+		Use:   "daemonset NAME",
+		Short: "Track DaemonSet till ready",
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			name := args[0]
+			err := rollout.TrackDaemonSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error tracking DaemonSet `%s` in namespace `%s`: %s\n", name, namespace, err)
 				os.Exit(1)
 			}
 		},

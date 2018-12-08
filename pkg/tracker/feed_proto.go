@@ -92,6 +92,7 @@ func (proto *PodFeedProto) Ready() error {
 	return nil
 }
 
+// TODO add delete pod callback
 type ControllerFeedProto struct {
 	AddedFunc           func(bool) error
 	ReadyFunc           func() error

@@ -18,6 +18,7 @@ type ReplicaSet struct {
 	IsNew bool
 }
 
+// TODO add containers!
 type ReplicaSetPod struct {
 	ReplicaSet ReplicaSet
 	Name       string
