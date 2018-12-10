@@ -73,7 +73,7 @@ func main() {
 			name := args[0]
 			err := follow.TrackJob(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error following Job `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -86,7 +86,7 @@ func main() {
 			name := args[0]
 			err := follow.TrackDeployment(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error following Deployment `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -99,7 +99,7 @@ func main() {
 			name := args[0]
 			err := follow.TrackStatefulSet(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error following Statefulset `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -112,7 +112,7 @@ func main() {
 			name := args[0]
 			err := follow.TrackDaemonSet(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error following DaemonSet `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -125,7 +125,7 @@ func main() {
 			name := args[0]
 			err := follow.TrackPod(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error following Pod `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -144,7 +144,7 @@ func main() {
 			name := args[0]
 			err := rollout.TrackJobTillDone(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error tracking Job `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -158,7 +158,7 @@ func main() {
 			name := args[0]
 			err := rollout.TrackDeploymentTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error tracking Deployment `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -172,7 +172,7 @@ func main() {
 			name := args[0]
 			err := rollout.TrackStatefulSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error tracking StatefulSet `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -186,7 +186,7 @@ func main() {
 			name := args[0]
 			err := rollout.TrackDaemonSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error tracking DaemonSet `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
@@ -200,7 +200,7 @@ func main() {
 			name := args[0]
 			err := rollout.TrackPodTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error tracking Pod `%s` in namespace `%s`: %s\n", name, namespace, err)
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},

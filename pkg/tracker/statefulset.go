@@ -88,7 +88,7 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 
 		case reason := <-StatefulSetTracker.Failed:
 			if debug() {
-				fmt.Printf("    statefulset/%s failed. Tracker state: `%s`", name, StatefulSetTracker.State)
+				fmt.Printf("    statefulset/%s failed. Tracker state: `%s`\n", name, StatefulSetTracker.State)
 			}
 
 			err := feed.Failed(reason)
@@ -99,18 +99,18 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 				return err
 			}
 
-		//case rs := <-StatefulSetTracker.AddedReplicaSet:
-		//	if debug() {
-		//		fmt.Printf("    statefulset/%s got new replicaset `%s` (is new: %v)\n", StatefulSetTracker.ResourceName, rs.Name, rs.IsNew)
-		//	}
-		//
-		//	err := feed.AddedReplicaSet(rs)
-		//	if err == StopTrack {
-		//		return nil
-		//	}
-		//	if err != nil {
-		//		return err
-		//	}
+		case msg := <-StatefulSetTracker.EventMsg:
+			if debug() {
+				fmt.Printf("    statefulset/%s event: %s\n", name, msg)
+			}
+
+			err := feed.EventMsg(msg)
+			if err == StopTrack {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
 
 		case pod := <-StatefulSetTracker.AddedPod:
 			if debug() {
@@ -129,7 +129,7 @@ func TrackStatefulSet(name string, namespace string, kube kubernetes.Interface, 
 			if debug() {
 				fmt.Printf("    statefulset/%s pod `%s` log chunk\n", StatefulSetTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
-					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Data)
+					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Message)
 				}
 			}
 
@@ -167,8 +167,6 @@ type StatefulSetTracker struct {
 	Tracker
 	LogsFromTime time.Time
 
-	CurrentReady bool
-
 	State                  string
 	Conditions             []string
 	FinalStatefulSetStatus appsv1.StatefulSetStatus
@@ -177,6 +175,7 @@ type StatefulSetTracker struct {
 	Added       chan bool
 	Ready       chan bool
 	Failed      chan string
+	EventMsg    chan string
 	AddedPod    chan ReplicaSetPod
 	PodLogChunk chan *ReplicaSetPodLogChunk
 	PodError    chan ReplicaSetPodError
@@ -184,6 +183,7 @@ type StatefulSetTracker struct {
 	resourceAdded    chan *appsv1.StatefulSet
 	resourceModified chan *appsv1.StatefulSet
 	resourceDeleted  chan *appsv1.StatefulSet
+	resourceFailed   chan string
 	podAdded         chan *corev1.Pod
 	podDone          chan string
 	errors           chan error
@@ -202,7 +202,7 @@ func NewStatefulSetTracker(ctx context.Context, name, namespace string, kube kub
 		Tracker: Tracker{
 			Kube:             kube,
 			Namespace:        namespace,
-			FullResourceName: fmt.Sprintf("statefulset/%s", name),
+			FullResourceName: fmt.Sprintf("sts/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
 		},
@@ -212,6 +212,7 @@ func NewStatefulSetTracker(ctx context.Context, name, namespace string, kube kub
 		Added:       make(chan bool, 0),
 		Ready:       make(chan bool, 1),
 		Failed:      make(chan string, 1),
+		EventMsg:    make(chan string, 1),
 		AddedPod:    make(chan ReplicaSetPod, 10),
 		PodLogChunk: make(chan *ReplicaSetPodLogChunk, 1000),
 		PodError:    make(chan ReplicaSetPodError, 0),
@@ -221,6 +222,7 @@ func NewStatefulSetTracker(ctx context.Context, name, namespace string, kube kub
 		resourceAdded:    make(chan *appsv1.StatefulSet, 1),
 		resourceModified: make(chan *appsv1.StatefulSet, 1),
 		resourceDeleted:  make(chan *appsv1.StatefulSet, 1),
+		resourceFailed:   make(chan string, 1),
 		podAdded:         make(chan *corev1.Pod, 1),
 		podDone:          make(chan string, 1),
 		errors:           make(chan error, 0),
@@ -244,6 +246,7 @@ func (d *StatefulSetTracker) Track() (err error) {
 	for {
 		select {
 		case object := <-d.resourceAdded:
+			d.lastObject = object
 			ready, err := d.handleStatefulSetState(object)
 			if err != nil {
 				if debug() {
@@ -254,8 +257,6 @@ func (d *StatefulSetTracker) Track() (err error) {
 			if debug() {
 				fmt.Printf("StatefulSet `%s` initial ready state: %v\n", d.ResourceName, ready)
 			}
-			d.CurrentReady = ready
-			d.lastObject = object
 
 			switch d.State {
 			case "":
@@ -264,22 +265,25 @@ func (d *StatefulSetTracker) Track() (err error) {
 			}
 
 			d.runPodsInformer()
+			d.runEventsInformer()
 
 		case object := <-d.resourceModified:
+			d.lastObject = object
 			ready, err := d.handleStatefulSetState(object)
 			if err != nil {
 				return err
 			}
-			d.CurrentReady = ready
-			d.lastObject = object
 			if ready {
 				d.Ready <- true
 			}
 		case object := <-d.resourceDeleted:
 			d.lastObject = object
 			d.State = "Deleted"
-			// TODO create StatefulSetErrors!
 			d.Failed <- "resource deleted"
+
+		case reason := <-d.resourceFailed:
+			d.State = "Failed"
+			d.Failed <- reason
 
 		case pod := <-d.podAdded:
 			if debug() {
@@ -443,6 +447,8 @@ func (d *StatefulSetTracker) runPodTracker(podName string) error {
 				}
 
 				d.PodError <- podError
+			case msg := <-pod.EventMsg:
+				d.EventMsg <- fmt.Sprintf("po/%s %s", pod.ResourceName, msg)
 			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
@@ -465,9 +471,16 @@ func (d *StatefulSetTracker) handleStatefulSetState(object *appsv1.StatefulSet) 
 		fmt.Printf("%s\n", getStatefulSetStatus(object))
 	}
 
-	d.lastObject = object
 	msg := ""
 	msg, ready, err = StatefulSetRolloutStatus(object)
+
+	if debug() {
+		evList, err := utils.ListEventsForObject(d.Kube, object)
+		if err != nil {
+			return false, err
+		}
+		utils.DescribeEvents(evList)
+	}
 
 	if debug() {
 		if ready {
@@ -478,4 +491,17 @@ func (d *StatefulSetTracker) handleStatefulSetState(object *appsv1.StatefulSet) 
 	}
 
 	return ready, err
+}
+
+// runEventsInformer watch for StatefulSet events
+func (d *StatefulSetTracker) runEventsInformer() {
+	if d.lastObject == nil {
+		return
+	}
+
+	eventInformer := NewEventInformer(d.Tracker, d.lastObject)
+	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
+	eventInformer.Run()
+
+	return
 }

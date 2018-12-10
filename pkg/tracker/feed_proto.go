@@ -4,6 +4,7 @@ type JobFeedProto struct {
 	AddedFunc       func() error
 	SucceededFunc   func() error
 	FailedFunc      func(string) error
+	EventMsgFunc    func(string) error
 	AddedPodFunc    func(string) error
 	PodLogChunkFunc func(*PodLogChunk) error
 	PodErrorFunc    func(PodError) error
@@ -21,9 +22,15 @@ func (proto *JobFeedProto) Succeeded() error {
 	}
 	return nil
 }
-func (proto *JobFeedProto) Failed(arg string) error {
+func (proto *JobFeedProto) Failed(reason string) error {
 	if proto.FailedFunc != nil {
-		return proto.FailedFunc(arg)
+		return proto.FailedFunc(reason)
+	}
+	return nil
+}
+func (proto *JobFeedProto) EventMsg(msg string) error {
+	if proto.EventMsgFunc != nil {
+		return proto.EventMsgFunc(msg)
 	}
 	return nil
 }
@@ -49,7 +56,8 @@ func (proto *JobFeedProto) PodError(arg PodError) error {
 type PodFeedProto struct {
 	AddedFunc             func() error
 	SucceededFunc         func() error
-	FailedFunc            func() error
+	FailedFunc            func(string) error
+	EventMsgFunc          func(string) error
 	ReadyFunc             func() error
 	ContainerLogChunkFunc func(*ContainerLogChunk) error
 	ContainerErrorFunc    func(ContainerError) error
@@ -79,9 +87,15 @@ func (proto *PodFeedProto) Succeeded() error {
 	}
 	return nil
 }
-func (proto *PodFeedProto) Failed() error {
+func (proto *PodFeedProto) Failed(reason string) error {
 	if proto.FailedFunc != nil {
-		return proto.FailedFunc()
+		return proto.FailedFunc(reason)
+	}
+	return nil
+}
+func (proto *PodFeedProto) EventMsg(msg string) error {
+	if proto.EventMsgFunc != nil {
+		return proto.EventMsgFunc(msg)
 	}
 	return nil
 }
@@ -97,6 +111,7 @@ type ControllerFeedProto struct {
 	AddedFunc           func(bool) error
 	ReadyFunc           func() error
 	FailedFunc          func(string) error
+	EventMsgFunc        func(string) error
 	AddedReplicaSetFunc func(ReplicaSet) error
 	AddedPodFunc        func(ReplicaSetPod) error
 	PodLogChunkFunc     func(*ReplicaSetPodLogChunk) error
@@ -118,6 +133,12 @@ func (proto *ControllerFeedProto) Ready() error {
 func (proto *ControllerFeedProto) Failed(arg string) error {
 	if proto.FailedFunc != nil {
 		return proto.FailedFunc(arg)
+	}
+	return nil
+}
+func (proto *ControllerFeedProto) EventMsg(msg string) error {
+	if proto.EventMsgFunc != nil {
+		return proto.EventMsgFunc(msg)
 	}
 	return nil
 }
