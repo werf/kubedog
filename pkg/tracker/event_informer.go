@@ -94,18 +94,18 @@ func (e *EventInformer) Run() {
 			switch ev.Type {
 			case watch.Added:
 				e.handleEvent(object)
-				if debug() {
-					fmt.Printf("> Event: %#v\n", object)
-				}
+				//if debug() {
+				//	fmt.Printf("> Event: %#v\n", object)
+				//}
 			case watch.Modified:
 				e.handleEvent(object)
-				if debug() {
-					fmt.Printf("> Event: %#v\n", object)
-				}
+				//if debug() {
+				//	fmt.Printf("> Event: %#v\n", object)
+				//}
 			case watch.Deleted:
-				if debug() {
-					fmt.Printf("> Event: %#v\n", object)
-				}
+				//if debug() {
+				//	fmt.Printf("> Event: %#v\n", object)
+				//}
 			case watch.Error:
 				err := fmt.Errorf("> Event error: %v", ev.Object)
 				return true, err

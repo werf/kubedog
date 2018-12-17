@@ -211,7 +211,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
-		State: Initial,
+		State:                           Initial,
 		ContainerTrackerStates:          make(map[string]TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
 		TrackedContainers:               make([]string, 0),
