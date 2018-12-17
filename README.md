@@ -28,9 +28,11 @@ In the rollout and follow modes kubedog will print to the screen logs and other 
 
 Follow mode can be used as simple `tail -f` tool, but for kubernetes resources.
 
-Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog ensures to exit with non-zero error code if something wrong with the specified resource.
+Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resource.
 
-![Demo Animation](doc/cli-1.gif)
+![Deployment Rollout Animation](doc/deployment_rollout.gif)
+
+![Deployment Follow Animation](doc/deployment_follow.gif)
 
 See `kubedog --help` for more info.
 
@@ -58,6 +60,8 @@ Available functions:
 TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
+TrackDaemonSet(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
+TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 ```
 
 Each function will block till specified resource is terminated. Returns error only in exceptional situation or on timeout.
@@ -89,6 +93,8 @@ Available functions:
 TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
+TrackDaemonSet(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
+TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 ```
 
 ## Use trackers examples
@@ -151,11 +157,11 @@ func main() {
 
 ## Custom trackers
 
-To define custom tracker one should call track function from `tracker` pkg and define callbacks for the resource events.
+To define a custom tracker one should call one of Track* function from `tracker` pkg and define callbacks for the resource events.
 
-To specify callbacks so called feed interface used. Feed is a set of callbacks related to the resource events.
+`feed` interface is used to specify callbacks. This interface defines a set of callbacks related to the resource events.
 
-For example basic Pod track function looks like:
+For example Track function for Pod resource is defined like this:
 
 ```
 TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, opts Options) error
@@ -168,6 +174,8 @@ type PodFeed interface {
 	Added() error
 	Succeeded() error
 	Failed() error
+	EventMsg(msg string) error
+	Ready() error
 	ContainerLogChunk(*ContainerLogChunk) error
 	ContainerError(ContainerError) error
 }

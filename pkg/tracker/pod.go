@@ -16,25 +16,23 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
+
+	"github.com/flant/kubedog/pkg/display"
 )
 
 type PodFeed interface {
 	Added() error
 	Succeeded() error
-	Failed() error
+	Failed(reason string) error
+	EventMsg(msg string) error
 	Ready() error
 	ContainerLogChunk(*ContainerLogChunk) error
 	ContainerError(ContainerError) error
 }
 
-type LogLine struct {
-	Timestamp string
-	Data      string
-}
-
 type ContainerLogChunk struct {
 	ContainerName string
-	LogLines      []LogLine
+	LogLines      []display.LogLine
 }
 
 type ContainerError struct {
@@ -70,7 +68,7 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, o
 			if debug() {
 				fmt.Printf("Pod `%s` container `%s` log chunk:\n", pod.ResourceName, chunk.ContainerName)
 				for _, line := range chunk.LogLines {
-					fmt.Printf("[%s] %s\n", line.Timestamp, line.Data)
+					fmt.Printf("[%s] %s\n", line.Timestamp, line.Message)
 				}
 			}
 
@@ -121,12 +119,25 @@ func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, o
 				return err
 			}
 
-		case <-pod.Failed:
+		case reason := <-pod.Failed:
 			if debug() {
-				fmt.Printf("Pod `%s` failed\n", pod.ResourceName)
+				fmt.Printf("Pod `%s` failed: %s\n", pod.ResourceName, reason)
 			}
 
-			err := feed.Failed()
+			err := feed.Failed(reason)
+			if err == StopTrack {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
+		case msg := <-pod.EventMsg:
+			if debug() {
+				fmt.Printf("Pod `%s` event msg: %s\n", pod.ResourceName, msg)
+			}
+
+			err := feed.EventMsg(msg)
 			if err == StopTrack {
 				return nil
 			}
@@ -161,7 +172,8 @@ type PodTracker struct {
 
 	Added             chan struct{}
 	Succeeded         chan struct{}
-	Failed            chan struct{}
+	Failed            chan string
+	EventMsg          chan string
 	Ready             chan struct{}
 	ContainerLogChunk chan *ContainerLogChunk
 	ContainerError    chan ContainerError
@@ -176,6 +188,7 @@ type PodTracker struct {
 	objectAdded    chan *corev1.Pod
 	objectModified chan *corev1.Pod
 	objectDeleted  chan *corev1.Pod
+	objectFailed   chan string
 	containerDone  chan string
 	errors         chan error
 }
@@ -183,15 +196,17 @@ type PodTracker struct {
 func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *PodTracker {
 	return &PodTracker{
 		Tracker: Tracker{
-			Kube:         kube,
-			Namespace:    namespace,
-			ResourceName: name,
-			Context:      ctx,
+			Kube:             kube,
+			Namespace:        namespace,
+			FullResourceName: fmt.Sprintf("po/%s", name),
+			ResourceName:     name,
+			Context:          ctx,
 		},
 
 		Added:             make(chan struct{}, 0),
 		Succeeded:         make(chan struct{}, 0),
-		Failed:            make(chan struct{}, 0),
+		Failed:            make(chan string, 1),
+		EventMsg:          make(chan string, 1),
 		Ready:             make(chan struct{}, 0),
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
@@ -205,6 +220,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		objectAdded:    make(chan *corev1.Pod, 0),
 		objectModified: make(chan *corev1.Pod, 0),
 		objectDeleted:  make(chan *corev1.Pod, 0),
+		objectFailed:   make(chan string, 1),
 		errors:         make(chan error, 0),
 		containerDone:  make(chan string, 10),
 	}
@@ -237,6 +253,7 @@ func (pod *PodTracker) Track() error {
 
 		case object := <-pod.objectAdded:
 			pod.lastObject = object
+			pod.runEventsInformer()
 
 			switch pod.State {
 			case Initial:
@@ -283,6 +300,10 @@ func (pod *PodTracker) Track() error {
 
 			return nil
 
+		case reason := <-pod.objectFailed:
+			pod.State = "Failed"
+			pod.Failed <- reason
+
 		case <-pod.Context.Done():
 			return ErrTrackTimeout
 
@@ -309,7 +330,7 @@ func (pod *PodTracker) handlePodState(object *corev1.Pod) (done bool, err error)
 			pod.Succeeded <- struct{}{}
 			done = true
 		} else if object.Status.Phase == corev1.PodFailed {
-			pod.Failed <- struct{}{}
+			pod.Failed <- "pod is in a Failed phase"
 			done = true
 		}
 	}
@@ -381,7 +402,7 @@ func (pod *PodTracker) followContainerLogs(containerName string) error {
 		n, err := readCloser.Read(chunkBuf)
 
 		if n > 0 {
-			chunkLines := make([]LogLine, 0)
+			chunkLines := make([]display.LogLine, 0)
 			for i := 0; i < n; i++ {
 				bt := chunkBuf[i]
 
@@ -391,7 +412,7 @@ func (pod *PodTracker) followContainerLogs(containerName string) error {
 
 					lineParts := strings.SplitN(line, " ", 2)
 					if len(lineParts) == 2 {
-						chunkLines = append(chunkLines, LogLine{Timestamp: lineParts[0], Data: lineParts[1]})
+						chunkLines = append(chunkLines, display.LogLine{Timestamp: lineParts[0], Message: lineParts[1]})
 					}
 
 					continue
@@ -523,7 +544,7 @@ func (pod *PodTracker) runInformer() error {
 				var ok bool
 				object, ok = e.Object.(*corev1.Pod)
 				if !ok {
-					return true, fmt.Errorf("expected %s to be a *corev1.Pod, got %T", pod.ResourceName, e.Object)
+					return true, fmt.Errorf("TRACK POD EVENT %s expect *corev1.Pod object, got %T", pod.ResourceName, e.Object)
 				}
 			}
 
@@ -533,6 +554,8 @@ func (pod *PodTracker) runInformer() error {
 				pod.objectModified <- object
 			} else if e.Type == watch.Deleted {
 				pod.objectDeleted <- object
+			} else if e.Type == watch.Error {
+				pod.errors <- fmt.Errorf("Pod %s error: %v", e.Object)
 			}
 
 			return false, nil
@@ -548,4 +571,17 @@ func (pod *PodTracker) runInformer() error {
 	}()
 
 	return nil
+}
+
+// runEventsInformer watch for DaemonSet events
+func (pod *PodTracker) runEventsInformer() {
+	if pod.lastObject == nil {
+		return
+	}
+
+	eventInformer := NewEventInformer(pod.Tracker, pod.lastObject)
+	eventInformer.WithChannels(pod.EventMsg, pod.objectFailed, pod.errors)
+	eventInformer.Run()
+
+	return
 }

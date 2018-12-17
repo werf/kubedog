@@ -10,6 +10,8 @@ import (
 func getStatefulSetStatus(obj *appsv1.StatefulSet) string {
 	msgs := []string{}
 
+	msgs = append(msgs, fmt.Sprintf("%#v\n", obj.Status))
+
 	for _, c := range obj.Status.Conditions {
 		msgs = append(msgs, fmt.Sprintf("        - %s - %s - %s: \"%s\"", c.Type, c.Status, c.Reason, c.Message))
 	}

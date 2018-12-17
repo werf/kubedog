@@ -14,6 +14,7 @@ type ControllerMetadata interface {
 	NewReplicaSetTemplate() corev1.PodTemplateSpec
 	LabelSelector() *metav1.LabelSelector
 	Namespace() string
+	Name() string
 	UID() types.UID
 }
 
@@ -34,6 +35,9 @@ func (w *ReplicaSetControllerWrapper) LabelSelector() *metav1.LabelSelector {
 }
 func (w *ReplicaSetControllerWrapper) Namespace() string {
 	return w.metadata.GetNamespace()
+}
+func (w *ReplicaSetControllerWrapper) Name() string {
+	return w.metadata.GetName()
 }
 func (w *ReplicaSetControllerWrapper) UID() types.UID {
 	return w.metadata.GetUID()

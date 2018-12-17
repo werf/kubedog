@@ -3,38 +3,41 @@ package follow
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/log"
-	"github.com/flant/kubedog/pkg/tracker"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/flant/kubedog/pkg/display"
+	"github.com/flant/kubedog/pkg/tracker"
 )
 
 func TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.JobFeedProto{
 		AddedFunc: func() error {
-			fmt.Printf("# Job `%s` added\n", name)
+			fmt.Printf("# job/%s added\n", name)
 			return nil
 		},
 		SucceededFunc: func() error {
-			fmt.Printf("# Job `%s` succeeded\n", name)
+			fmt.Printf("# job/%s succeeded\n", name)
 			return nil
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# Job `%s` failed: %s\n", name, reason)
+			fmt.Printf("# job/%s FAIL: %s\n", name, reason)
+			return nil
+		},
+		EventMsgFunc: func(msg string) error {
+			fmt.Printf("# job/%s event: %s\n", name, msg)
 			return nil
 		},
 		AddedPodFunc: func(podName string) error {
-			fmt.Printf("# Job `%s` Pod `%s` added\n", name, podName)
+			fmt.Printf("# job/%s po/%s added\n", name, podName)
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.PodError) error {
-			fmt.Printf("# Job `%s` Pod `%s` Container `%s` error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Printf("# job/%s po/%s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return nil
 		},
 		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
-			log.SetLogHeader(fmt.Sprintf("# Job `%s` Pod `%s` Container `%s`", name, chunk.PodName, chunk.ContainerName))
-			for _, line := range chunk.LogLines {
-				fmt.Println(line.Data)
-			}
+			header := fmt.Sprintf("po/%s %s", chunk.PodName, chunk.ContainerName)
+			display.OutputLogLines(header, chunk.LogLines)
 			return nil
 		},
 	}

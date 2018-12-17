@@ -100,6 +100,19 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 				return err
 			}
 
+		case msg := <-deploymentTracker.EventMsg:
+			if debug() {
+				fmt.Printf("    deploy/%s event: %s", name, msg)
+			}
+
+			err := feed.EventMsg(msg)
+			if err == StopTrack {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
 		case rs := <-deploymentTracker.AddedReplicaSet:
 			if debug() {
 				fmt.Printf("    deploy/%s got new replicaset `%s` (is new: %v)\n", deploymentTracker.ResourceName, rs.Name, rs.IsNew)
@@ -130,7 +143,7 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 			if debug() {
 				fmt.Printf("    deploy/%s pod `%s` log chunk\n", deploymentTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
-					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Data)
+					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Message)
 				}
 			}
 
@@ -180,6 +193,7 @@ type DeploymentTracker struct {
 	Added           chan bool
 	Ready           chan bool
 	Failed          chan string
+	EventMsg        chan string
 	AddedReplicaSet chan ReplicaSet
 	AddedPod        chan ReplicaSetPod
 	PodLogChunk     chan *ReplicaSetPodLogChunk
@@ -188,6 +202,7 @@ type DeploymentTracker struct {
 	resourceAdded      chan *extensions.Deployment
 	resourceModified   chan *extensions.Deployment
 	resourceDeleted    chan *extensions.Deployment
+	resourceFailed     chan string
 	replicaSetAdded    chan *extensions.ReplicaSet
 	replicaSetModified chan *extensions.ReplicaSet
 	replicaSetDeleted  chan *extensions.ReplicaSet
@@ -219,6 +234,7 @@ func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kube
 		Added:           make(chan bool, 0),
 		Ready:           make(chan bool, 1),
 		Failed:          make(chan string, 1),
+		EventMsg:        make(chan string, 1),
 		AddedReplicaSet: make(chan ReplicaSet, 10),
 		AddedPod:        make(chan ReplicaSetPod, 10),
 		PodLogChunk:     make(chan *ReplicaSetPodLogChunk, 1000),
@@ -231,6 +247,7 @@ func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kube
 		resourceAdded:      make(chan *extensions.Deployment, 1),
 		resourceModified:   make(chan *extensions.Deployment, 1),
 		resourceDeleted:    make(chan *extensions.Deployment, 1),
+		resourceFailed:     make(chan string, 1),
 		replicaSetAdded:    make(chan *extensions.ReplicaSet, 1),
 		replicaSetModified: make(chan *extensions.ReplicaSet, 1),
 		replicaSetDeleted:  make(chan *extensions.ReplicaSet, 1),
@@ -276,6 +293,7 @@ func (d *DeploymentTracker) Track() (err error) {
 
 			d.runReplicaSetsInformer()
 			d.runPodsInformer()
+			d.runEventsInformer()
 
 		case object := <-d.resourceModified:
 			ready, err := d.handleDeploymentState(object)
@@ -288,8 +306,12 @@ func (d *DeploymentTracker) Track() (err error) {
 		case object := <-d.resourceDeleted:
 			d.lastObject = object
 			d.State = "Deleted"
-			// TODO create DeploymentErrors!
 			d.Failed <- "resource deleted"
+
+		case reason := <-d.resourceFailed:
+			d.State = "Failed"
+			d.Failed <- reason
+
 		case rs := <-d.replicaSetAdded:
 			if debug() {
 				fmt.Printf("rs/%s added\n", rs.Name)
@@ -521,6 +543,8 @@ func (d *DeploymentTracker) runPodTracker(podName, rsName string) error {
 				}
 
 				d.PodError <- podError
+			case msg := <-pod.EventMsg:
+				d.EventMsg <- fmt.Sprintf("po/%s %s", pod.ResourceName, msg)
 			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
@@ -546,6 +570,14 @@ func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment)
 			getReplicaSetsStatus(d.Kube, object))
 	}
 
+	if debug() {
+		evList, err := utils.ListEventsForObject(d.Kube, object)
+		if err != nil {
+			return false, err
+		}
+		utils.DescribeEvents(evList)
+	}
+
 	prevReady := false
 	newStatus := object.Status
 	// calc new status
@@ -564,6 +596,19 @@ func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment)
 	if ready && debug() {
 		fmt.Printf("Deployment READY.\n")
 	}
+
+	return
+}
+
+// runEventsInformer watch for StatefulSet events
+func (d *DeploymentTracker) runEventsInformer() {
+	if d.lastObject == nil {
+		return
+	}
+
+	eventInformer := NewEventInformer(d.Tracker, d.lastObject)
+	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
+	eventInformer.Run()
 
 	return
 }

@@ -3,6 +3,7 @@ package tracker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -52,4 +53,18 @@ type PodError struct {
 
 func debug() bool {
 	return os.Getenv("KUBEDOG_TRACKER_DEBUG") == "1"
+}
+
+type ResourceError struct {
+	msg string
+}
+
+func (r *ResourceError) Error() string {
+	return r.msg
+}
+
+func ResourceErrorf(format string, a ...interface{}) error {
+	return &ResourceError{
+		msg: fmt.Sprintf(format, a...),
+	}
 }

@@ -13,12 +13,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
+
+	"github.com/flant/kubedog/pkg/utils"
 )
 
 type JobFeed interface {
 	Added() error
 	Succeeded() error
 	Failed(reason string) error
+	EventMsg(msg string) error
 	AddedPod(podName string) error
 	PodLogChunk(*PodLogChunk) error
 	PodError(PodError) error
@@ -87,6 +90,19 @@ func TrackJob(name, namespace string, kube kubernetes.Interface, feed JobFeed, o
 				return err
 			}
 
+		case msg := <-job.EventMsg:
+			if debug() {
+				fmt.Printf("Job `%s` event msg: %s\n", job.ResourceName, msg)
+			}
+
+			err := feed.EventMsg(msg)
+			if err == StopTrack {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+
 		case podName := <-job.AddedPod:
 			if debug() {
 				fmt.Printf("Job's `%s` pod `%s` added\n", job.ResourceName, podName)
@@ -104,7 +120,7 @@ func TrackJob(name, namespace string, kube kubernetes.Interface, feed JobFeed, o
 			if debug() {
 				fmt.Printf("Job's `%s` pod `%s` log chunk\n", job.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
-					fmt.Printf("[%s] %s\n", line.Timestamp, line.Data)
+					fmt.Printf("[%s] %s\n", line.Timestamp, line.Message)
 				}
 			}
 
@@ -144,6 +160,7 @@ type JobTracker struct {
 	Added       chan struct{}
 	Succeeded   chan struct{}
 	Failed      chan string
+	EventMsg    chan string
 	AddedPod    chan string
 	PodLogChunk chan *PodLogChunk
 	PodError    chan PodError
@@ -156,6 +173,7 @@ type JobTracker struct {
 	objectAdded    chan *batchv1.Job
 	objectModified chan *batchv1.Job
 	objectDeleted  chan *batchv1.Job
+	objectFailed   chan string
 	podDone        chan string
 	errors         chan error
 }
@@ -163,15 +181,17 @@ type JobTracker struct {
 func NewJobTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *JobTracker {
 	return &JobTracker{
 		Tracker: Tracker{
-			Kube:         kube,
-			Namespace:    namespace,
-			ResourceName: name,
-			Context:      ctx,
+			Kube:             kube,
+			Namespace:        namespace,
+			FullResourceName: fmt.Sprintf("job/%s", name),
+			ResourceName:     name,
+			Context:          ctx,
 		},
 
 		Added:       make(chan struct{}, 0),
 		Succeeded:   make(chan struct{}, 0),
 		Failed:      make(chan string, 0),
+		EventMsg:    make(chan string, 1),
 		AddedPod:    make(chan string, 10),
 		PodLogChunk: make(chan *PodLogChunk, 1000),
 		PodError:    make(chan PodError, 0),
@@ -182,6 +202,7 @@ func NewJobTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		objectAdded:    make(chan *batchv1.Job, 0),
 		objectModified: make(chan *batchv1.Job, 0),
 		objectDeleted:  make(chan *batchv1.Job, 0),
+		objectFailed:   make(chan string, 1),
 		podDone:        make(chan string, 10),
 		errors:         make(chan error, 0),
 	}
@@ -199,6 +220,7 @@ func (job *JobTracker) Track() error {
 		select {
 		case object := <-job.objectAdded:
 			job.lastObject = object
+			job.runEventsInformer()
 
 			switch job.State {
 			case Initial:
@@ -229,6 +251,10 @@ func (job *JobTracker) Track() error {
 			if done {
 				return nil
 			}
+
+		case reason := <-job.objectFailed:
+			job.State = "Failed"
+			job.Failed <- reason
 
 		case <-job.objectDeleted:
 			if debug() {
@@ -316,6 +342,14 @@ func (job *JobTracker) runInformer() error {
 }
 
 func (job *JobTracker) handleJobState(object *batchv1.Job) (done bool, err error) {
+	if debug() {
+		evList, err := utils.ListEventsForObject(job.Kube, object)
+		if err != nil {
+			return false, err
+		}
+		utils.DescribeEvents(evList)
+	}
+
 	if len(job.TrackedPods) == 0 {
 		for _, c := range object.Status.Conditions {
 			if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
@@ -445,6 +479,8 @@ func (job *JobTracker) runPodTracker(podName string) error {
 			case containerError := <-pod.ContainerError:
 				podError := PodError{ContainerError: containerError, PodName: pod.ResourceName}
 				job.PodError <- podError
+			case msg := <-pod.EventMsg:
+				job.EventMsg <- fmt.Sprintf("po/%s %s", pod.ResourceName, msg)
 			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
@@ -460,4 +496,17 @@ func (job *JobTracker) runPodTracker(podName string) error {
 	}()
 
 	return nil
+}
+
+// runEventsInformer watch for DaemonSet events
+func (job *JobTracker) runEventsInformer() {
+	if job.lastObject == nil {
+		return
+	}
+
+	eventInformer := NewEventInformer(job.Tracker, job.lastObject)
+	eventInformer.WithChannels(job.EventMsg, job.objectFailed, job.errors)
+	eventInformer.Run()
+
+	return
 }

@@ -49,14 +49,14 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 	}()
 
 	if debug() {
-		fmt.Printf("  Daemonset/%s: for-select DaemonSetTracker channels\n", name)
+		fmt.Printf("  ds/%s: for-select DaemonSetTracker channels\n", name)
 	}
 
 	for {
 		select {
 		case isReady := <-DaemonSetTracker.Added:
 			if debug() {
-				fmt.Printf("    Daemonset/%s added\n", name)
+				fmt.Printf("    ds/%s added\n", name)
 			}
 
 			err := feed.Added(isReady)
@@ -69,7 +69,7 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 
 		case <-DaemonSetTracker.Ready:
 			if debug() {
-				fmt.Printf("    Daemonset/%s ready: desired: %d, current: %d, updated: %d, ready: %d\n",
+				fmt.Printf("    ds/%s ready: desired: %d, current: %d, updated: %d, ready: %d\n",
 					name,
 					DaemonSetTracker.FinalDaemonSetStatus.DesiredNumberScheduled,
 					DaemonSetTracker.FinalDaemonSetStatus.CurrentNumberScheduled,
@@ -88,7 +88,7 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 
 		case reason := <-DaemonSetTracker.Failed:
 			if debug() {
-				fmt.Printf("    Daemonset/%s failed. Tracker state: `%s`", name, DaemonSetTracker.State)
+				fmt.Printf("    ds/%s failed. Tracker state: `%s`", name, DaemonSetTracker.State)
 			}
 
 			err := feed.Failed(reason)
@@ -99,22 +99,22 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 				return err
 			}
 
-		//case rs := <-DaemonSetTracker.AddedReplicaSet:
-		//	if debug() {
-		//		fmt.Printf("    Daemonset/%s got new replicaset `%s` (is new: %v)\n", DaemonSetTracker.ResourceName, rs.Name, rs.IsNew)
-		//	}
-		//
-		//	err := feed.AddedReplicaSet(rs)
-		//	if err == StopTrack {
-		//		return nil
-		//	}
-		//	if err != nil {
-		//		return err
-		//	}
+		case msg := <-DaemonSetTracker.EventMsg:
+			if debug() {
+				fmt.Printf("    ds/%s event: %s\n", name, msg)
+			}
+
+			err := feed.EventMsg(msg)
+			if err == StopTrack {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
 
 		case pod := <-DaemonSetTracker.AddedPod:
 			if debug() {
-				fmt.Printf("    Daemonset/%s got new pod `%s`\n", DaemonSetTracker.ResourceName, pod.Name)
+				fmt.Printf("    ds/%s po/%s added\n", DaemonSetTracker.ResourceName, pod.Name)
 			}
 
 			err := feed.AddedPod(pod)
@@ -127,9 +127,9 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 
 		case chunk := <-DaemonSetTracker.PodLogChunk:
 			if debug() {
-				fmt.Printf("    Daemonset/%s pod `%s` log chunk\n", DaemonSetTracker.ResourceName, chunk.PodName)
+				fmt.Printf("    ds/%s po/%s log chunk\n", DaemonSetTracker.ResourceName, chunk.PodName)
 				for _, line := range chunk.LogLines {
-					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Data)
+					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Message)
 				}
 			}
 
@@ -143,7 +143,7 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 
 		case podError := <-DaemonSetTracker.PodError:
 			if debug() {
-				fmt.Printf("    Daemonset/%s pod error: %s\n", DaemonSetTracker.ResourceName, podError.Message)
+				fmt.Printf("    ds/%s pod error: %s\n", DaemonSetTracker.ResourceName, podError.Message)
 			}
 
 			err := feed.PodError(podError)
@@ -155,7 +155,7 @@ func TrackDaemonSet(name string, namespace string, kube kubernetes.Interface, fe
 			}
 
 		case err := <-errorChan:
-			return fmt.Errorf("Daemonset/%s error: %v", name, err)
+			return fmt.Errorf("ds/%s error: %v", name, err)
 		case <-doneChan:
 			return nil
 		}
@@ -167,8 +167,6 @@ type DaemonSetTracker struct {
 	Tracker
 	LogsFromTime time.Time
 
-	CurrentReady bool
-
 	State                string
 	Conditions           []string
 	FinalDaemonSetStatus extensions.DaemonSetStatus
@@ -177,6 +175,7 @@ type DaemonSetTracker struct {
 	Added       chan bool
 	Ready       chan bool
 	Failed      chan string
+	EventMsg    chan string
 	AddedPod    chan ReplicaSetPod
 	PodLogChunk chan *ReplicaSetPodLogChunk
 	PodError    chan ReplicaSetPodError
@@ -184,6 +183,7 @@ type DaemonSetTracker struct {
 	resourceAdded    chan *extensions.DaemonSet
 	resourceModified chan *extensions.DaemonSet
 	resourceDeleted  chan *extensions.DaemonSet
+	resourceFailed   chan string
 	podAdded         chan *corev1.Pod
 	podDone          chan string
 	errors           chan error
@@ -202,7 +202,7 @@ func NewDaemonSetTracker(ctx context.Context, name, namespace string, kube kuber
 		Tracker: Tracker{
 			Kube:             kube,
 			Namespace:        namespace,
-			FullResourceName: fmt.Sprintf("Daemonset/%s", name),
+			FullResourceName: fmt.Sprintf("ds/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
 		},
@@ -212,6 +212,7 @@ func NewDaemonSetTracker(ctx context.Context, name, namespace string, kube kuber
 		Added:       make(chan bool, 0),
 		Ready:       make(chan bool, 1),
 		Failed:      make(chan string, 1),
+		EventMsg:    make(chan string, 1),
 		AddedPod:    make(chan ReplicaSetPod, 10),
 		PodLogChunk: make(chan *ReplicaSetPodLogChunk, 1000),
 		PodError:    make(chan ReplicaSetPodError, 0),
@@ -221,6 +222,7 @@ func NewDaemonSetTracker(ctx context.Context, name, namespace string, kube kuber
 		resourceAdded:    make(chan *extensions.DaemonSet, 1),
 		resourceModified: make(chan *extensions.DaemonSet, 1),
 		resourceDeleted:  make(chan *extensions.DaemonSet, 1),
+		resourceFailed:   make(chan string, 1),
 		podAdded:         make(chan *corev1.Pod, 1),
 		podDone:          make(chan string, 1),
 		errors:           make(chan error, 0),
@@ -244,6 +246,7 @@ func (d *DaemonSetTracker) Track() (err error) {
 	for {
 		select {
 		case object := <-d.resourceAdded:
+			d.lastObject = object
 			ready, err := d.handleDaemonSetStatus(object)
 			if err != nil {
 				if debug() {
@@ -254,8 +257,6 @@ func (d *DaemonSetTracker) Track() (err error) {
 			if debug() {
 				fmt.Printf("DaemonSet `%s` initial ready state: %v\n", d.ResourceName, ready)
 			}
-			d.CurrentReady = ready
-			d.lastObject = object
 
 			switch d.State {
 			case "":
@@ -264,13 +265,13 @@ func (d *DaemonSetTracker) Track() (err error) {
 			}
 
 			d.runPodsInformer()
+			d.runEventsInformer()
 
 		case object := <-d.resourceModified:
 			ready, err := d.handleDaemonSetStatus(object)
 			if err != nil {
 				return err
 			}
-			d.CurrentReady = ready
 			d.lastObject = object
 			if ready {
 				d.Ready <- true
@@ -278,8 +279,11 @@ func (d *DaemonSetTracker) Track() (err error) {
 		case object := <-d.resourceDeleted:
 			d.lastObject = object
 			d.State = "Deleted"
-			// TODO create DaemonSetErrors!
 			d.Failed <- "resource deleted"
+
+		case reason := <-d.resourceFailed:
+			d.State = "Failed"
+			d.Failed <- reason
 
 		case pod := <-d.podAdded:
 			if debug() {
@@ -443,6 +447,8 @@ func (d *DaemonSetTracker) runPodTracker(podName string) error {
 				}
 
 				d.PodError <- podError
+			case msg := <-pod.EventMsg:
+				d.EventMsg <- fmt.Sprintf("po/%s %s", pod.ResourceName, msg)
 			case <-pod.Added:
 			case <-pod.Succeeded:
 			case <-pod.Failed:
@@ -469,6 +475,14 @@ func (d *DaemonSetTracker) handleDaemonSetStatus(object *extensions.DaemonSet) (
 	msg, ready, err = DaemonSetRolloutStatus(object)
 
 	if debug() {
+		evList, err := utils.ListEventsForObject(d.Kube, object)
+		if err != nil {
+			return false, err
+		}
+		utils.DescribeEvents(evList)
+	}
+
+	if debug() {
 		if err == nil && ready {
 			fmt.Printf("DaemonSet READY. %s\n", msg)
 		} else {
@@ -477,4 +491,17 @@ func (d *DaemonSetTracker) handleDaemonSetStatus(object *extensions.DaemonSet) (
 	}
 
 	return ready, err
+}
+
+// runEventsInformer watch for DaemonSet events
+func (d *DaemonSetTracker) runEventsInformer() {
+	if d.lastObject == nil {
+		return
+	}
+
+	eventInformer := NewEventInformer(d.Tracker, d.lastObject)
+	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
+	eventInformer.Run()
+
+	return
 }
