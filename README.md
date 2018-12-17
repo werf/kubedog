@@ -28,7 +28,7 @@ In the rollout and follow modes kubedog will print to the screen logs and other 
 
 Follow mode can be used as simple `tail -f` tool, but for kubernetes resources.
 
-Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error mesage and ensures to exit with non-zero error code if something wrong with the specified resource.
+Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resource.
 
 ![Deployment Rollout Animation](doc/deployment_rollout.gif)
 
