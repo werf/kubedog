@@ -12,12 +12,6 @@ This library is used in the [dapp CI/CD tool](https://github.com/flant/dapp) to 
 go get github.com/flant/kubedog
 ```
 
-### Compile cli util
-
-```
-go install github.com/flant/kubedog/cmd/kubedog
-```
-
 ### Download cli util binary
 
 [Linux amd64](https://dl.bintray.com/dapp/dapp/kubedog/linux-amd64/kubedog)
