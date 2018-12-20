@@ -227,7 +227,7 @@ func (job *JobTracker) Track() error {
 				job.State = ResourceAdded
 				job.Added <- struct{}{}
 
-				err = job.runPodsTrackers()
+				err = job.runPodsTrackers(object)
 				if err != nil {
 					return err
 				}
@@ -368,14 +368,8 @@ func (job *JobTracker) handleJobState(object *batchv1.Job) (done bool, err error
 	return
 }
 
-func (job *JobTracker) runPodsTrackers() error {
-	jobManifest, err := job.Kube.Batch().
-		Jobs(job.Namespace).
-		Get(job.ResourceName, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-	selector, err := metav1.LabelSelectorAsSelector(jobManifest.Spec.Selector)
+func (job *JobTracker) runPodsTrackers(object *batchv1.Job) error {
+	selector, err := metav1.LabelSelectorAsSelector(object.Spec.Selector)
 	if err != nil {
 		return err
 	}
