@@ -211,7 +211,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
-		State:                           Initial,
+		State: Initial,
 		ContainerTrackerStates:          make(map[string]TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
 		TrackedContainers:               make([]string, 0),
@@ -260,7 +260,7 @@ func (pod *PodTracker) Track() error {
 				pod.State = ResourceAdded
 				pod.Added <- struct{}{}
 
-				err := pod.runContainersTrackers()
+				err := pod.runContainersTrackers(object)
 				if err != nil {
 					return err
 				}
@@ -476,19 +476,12 @@ func (pod *PodTracker) trackContainer(containerName string) error {
 	}
 }
 
-func (pod *PodTracker) runContainersTrackers() error {
-	podManifest, err := pod.Kube.Core().
-		Pods(pod.Namespace).
-		Get(pod.ResourceName, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-
+func (pod *PodTracker) runContainersTrackers(object *corev1.Pod) error {
 	allContainersNames := make([]string, 0)
-	for _, containerConf := range podManifest.Spec.InitContainers {
+	for _, containerConf := range object.Spec.InitContainers {
 		allContainersNames = append(allContainersNames, containerConf.Name)
 	}
-	for _, containerConf := range podManifest.Spec.Containers {
+	for _, containerConf := range object.Spec.Containers {
 		allContainersNames = append(allContainersNames, containerConf.Name)
 	}
 	for i := range allContainersNames {
