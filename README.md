@@ -188,3 +188,7 @@ Import package:
 ```
 import "github.com/flant/kubedog/pkg/tracker"
 ```
+
+# Support
+
+You can ask for support in [dapp chat in Telegram](https://t.me/dapp_ru).
