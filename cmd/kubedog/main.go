@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -13,6 +14,9 @@ import (
 )
 
 func main() {
+	// set flag.Parsed() for glog
+	flag.CommandLine.Parse([]string{})
+
 	err := kube.Init(kube.InitOptions{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
