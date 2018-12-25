@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flant/kubedog/pkg/kube"
+	"github.com/flant/kubedog/pkg/kubedog"
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/trackers/follow"
 	"github.com/flant/kubedog/pkg/trackers/rollout"
@@ -65,6 +66,14 @@ func main() {
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
 	rootCmd.PersistentFlags().IntVarP(&timeoutSeconds, "timeout", "t", -1, "watch timeout in seconds") // default is 0 for follow
 	rootCmd.PersistentFlags().StringVarP(&logsSince, "logs-since", "", "now", "logs newer than a relative duration like 30s, 5m, or 2h")
+
+	versionCmd := &cobra.Command{
+		Use: "version",
+		Run: func(_ *cobra.Command, _ []string) {
+			fmt.Println(kubedog.Version)
+		},
+	}
+	rootCmd.AddCommand(versionCmd)
 
 	followCmd := &cobra.Command{Use: "follow"}
 	rootCmd.AddCommand(followCmd)
