@@ -14,9 +14,9 @@ go get github.com/flant/kubedog
 
 ### Download cli util binary
 
-[Linux amd64](https://dl.bintray.com/dapp/dapp/kubedog/linux-amd64/kubedog)
+[Linux amd64](https://dl.bintray.com/dapp/kubedog/0.1.0-alpha.2/linux-amd64/kubedog)
 
-[Darwin amd64](https://dl.bintray.com/dapp/dapp/kubedog/darwin-amd64/kubedog)
+[Darwin amd64](https://dl.bintray.com/dapp/kubedog/0.1.0-alpha.2/darwin-amd64/kubedog)
 
 ## Cli
 
