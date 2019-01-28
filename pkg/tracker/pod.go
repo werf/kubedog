@@ -548,7 +548,7 @@ func (pod *PodTracker) runInformer() error {
 			} else if e.Type == watch.Deleted {
 				pod.objectDeleted <- object
 			} else if e.Type == watch.Error {
-				pod.errors <- fmt.Errorf("Pod %s error: %v", e.Object)
+				pod.errors <- fmt.Errorf("Pod %s error: %v", pod.ResourceName, e.Object)
 			}
 
 			return false, nil

@@ -5,9 +5,10 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
+	"os"
+
 	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker"
-	"os"
 )
 
 func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
@@ -34,7 +35,7 @@ func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tr
 		},
 		PodErrorFunc: func(podError tracker.PodError) error {
 			fmt.Printf("# job/%s po/%s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
-			return tracker.ResourceErrorf("job/%s po/%s %s failed: %s", podError.PodName, podError.ContainerName, podError.Message)
+			return tracker.ResourceErrorf("job/%s po/%s %s failed: %s", name, podError.PodName, podError.ContainerName, podError.Message)
 		},
 		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
 			header := fmt.Sprintf("po/%s %s", chunk.PodName, chunk.ContainerName)
