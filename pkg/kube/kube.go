@@ -30,7 +30,7 @@ func Init(opts InitOptions) error {
 	var config *rest.Config
 
 	if isRunningOutOfKubeCluster() {
-		clientConfig := getConfig(opts.KubeContext, opts.KubeConfig)
+		clientConfig := getClientConfig(opts.KubeContext, opts.KubeConfig)
 
 		ns, _, err := clientConfig.Namespace()
 		if err != nil {
@@ -40,14 +40,7 @@ func Init(opts InitOptions) error {
 
 		config, err = clientConfig.ClientConfig()
 		if err != nil {
-			baseErrMsg := fmt.Sprintf("out-of-cluster configuration problem")
-			if opts.KubeConfig != "" {
-				baseErrMsg += ", custom kube config path is %q"
-			}
-			if opts.KubeContext != "" {
-				baseErrMsg += ", custom kube context is %q"
-			}
-			return fmt.Errorf("%s: %s", baseErrMsg, err)
+			return makeOutOfClusterClientConfigError(opts.KubeConfig, opts.KubeContext, err)
 		}
 	} else {
 		config, err = rest.InClusterConfig()
@@ -71,7 +64,66 @@ func Init(opts InitOptions) error {
 	return nil
 }
 
-func getConfig(context string, kubeconfig string) clientcmd.ClientConfig {
+type GetClientsOptions struct {
+	KubeConfig string
+}
+
+func GetAllClients(opts GetClientsOptions) ([]kubernetes.Interface, error) {
+	var res []kubernetes.Interface
+
+	if isRunningOutOfKubeCluster() {
+		rc, err := getClientConfig("", opts.KubeConfig).RawConfig()
+		if err != nil {
+			return nil, err
+		}
+
+		for contextName := range rc.Contexts {
+			clientConfig := getClientConfig(contextName, opts.KubeConfig)
+
+			config, err := clientConfig.ClientConfig()
+			if err != nil {
+				return nil, makeOutOfClusterClientConfigError(opts.KubeConfig, contextName, err)
+			}
+
+			clientset, err := kubernetes.NewForConfig(config)
+			if err != nil {
+				return nil, err
+			}
+
+			res = append(res, clientset)
+		}
+	} else {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("in-cluster configuration problem: %s", err)
+		}
+
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, clientset)
+	}
+
+	return res, nil
+}
+
+func makeOutOfClusterClientConfigError(kubeConfig, kubeContext string, err error) error {
+	baseErrMsg := fmt.Sprintf("out-of-cluster configuration problem")
+
+	if kubeConfig != "" {
+		baseErrMsg += fmt.Sprintf(", custom kube config path is %q", kubeConfig)
+	}
+
+	if kubeContext != "" {
+		baseErrMsg += fmt.Sprintf(", custom kube context is %q", kubeContext)
+	}
+
+	return fmt.Errorf("%s: %s", baseErrMsg, err)
+}
+
+func getClientConfig(context string, kubeconfig string) clientcmd.ClientConfig {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
 
