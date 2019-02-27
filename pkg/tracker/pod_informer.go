@@ -60,10 +60,10 @@ func (p *PodsInformer) Run() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.Core().Pods(p.Namespace).List(tweakListOptions(options))
+			return client.CoreV1().Pods(p.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.Core().Pods(p.Namespace).Watch(tweakListOptions(options))
+			return client.CoreV1().Pods(p.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 

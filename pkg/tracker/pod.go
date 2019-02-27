@@ -211,7 +211,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
-		State: Initial,
+		State:                           Initial,
 		ContainerTrackerStates:          make(map[string]TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
 		TrackedContainers:               make([]string, 0),
@@ -385,7 +385,7 @@ func (pod *PodTracker) followContainerLogs(containerName string) error {
 			Time: pod.LogsFromTime,
 		}
 	}
-	req := pod.Kube.Core().
+	req := pod.Kube.CoreV1().
 		Pods(pod.Namespace).
 		GetLogs(pod.ResourceName, logOpts)
 
@@ -518,10 +518,10 @@ func (pod *PodTracker) runInformer() error {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return pod.Kube.Core().Pods(pod.Namespace).List(tweakListOptions(options))
+			return pod.Kube.CoreV1().Pods(pod.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return pod.Kube.Core().Pods(pod.Namespace).Watch(tweakListOptions(options))
+			return pod.Kube.CoreV1().Pods(pod.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 

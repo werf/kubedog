@@ -119,7 +119,7 @@ type rsListFunc func(string, metav1.ListOptions) ([]*extensions.ReplicaSet, erro
 // rsListFromClient returns an rsListFunc that wraps the given client.
 func rsListFromClient(c kubernetes.Interface) rsListFunc {
 	return func(namespace string, options metav1.ListOptions) ([]*extensions.ReplicaSet, error) {
-		rsList, err := c.Extensions().ReplicaSets(namespace).List(options)
+		rsList, err := c.ExtensionsV1beta1().ReplicaSets(namespace).List(options)
 		if err != nil {
 			return nil, err
 		}

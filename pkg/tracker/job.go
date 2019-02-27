@@ -295,10 +295,10 @@ func (job *JobTracker) runInformer() error {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return job.Kube.Batch().Jobs(job.Namespace).List(tweakListOptions(options))
+			return job.Kube.BatchV1().Jobs(job.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return job.Kube.Batch().Jobs(job.Namespace).Watch(tweakListOptions(options))
+			return job.Kube.BatchV1().Jobs(job.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
@@ -374,7 +374,7 @@ func (job *JobTracker) runPodsTrackers(object *batchv1.Job) error {
 		return err
 	}
 
-	list, err := job.Kube.Core().Pods(job.Namespace).List(metav1.ListOptions{LabelSelector: selector.String()})
+	list, err := job.Kube.CoreV1().Pods(job.Namespace).List(metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		return err
 	}
@@ -391,10 +391,10 @@ func (job *JobTracker) runPodsTrackers(object *batchv1.Job) error {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return job.Kube.Core().Pods(job.Namespace).List(tweakListOptions(options))
+			return job.Kube.CoreV1().Pods(job.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return job.Kube.Core().Pods(job.Namespace).Watch(tweakListOptions(options))
+			return job.Kube.CoreV1().Pods(job.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
