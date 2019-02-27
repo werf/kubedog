@@ -394,10 +394,10 @@ func (d *DeploymentTracker) runDeploymentInformer() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.Extensions().Deployments(d.Namespace).List(tweakListOptions(options))
+			return client.ExtensionsV1beta1().Deployments(d.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.Extensions().Deployments(d.Namespace).Watch(tweakListOptions(options))
+			return client.ExtensionsV1beta1().Deployments(d.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 

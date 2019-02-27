@@ -331,10 +331,10 @@ func (d *DaemonSetTracker) runDaemonSetInformer() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.Extensions().DaemonSets(d.Namespace).List(tweakListOptions(options))
+			return client.ExtensionsV1beta1().DaemonSets(d.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.Extensions().DaemonSets(d.Namespace).Watch(tweakListOptions(options))
+			return client.ExtensionsV1beta1().DaemonSets(d.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
