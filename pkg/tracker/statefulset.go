@@ -247,13 +247,7 @@ func (d *StatefulSetTracker) Track() (err error) {
 		select {
 		case object := <-d.resourceAdded:
 			d.lastObject = object
-			ready, err := d.handleStatefulSetState(object)
-			if err != nil {
-				if debug() {
-					fmt.Printf("handle StatefulSet state error: %v", err)
-				}
-				return err
-			}
+			ready := d.handleStatefulSetState(object)
 			if debug() {
 				fmt.Printf("StatefulSet `%s` initial ready state: %v\n", d.ResourceName, ready)
 			}
@@ -269,11 +263,9 @@ func (d *StatefulSetTracker) Track() (err error) {
 
 		case object := <-d.resourceModified:
 			d.lastObject = object
-			ready, err := d.handleStatefulSetState(object)
-			if err != nil {
-				return err
-			}
+			ready := d.handleStatefulSetState(object)
 			if ready {
+				d.FinalStatefulSetStatus = object.Status
 				d.Ready <- true
 			}
 		case object := <-d.resourceDeleted:
@@ -466,31 +458,21 @@ func (d *StatefulSetTracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *StatefulSetTracker) handleStatefulSetState(object *appsv1.StatefulSet) (ready bool, err error) {
+func (d *StatefulSetTracker) handleStatefulSetState(object *appsv1.StatefulSet) bool {
 	if debug() {
 		fmt.Printf("%s\n", getStatefulSetStatus(object))
-	}
+		msg, ready, err := StatefulSetRolloutStatus(object)
+		fmt.Printf("StatefulSet kubectl rollout status: ready=%s, msg=%s, err=%v\n", yesNo(ready), msg, err)
 
-	msg := ""
-	msg, ready, err = StatefulSetRolloutStatus(object)
-
-	if debug() {
 		evList, err := utils.ListEventsForObject(d.Kube, object)
 		if err != nil {
-			return false, err
-		}
-		utils.DescribeEvents(evList)
-	}
-
-	if debug() {
-		if ready {
-			fmt.Printf("StatefulSet READY. %s\n", msg)
+			fmt.Printf("ListEvents for sts/%s error: %v\n", object.Name, err)
 		} else {
-			fmt.Printf("StatefulSet NOT READY. %s\n", msg)
+			utils.DescribeEvents(evList)
 		}
 	}
 
-	return ready, err
+	return StatefulSetComplete(object)
 }
 
 // runEventsInformer watch for StatefulSet events

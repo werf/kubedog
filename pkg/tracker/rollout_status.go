@@ -77,6 +77,9 @@ func DaemonSetRolloutStatus(daemon *extensions.DaemonSet) (string, bool, error) 
 }
 
 // Status returns a message describing statefulset status, and a bool value indicating if the status is considered done.
+// A code from kubectl sources. Doesn't work well for OnDelete, downscale and partition: 0 case.
+// https://github.com/kubernetes/kubernetes/issues/72212
+// Now used only for debug purposes
 func StatefulSetRolloutStatus(sts *appsv1.StatefulSet) (string, bool, error) {
 	if sts.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
 		return "", true, fmt.Errorf("rollout status is only available for %s strategy type", appsv1.RollingUpdateStatefulSetStrategyType)
@@ -103,4 +106,67 @@ func StatefulSetRolloutStatus(sts *appsv1.StatefulSet) (string, bool, error) {
 	}
 	return fmt.Sprintf("statefulset rolling update complete %d pods at revision %s...\n", sts.Status.CurrentReplicas, sts.Status.CurrentRevision), true, nil
 
+}
+
+// StatefulSetComplete return true if StatefulSet is considered ready
+//
+// Two strategies: OnDelete, RollingUpdate
+//
+// OnDelete can be tracked in two situations:
+// - resource is created
+// - replicas attribute is changed
+// A more sophisticated solution that will check Revision of Pods is not needed because of required manual intervention
+//
+// RollingUpdate is automatic, so we can rely on the CurrentReplicas and UpdatedReplicas counters.
+func StatefulSetComplete(sts *appsv1.StatefulSet) bool {
+	if sts.Status.ObservedGeneration == 0 || sts.Generation != sts.Status.ObservedGeneration {
+		return false
+	}
+
+	// desired == observed == ready
+	if sts.Spec.Replicas != nil && (*sts.Spec.Replicas != sts.Status.Replicas || *sts.Spec.Replicas != sts.Status.ReadyReplicas) {
+		return false
+	}
+
+	// No other conditions for OnDelete strategy
+	if sts.Spec.UpdateStrategy.Type == appsv1.OnDeleteStatefulSetStrategyType {
+		return true
+	}
+
+	if sts.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType {
+		var partition int32 = 0
+		if sts.Spec.UpdateStrategy.RollingUpdate != nil {
+			if sts.Spec.Replicas != nil && sts.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+				partition = *sts.Spec.UpdateStrategy.RollingUpdate.Partition
+			}
+		}
+
+		if partition == 0 {
+			// The last step in update is make revisions equal and so UpdatedReplicas becomes 0.
+			// Final ready condition is: currentRevision == updateRevision and currentReplicas == readyReplicas and updatedReplicas == 0
+			// This code also works for static checking when sts is not in progress.
+
+			// Revision are not equal — sts update still in progress.
+			if sts.Status.UpdateRevision != sts.Status.CurrentRevision {
+				return false
+			}
+			// current == ready, updated == 0
+			if sts.Status.CurrentReplicas == sts.Status.ReadyReplicas && sts.Status.UpdatedReplicas == 0 {
+				return true
+			}
+		} else {
+			// Final ready condition for partitioned rollout is:
+			// revisions are not equal, currentReplicas == partition, updatedReplicas == desired - partition
+			if sts.Status.UpdateRevision == sts.Status.CurrentRevision {
+				return false
+			}
+			if sts.Status.CurrentReplicas == partition && sts.Status.UpdatedReplicas == (*sts.Spec.Replicas-partition) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Unknown UpdateStrategy. Behave like OnDelete.
+	return true
 }

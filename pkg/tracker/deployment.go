@@ -102,7 +102,7 @@ func TrackDeployment(name string, namespace string, kube kubernetes.Interface, f
 
 		case msg := <-deploymentTracker.EventMsg:
 			if debug() {
-				fmt.Printf("    deploy/%s event: %s", name, msg)
+				fmt.Printf("    deploy/%s event: %s\n", name, msg)
 			}
 
 			err := feed.EventMsg(msg)
@@ -239,6 +239,7 @@ func NewDeploymentTracker(ctx context.Context, name, namespace string, kube kube
 		AddedPod:        make(chan ReplicaSetPod, 10),
 		PodLogChunk:     make(chan *ReplicaSetPodLogChunk, 1000),
 		PodError:        make(chan ReplicaSetPodError, 0),
+		//PodReady:        make(chan bool, 1),
 
 		knownReplicaSets: make(map[string]*extensions.ReplicaSet),
 		TrackedPods:      make([]string, 0),
@@ -293,7 +294,7 @@ func (d *DeploymentTracker) Track() (err error) {
 
 			d.runReplicaSetsInformer()
 			d.runPodsInformer()
-			d.runEventsInformer()
+			d.runEventsInformer(object)
 
 		case object := <-d.resourceModified:
 			ready, err := d.handleDeploymentState(object)
@@ -590,6 +591,7 @@ func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment)
 	d.lastObject = object
 
 	if prevReady == false && d.CurrentReady == true {
+		d.FinalDeploymentStatus = newStatus
 		ready = true
 	}
 
@@ -600,13 +602,13 @@ func (d *DeploymentTracker) handleDeploymentState(object *extensions.Deployment)
 	return
 }
 
-// runEventsInformer watch for StatefulSet events
-func (d *DeploymentTracker) runEventsInformer() {
-	if d.lastObject == nil {
-		return
-	}
+// runEventsInformer watch for Deployment events
+func (d *DeploymentTracker) runEventsInformer(resource interface{}) {
+	//if d.lastObject == nil {
+	//	return
+	//}
 
-	eventInformer := NewEventInformer(d.Tracker, d.lastObject)
+	eventInformer := NewEventInformer(d.Tracker, resource)
 	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
 	eventInformer.Run()
 
