@@ -84,9 +84,8 @@ func DeploymentTimedOut(deployment *extensions.Deployment, newStatus *extensions
 	timedOut := from.Add(delta).Before(now)
 
 	if debug() {
-		fmt.Printf("Deployment %q timed out (%t) [last progress check: %v - now: %v]", deployment.Name, timedOut, from, now)
+		fmt.Printf("deploy/%s timedOut=%t [last progress check: %v - now: %v]\n", deployment.Name, timedOut, from.Format("02.01.2006 15:04:05"), now.Format("02.01.2006 15:04:05"))
 	}
-	//glog.V(4).Infof("Deployment %q timed out (%t) [last progress check: %v - now: %v]", deployment.Name, timedOut, from, now)
 	return timedOut
 }
 
