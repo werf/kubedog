@@ -2,14 +2,26 @@ package display
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 )
 
 var (
+	Out io.Writer = os.Stdout
+	Err io.Writer = os.Stderr
+
 	mutex            = &sync.Mutex{}
 	currentLogHeader = ""
 )
+
+func SetOut(out io.Writer) {
+	Out = out
+}
+
+func SetErr(err io.Writer) {
+	Err = err
+}
 
 type LogLine struct {
 	Timestamp string
@@ -24,7 +36,7 @@ func SetLogHeader(logHeader string) {
 		if currentLogHeader != "" {
 			fmt.Println()
 		}
-		fmt.Printf(">> %s\n", logHeader)
+		fmt.Fprintf(Out, ">> %s\n", logHeader)
 		currentLogHeader = logHeader
 	}
 }
@@ -32,12 +44,12 @@ func SetLogHeader(logHeader string) {
 func OutputLogLines(header string, logLines []LogLine) {
 	if inline() {
 		for _, line := range logLines {
-			fmt.Printf(">> %s: %s\n", header, line.Message)
+			fmt.Fprintf(Out, ">> %s: %s\n", header, line.Message)
 		}
 	} else {
 		SetLogHeader(header)
 		for _, line := range logLines {
-			fmt.Println(line.Message)
+			fmt.Fprintln(Out, line.Message)
 		}
 	}
 }

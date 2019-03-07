@@ -7,7 +7,6 @@ import (
 
 	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker"
-	"os"
 )
 
 // TrackDaemonSetTillReady implements rollout track mode for DaemonSet
@@ -17,30 +16,30 @@ func TrackDaemonSetTillReady(name, namespace string, kube kubernetes.Interface, 
 	feed := &tracker.ControllerFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
-				fmt.Printf("# ds/%s appears to be ready. Exit\n", name)
+				fmt.Fprintf(display.Out, "# ds/%s appears to be ready. Exit\n", name)
 				return tracker.StopTrack
 			}
-			fmt.Printf("# ds/%s added\n", name)
+			fmt.Fprintf(display.Out, "# ds/%s added\n", name)
 			return nil
 		},
 		ReadyFunc: func() error {
-			fmt.Printf("# ds/%s become READY\n", name)
+			fmt.Fprintf(display.Out, "# ds/%s become READY\n", name)
 			return tracker.StopTrack
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# ds/%s FAIL: %s\n", name, reason)
-			return tracker.ResourceErrorf("ds/%s failed: %s", reason)
+			fmt.Fprintf(display.Err, "# ds/%s FAIL: %s\n", name, reason)
+			return tracker.ResourceErrorf("ds/%s failed: %s", name, reason)
 		},
 		EventMsgFunc: func(msg string) error {
-			fmt.Printf("# ds/%s event: %s\n", name, msg)
+			fmt.Fprintf(display.Out, "# ds/%s event: %s\n", name, msg)
 			return nil
 		},
 		AddedPodFunc: func(pod tracker.ReplicaSetPod) error {
-			fmt.Printf("# ds/%s po/%s added\n", name, pod.Name)
+			fmt.Fprintf(display.Out, "# ds/%s po/%s added\n", name, pod.Name)
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.ReplicaSetPodError) error {
-			fmt.Printf("# ds/%s %s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Fprintf(display.Err, "# ds/%s %s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return tracker.ResourceErrorf("ds/%s po/%s %s failed: %s", name, podError.PodName, podError.ContainerName, podError.Message)
 		},
 		PodLogChunkFunc: func(chunk *tracker.ReplicaSetPodLogChunk) error {
@@ -56,7 +55,7 @@ func TrackDaemonSetTillReady(name, namespace string, kube kubernetes.Interface, 
 		case *tracker.ResourceError:
 			return e
 		default:
-			fmt.Fprintf(os.Stderr, "error tracking DaemonSet `%s` in namespace `%s`: %s\n", name, namespace, err)
+			fmt.Fprintf(display.Err, "error tracking ds/%s in namespace '%s': %s\n", name, namespace, err)
 		}
 	}
 	return err
