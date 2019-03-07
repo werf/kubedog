@@ -18,15 +18,11 @@ func main() {
 	// set flag.Parsed() for glog
 	flag.CommandLine.Parse([]string{})
 
-	err := kube.Init(kube.InitOptions{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
-		os.Exit(1)
-	}
-
 	var namespace string
 	var timeoutSeconds int
 	var logsSince string
+	var kubeContext string
+	var kubeConfig string
 
 	makeTrackerOptions := func(mode string) tracker.Options {
 		// rollout track defaults
@@ -62,10 +58,20 @@ func main() {
 		return opts
 	}
 
+	initKube := func() {
+		err := kube.Init(kube.InitOptions{KubeContext: kubeContext, KubeConfig: kubeConfig})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
+			os.Exit(1)
+		}
+	}
+
 	rootCmd := &cobra.Command{Use: "kubedog"}
-	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "kubernetes namespace")
-	rootCmd.PersistentFlags().IntVarP(&timeoutSeconds, "timeout", "t", -1, "watch timeout in seconds") // default is 0 for follow
-	rootCmd.PersistentFlags().StringVarP(&logsSince, "logs-since", "", "now", "logs newer than a relative duration like 30s, 5m, or 2h")
+	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "If present, the namespace scope of a resource.")
+	rootCmd.PersistentFlags().IntVarP(&timeoutSeconds, "timeout", "t", -1, "Timeout of operation in seconds. 0 is wait forever. Default is 0 for follow and 300 for rollout track.")
+	rootCmd.PersistentFlags().StringVarP(&logsSince, "logs-since", "", "now", "A duration like 30s, 5m, or 2h to start log records from the past. 'all' to show all logs and 'now' to display only new records (default).")
+	rootCmd.PersistentFlags().StringVarP(&kubeContext, "kube-context", "", os.Getenv("KUBEDOG_KUBE_CONTEXT"), "The name of the kubeconfig context to use (can be set with $KUBEDOG_KUBE_CONTEXT).")
+	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "", os.Getenv("KUBEDOG_KUBE_CONFIG"), "Path to the kubeconfig file (can be set with $KUBEDOG_KUBE_CONFIG).")
 
 	versionCmd := &cobra.Command{
 		Use: "version",
@@ -84,6 +90,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := follow.TrackJob(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -97,6 +104,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := follow.TrackDeployment(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -110,6 +118,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := follow.TrackStatefulSet(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -123,6 +132,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := follow.TrackDaemonSet(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -136,6 +146,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := follow.TrackPod(name, namespace, kube.Kubernetes, makeTrackerOptions("follow"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -155,6 +166,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := rollout.TrackJobTillDone(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -169,6 +181,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := rollout.TrackDeploymentTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -183,6 +196,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := rollout.TrackStatefulSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -197,6 +211,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := rollout.TrackDaemonSetTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -211,6 +226,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			name := args[0]
+			initKube()
 			err := rollout.TrackPodTillReady(name, namespace, kube.Kubernetes, makeTrackerOptions("track"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -219,7 +235,7 @@ func main() {
 		},
 	})
 
-	err = rootCmd.Execute()
+	err := rootCmd.Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
