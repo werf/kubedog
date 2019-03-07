@@ -13,46 +13,46 @@ func TrackDeployment(name, namespace string, kube kubernetes.Interface, opts tra
 	feed := &tracker.ControllerFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
-				fmt.Printf("# deploy/%s appears to be ready\n", name)
+				fmt.Fprintf(display.Out, "# deploy/%s appears to be ready\n", name)
 			} else {
-				fmt.Printf("# deploy/%s added\n", name)
+				fmt.Fprintf(display.Out, "# deploy/%s added\n", name)
 			}
 			return nil
 		},
 		ReadyFunc: func() error {
-			fmt.Printf("# deploy/%s become READY\n", name)
+			fmt.Fprintf(display.Out, "# deploy/%s become READY\n", name)
 			return nil
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# deploy/%s FAIL: %s\n", name, reason)
+			fmt.Fprintf(display.Out, "# deploy/%s FAIL: %s\n", name, reason)
 			return nil
 		},
 		EventMsgFunc: func(msg string) error {
-			fmt.Printf("# deploy/%s event: %s\n", name, msg)
+			fmt.Fprintf(display.Out, "# deploy/%s event: %s\n", name, msg)
 			return nil
 		},
 		AddedReplicaSetFunc: func(rs tracker.ReplicaSet) error {
 			if rs.IsNew {
-				fmt.Printf("# deploy/%s new rs/%s added\n", name, rs.Name)
+				fmt.Fprintf(display.Out, "# deploy/%s new rs/%s added\n", name, rs.Name)
 			} else {
-				fmt.Printf("# deploy/%s rs/%s added\n", name, rs.Name)
+				fmt.Fprintf(display.Out, "# deploy/%s rs/%s added\n", name, rs.Name)
 			}
 
 			return nil
 		},
 		AddedPodFunc: func(pod tracker.ReplicaSetPod) error {
 			if pod.ReplicaSet.IsNew {
-				fmt.Printf("# deploy/%s rs/%s(new) po/%s added\n", name, pod.ReplicaSet.Name, pod.Name)
+				fmt.Fprintf(display.Out, "# deploy/%s rs/%s(new) po/%s added\n", name, pod.ReplicaSet.Name, pod.Name)
 			} else {
-				fmt.Printf("# deploy/%s rs/%s po/%s added\n", name, pod.ReplicaSet.Name, pod.Name)
+				fmt.Fprintf(display.Out, "# deploy/%s rs/%s po/%s added\n", name, pod.ReplicaSet.Name, pod.Name)
 			}
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.ReplicaSetPodError) error {
 			if podError.ReplicaSet.IsNew {
-				fmt.Printf("# deploy/%s rs/%s(new) po/%s %s error: %s\n", name, podError.ReplicaSet.Name, podError.PodName, podError.ContainerName, podError.Message)
+				fmt.Fprintf(display.Out, "# deploy/%s rs/%s(new) po/%s %s error: %s\n", name, podError.ReplicaSet.Name, podError.PodName, podError.ContainerName, podError.Message)
 			} else {
-				fmt.Printf("# deploy/%s rs/%s po/%s %s error: %s\n", name, podError.ReplicaSet.Name, podError.PodName, podError.ContainerName, podError.Message)
+				fmt.Fprintf(display.Out, "# deploy/%s rs/%s po/%s %s error: %s\n", name, podError.ReplicaSet.Name, podError.PodName, podError.ContainerName, podError.Message)
 			}
 			return nil
 		},

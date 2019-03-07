@@ -34,7 +34,7 @@ func SetLogHeader(logHeader string) {
 
 	if currentLogHeader != logHeader {
 		if currentLogHeader != "" {
-			fmt.Println()
+			fmt.Fprintln(Out)
 		}
 		fmt.Fprintf(Out, ">> %s\n", logHeader)
 		currentLogHeader = logHeader

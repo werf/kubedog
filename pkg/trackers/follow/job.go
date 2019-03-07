@@ -12,27 +12,27 @@ import (
 func TrackJob(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.JobFeedProto{
 		AddedFunc: func() error {
-			fmt.Printf("# job/%s added\n", name)
+			fmt.Fprintf(display.Out, "# job/%s added\n", name)
 			return nil
 		},
 		SucceededFunc: func() error {
-			fmt.Printf("# job/%s succeeded\n", name)
+			fmt.Fprintf(display.Out, "# job/%s succeeded\n", name)
 			return nil
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# job/%s FAIL: %s\n", name, reason)
+			fmt.Fprintf(display.Out, "# job/%s FAIL: %s\n", name, reason)
 			return nil
 		},
 		EventMsgFunc: func(msg string) error {
-			fmt.Printf("# job/%s event: %s\n", name, msg)
+			fmt.Fprintf(display.Out, "# job/%s event: %s\n", name, msg)
 			return nil
 		},
 		AddedPodFunc: func(podName string) error {
-			fmt.Printf("# job/%s po/%s added\n", name, podName)
+			fmt.Fprintf(display.Out, "# job/%s po/%s added\n", name, podName)
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.PodError) error {
-			fmt.Printf("# job/%s po/%s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Fprintf(display.Out, "# job/%s po/%s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return nil
 		},
 		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
