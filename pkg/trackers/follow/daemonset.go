@@ -13,30 +13,30 @@ func TrackDaemonSet(name, namespace string, kube kubernetes.Interface, opts trac
 	feed := &tracker.ControllerFeedProto{
 		AddedFunc: func(ready bool) error {
 			if ready {
-				fmt.Printf("# ds/%s appears to be ready\n", name)
+				fmt.Fprintf(display.Out, "# ds/%s appears to be ready\n", name)
 			} else {
-				fmt.Printf("# ds/%s added\n", name)
+				fmt.Fprintf(display.Out, "# ds/%s added\n", name)
 			}
 			return nil
 		},
 		ReadyFunc: func() error {
-			fmt.Printf("# ds/%s become READY\n", name)
+			fmt.Fprintf(display.Out, "# ds/%s become READY\n", name)
 			return nil
 		},
 		EventMsgFunc: func(msg string) error {
-			fmt.Printf("# ds/%s event: %s\n", name, msg)
+			fmt.Fprintf(display.Out, "# ds/%s event: %s\n", name, msg)
 			return nil
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# ds/%s FAIL: %s\n", name, reason)
+			fmt.Fprintf(display.Out, "# ds/%s FAIL: %s\n", name, reason)
 			return nil
 		},
 		AddedPodFunc: func(pod tracker.ReplicaSetPod) error {
-			fmt.Printf("# ds/%s po/%s added\n", name, pod.Name)
+			fmt.Fprintf(display.Out, "# ds/%s po/%s added\n", name, pod.Name)
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.ReplicaSetPodError) error {
-			fmt.Printf("# ds/%s %s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Fprintf(display.Out, "# ds/%s %s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return nil
 		},
 		PodLogChunkFunc: func(chunk *tracker.ReplicaSetPodLogChunk) error {
