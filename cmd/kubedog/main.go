@@ -28,12 +28,8 @@ func main() {
 		// rollout track defaults
 		var timeout uint64
 		if timeoutSeconds == -1 {
-			if mode == "follow" {
-				timeout = 0
-			}
-			if mode == "track" {
-				timeout = 300
-			}
+			// wait forever by default in follow and rollout track modes
+			timeout = 0
 		} else {
 			timeout = uint64(timeoutSeconds)
 		}
@@ -68,7 +64,7 @@ func main() {
 
 	rootCmd := &cobra.Command{Use: "kubedog"}
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "If present, the namespace scope of a resource.")
-	rootCmd.PersistentFlags().IntVarP(&timeoutSeconds, "timeout", "t", -1, "Timeout of operation in seconds. 0 is wait forever. Default is 0 for follow and 300 for rollout track.")
+	rootCmd.PersistentFlags().IntVarP(&timeoutSeconds, "timeout", "t", -1, "Timeout of operation in seconds. 0 is wait forever. Default is 0.")
 	rootCmd.PersistentFlags().StringVarP(&logsSince, "logs-since", "", "now", "A duration like 30s, 5m, or 2h to start log records from the past. 'all' to show all logs and 'now' to display only new records (default).")
 	rootCmd.PersistentFlags().StringVarP(&kubeContext, "kube-context", "", os.Getenv("KUBEDOG_KUBE_CONTEXT"), "The name of the kubeconfig context to use (can be set with $KUBEDOG_KUBE_CONTEXT).")
 	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "", os.Getenv("KUBEDOG_KUBE_CONFIG"), "Path to the kubeconfig file (can be set with $KUBEDOG_KUBE_CONFIG).")
