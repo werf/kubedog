@@ -150,8 +150,9 @@ func StatefulSetComplete(sts *appsv1.StatefulSet) bool {
 			if sts.Status.UpdateRevision != sts.Status.CurrentRevision {
 				return false
 			}
-			// current == ready, updated == 0
-			if sts.Status.CurrentReplicas == sts.Status.ReadyReplicas && sts.Status.UpdatedReplicas == 0 {
+			//    current == ready, updated == 0
+			// or current == ready, updated == current (1.10 set updatedReplicas to 0, but 1.11 is not)
+			if sts.Status.CurrentReplicas == sts.Status.ReadyReplicas && (sts.Status.UpdatedReplicas == 0 || sts.Status.UpdatedReplicas == sts.Status.CurrentReplicas) {
 				return true
 			}
 		} else {
