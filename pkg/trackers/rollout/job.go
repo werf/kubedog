@@ -5,8 +5,6 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"os"
-
 	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker"
 )
@@ -14,27 +12,27 @@ import (
 func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := &tracker.JobFeedProto{
 		AddedFunc: func() error {
-			fmt.Printf("# job/%s added\n", name)
+			fmt.Fprintf(display.Out, "# job/%s added\n", name)
 			return nil
 		},
 		SucceededFunc: func() error {
-			fmt.Printf("# job/%s succeeded\n", name)
+			fmt.Fprintf(display.Out, "# job/%s succeeded\n", name)
 			return tracker.StopTrack
 		},
 		FailedFunc: func(reason string) error {
-			fmt.Printf("# job/%s FAIL: %s\n", name, reason)
+			fmt.Fprintf(display.Out, "# job/%s FAIL: %s\n", name, reason)
 			return tracker.ResourceErrorf("failed: %s", reason)
 		},
 		EventMsgFunc: func(msg string) error {
-			fmt.Printf("# job/%s event: %s\n", name, msg)
+			fmt.Fprintf(display.Out, "# job/%s event: %s\n", name, msg)
 			return nil
 		},
 		AddedPodFunc: func(podName string) error {
-			fmt.Printf("# job/%s po/%s added\n", name, podName)
+			fmt.Fprintf(display.Out, "# job/%s po/%s added\n", name, podName)
 			return nil
 		},
 		PodErrorFunc: func(podError tracker.PodError) error {
-			fmt.Printf("# job/%s po/%s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
+			fmt.Fprintf(display.Out, "# job/%s po/%s %s error: %s\n", name, podError.PodName, podError.ContainerName, podError.Message)
 			return tracker.ResourceErrorf("job/%s po/%s %s failed: %s", name, podError.PodName, podError.ContainerName, podError.Message)
 		},
 		PodLogChunkFunc: func(chunk *tracker.PodLogChunk) error {
@@ -50,7 +48,7 @@ func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tr
 		case *tracker.ResourceError:
 			return e
 		default:
-			fmt.Fprintf(os.Stderr, "error tracking Job `%s` in namespace `%s`: %s\n", name, namespace, err)
+			fmt.Fprintf(display.Err, "error tracking Job `%s` in namespace `%s`: %s\n", name, namespace, err)
 		}
 	}
 	return err
