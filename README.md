@@ -14,13 +14,27 @@ go get github.com/flant/kubedog
 
 ### Download cli util binary
 
-[Linux amd64](https://dl.bintray.com/flant/kubedog/v0.1.0/kubedog-linux-amd64-v0.1.0)
+The latest release can be reached via [this page](https://bintray.com/flant/kubedog/kubedog/_latestVersion).
 
-[Darwin amd64](https://dl.bintray.com/flant/kubedog/v0.1.0/kubedog-darwin-amd64-v0.1.0)
+##### MacOS
 
-[Windows amd64](https://dl.bintray.com/flant/kubedog/v0.1.0/kubedog-windows-amd64-v0.1.0.exe)
+```bash
+curl -L https://dl.bintray.com/flant/kubedog/v0.1.0/kubedog-darwin-amd64-v0.1.0 -o /tmp/kubedog
+chmod +x /tmp/kubedog
+sudo mv /tmp/kubedog /usr/local/bin/kubedog
+```
 
-[SHA256SUMS](https://dl.bintray.com/flant/kubedog/v0.1.0/SHA256SUMS)
+##### Linux
+
+```bash
+curl -L https://dl.bintray.com/flant/kubedog/v0.1.0/kubedog-linux-amd64-v0.1.0 -o /tmp/kubedog
+chmod +x /tmp/kubedog
+sudo mv /tmp/kubedog /usr/local/bin/kubedog
+```
+
+##### Windows
+
+Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.1.0/kubedog-windows-amd64-v0.1.0.exe).
 
 ## Cli
 
