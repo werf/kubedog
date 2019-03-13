@@ -19,6 +19,7 @@ const (
 var (
 	Kubernetes       kubernetes.Interface
 	DefaultNamespace string
+	Context          string
 )
 
 type InitOptions struct {
@@ -139,6 +140,17 @@ func getOutOfClusterConfig(contextName string, configPath string) (config *rest.
 	config, err = clientConfig.ClientConfig()
 	if err != nil {
 		return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
+	}
+
+	rc, err := clientConfig.RawConfig()
+	if err != nil {
+		return nil, fmt.Errorf("cannot get raw kubernetes config: %s", err)
+	}
+
+	if contextName != "" {
+		Context = contextName
+	} else {
+		Context = rc.CurrentContext
 	}
 
 	return
