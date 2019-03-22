@@ -1,9 +1,10 @@
-package tracker
+package daemonset
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/flant/kubedog/pkg/tracker/debug"
 	extensions "k8s.io/api/extensions/v1beta1"
 )
 
@@ -15,7 +16,7 @@ func getDaemonSetStatus(obj *extensions.DaemonSet) string {
 	}
 	_, ready, _ := DaemonSetRolloutStatus(obj)
 	msgs = append(msgs, fmt.Sprintf("        ready: %v,    gn: %d, ogn: %d,    ndsrd: %d, ncurr: %d, nupd: %d, nrdy: %d",
-		yesNo(ready),
+		debug.YesNo(ready),
 		obj.Generation,
 		obj.Status.ObservedGeneration,
 		obj.Status.DesiredNumberScheduled,

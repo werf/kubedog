@@ -1,4 +1,4 @@
-package tracker
+package pod
 
 import (
 	"context"
@@ -18,21 +18,13 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 
 	"github.com/flant/kubedog/pkg/display"
+	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/debug"
+	"github.com/flant/kubedog/pkg/tracker/event"
 )
 
-type PodFeed interface {
-	Added() error
-	Succeeded() error
-	Failed(reason string) error
-	EventMsg(msg string) error
-	Ready() error
-	ContainerLogChunk(*ContainerLogChunk) error
-	ContainerError(ContainerError) error
-}
-
-type ContainerLogChunk struct {
-	ContainerName string
-	LogLines      []display.LogLine
+type PodStatus struct {
+	corev1.PodStatus
 }
 
 type ContainerError struct {
@@ -40,135 +32,23 @@ type ContainerError struct {
 	ContainerName string
 }
 
-func TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, opts Options) error {
-	errorChan := make(chan error, 0)
-	doneChan := make(chan struct{}, 0)
-
-	parentContext := opts.ParentContext
-	if parentContext == nil {
-		parentContext = context.Background()
-	}
-	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
-	defer cancel()
-
-	pod := NewPodTracker(ctx, name, namespace, kube)
-
-	go func() {
-		err := pod.Track()
-		if err != nil {
-			errorChan <- err
-		} else {
-			doneChan <- struct{}{}
-		}
-	}()
-
-	for {
-		select {
-		case chunk := <-pod.ContainerLogChunk:
-			if debug() {
-				fmt.Printf("Pod `%s` container `%s` log chunk:\n", pod.ResourceName, chunk.ContainerName)
-				for _, line := range chunk.LogLines {
-					fmt.Printf("[%s] %s\n", line.Timestamp, line.Message)
-				}
-			}
-
-			err := feed.ContainerLogChunk(chunk)
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case containerError := <-pod.ContainerError:
-			if debug() {
-				fmt.Printf("Pod's `%s` container error: %#v", pod.ResourceName, containerError)
-			}
-
-			err := feed.ContainerError(containerError)
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case <-pod.Added:
-			if debug() {
-				fmt.Printf("Pod `%s` added\n", pod.ResourceName)
-			}
-
-			err := feed.Added()
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case <-pod.Succeeded:
-			if debug() {
-				fmt.Printf("Pod `%s` succeeded\n", pod.ResourceName)
-			}
-
-			err := feed.Succeeded()
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case reason := <-pod.Failed:
-			if debug() {
-				fmt.Printf("Pod `%s` failed: %s\n", pod.ResourceName, reason)
-			}
-
-			err := feed.Failed(reason)
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case msg := <-pod.EventMsg:
-			if debug() {
-				fmt.Printf("Pod `%s` event msg: %s\n", pod.ResourceName, msg)
-			}
-
-			err := feed.EventMsg(msg)
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case <-pod.Ready:
-			if debug() {
-				fmt.Printf("Pod `%s` ready\n", pod.ResourceName)
-			}
-
-			err := feed.Ready()
-			if err == StopTrack {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-		case err := <-errorChan:
-			return err
-
-		case <-doneChan:
-			return nil
-		}
-	}
+type ContainerLogChunk struct {
+	ContainerName string
+	LogLines      []display.LogLine
 }
 
-type PodTracker struct {
-	Tracker
+type PodLogChunk struct {
+	*ContainerLogChunk
+	PodName string
+}
+
+type PodError struct {
+	ContainerError
+	PodName string
+}
+
+type Tracker struct {
+	tracker.Tracker
 
 	Added             chan struct{}
 	Succeeded         chan struct{}
@@ -177,9 +57,10 @@ type PodTracker struct {
 	Ready             chan struct{}
 	ContainerLogChunk chan *ContainerLogChunk
 	ContainerError    chan ContainerError
+	StatusReport      chan PodStatus
 
-	State                           TrackerState
-	ContainerTrackerStates          map[string]TrackerState
+	State                           tracker.TrackerState
+	ContainerTrackerStates          map[string]tracker.TrackerState
 	ProcessedContainerLogTimestamps map[string]time.Time
 	TrackedContainers               []string
 	LogsFromTime                    time.Time
@@ -193,9 +74,9 @@ type PodTracker struct {
 	errors         chan error
 }
 
-func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *PodTracker {
-	return &PodTracker{
-		Tracker: Tracker{
+func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *Tracker {
+	return &Tracker{
+		Tracker: tracker.Tracker{
 			Kube:             kube,
 			Namespace:        namespace,
 			FullResourceName: fmt.Sprintf("po/%s", name),
@@ -203,16 +84,18 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 			Context:          ctx,
 		},
 
-		Added:             make(chan struct{}, 0),
-		Succeeded:         make(chan struct{}, 0),
+		Added:     make(chan struct{}, 0),
+		Succeeded: make(chan struct{}, 0),
+
 		Failed:            make(chan string, 1),
 		EventMsg:          make(chan string, 1),
 		Ready:             make(chan struct{}, 0),
 		ContainerError:    make(chan ContainerError, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
+		StatusReport:      make(chan PodStatus, 100),
 
-		State:                           Initial,
-		ContainerTrackerStates:          make(map[string]TrackerState),
+		State:                           tracker.Initial,
+		ContainerTrackerStates:          make(map[string]tracker.TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
 		TrackedContainers:               make([]string, 0),
 		LogsFromTime:                    time.Time{},
@@ -226,7 +109,7 @@ func NewPodTracker(ctx context.Context, name, namespace string, kube kubernetes.
 	}
 }
 
-func (pod *PodTracker) Track() error {
+func (pod *Tracker) Start() error {
 	err := pod.runInformer()
 	if err != nil {
 		return err
@@ -253,11 +136,13 @@ func (pod *PodTracker) Track() error {
 
 		case object := <-pod.objectAdded:
 			pod.lastObject = object
+			pod.StatusReport <- PodStatus{pod.lastObject.Status}
+
 			pod.runEventsInformer()
 
 			switch pod.State {
-			case Initial:
-				pod.State = ResourceAdded
+			case tracker.Initial:
+				pod.State = tracker.ResourceAdded
 				pod.Added <- struct{}{}
 
 				err := pod.runContainersTrackers(object)
@@ -276,6 +161,7 @@ func (pod *PodTracker) Track() error {
 
 		case object := <-pod.objectModified:
 			pod.lastObject = object
+			pod.StatusReport <- PodStatus{pod.lastObject.Status}
 
 			done, err := pod.handlePodState(object)
 			if err != nil {
@@ -286,15 +172,18 @@ func (pod *PodTracker) Track() error {
 			}
 
 		case <-pod.objectDeleted:
+			pod.lastObject = nil
+			pod.StatusReport <- PodStatus{}
+
 			keys := []string{}
 			for k := range pod.ContainerTrackerStates {
 				keys = append(keys, k)
 			}
 			for _, k := range keys {
-				pod.ContainerTrackerStates[k] = ContainerTrackerDone
+				pod.ContainerTrackerStates[k] = tracker.ContainerTrackerDone
 			}
 
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("Pod `%s` resource gone: stop tracking\n", pod.ResourceName)
 			}
 
@@ -305,7 +194,7 @@ func (pod *PodTracker) Track() error {
 			pod.Failed <- reason
 
 		case <-pod.Context.Done():
-			return ErrTrackTimeout
+			return tracker.ErrTrackTimeout // FIXME
 
 		case err := <-pod.errors:
 			return err
@@ -313,7 +202,7 @@ func (pod *PodTracker) Track() error {
 	}
 }
 
-func (pod *PodTracker) handlePodState(object *corev1.Pod) (done bool, err error) {
+func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
@@ -338,7 +227,7 @@ func (pod *PodTracker) handlePodState(object *corev1.Pod) (done bool, err error)
 	return
 }
 
-func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
+func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	allContainerStatuses := make([]corev1.ContainerStatus, 0)
 	for _, cs := range object.Status.InitContainerStatuses {
 		allContainerStatuses = append(allContainerStatuses, cs)
@@ -361,11 +250,11 @@ func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
 		}
 
 		if cs.State.Running != nil || cs.State.Terminated != nil {
-			pod.ContainerTrackerStates[cs.Name] = FollowingContainerLogs
+			pod.ContainerTrackerStates[cs.Name] = tracker.FollowingContainerLogs
 		}
 
 		if oldState != pod.ContainerTrackerStates[cs.Name] {
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("Pod `%s` container `%s` state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerTrackerStates[cs.Name])
 			}
 		}
@@ -374,7 +263,7 @@ func (pod *PodTracker) handleContainersState(object *corev1.Pod) error {
 	return nil
 }
 
-func (pod *PodTracker) followContainerLogs(containerName string) error {
+func (pod *Tracker) followContainerLogs(containerName string) error {
 	logOpts := &corev1.PodLogOptions{
 		Container:  containerName,
 		Timestamps: true,
@@ -437,7 +326,7 @@ func (pod *PodTracker) followContainerLogs(containerName string) error {
 
 		select {
 		case <-pod.Context.Done():
-			return ErrTrackTimeout
+			return tracker.ErrTrackTimeout
 		default:
 		}
 	}
@@ -445,7 +334,7 @@ func (pod *PodTracker) followContainerLogs(containerName string) error {
 	return nil
 }
 
-func (pod *PodTracker) trackContainer(containerName string) error {
+func (pod *Tracker) trackContainer(containerName string) error {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -455,28 +344,28 @@ func (pod *PodTracker) trackContainer(containerName string) error {
 			state := pod.ContainerTrackerStates[containerName]
 
 			switch state {
-			case FollowingContainerLogs:
+			case tracker.FollowingContainerLogs:
 				err := pod.followContainerLogs(containerName)
 				if err != nil {
-					if debug() {
+					if debug.Debug() {
 						fmt.Fprintf(os.Stderr, "Pod `%s` Container `%s` logs streaming error: %s\n", pod.ResourceName, containerName, err)
 					}
 				}
 				return nil
-			case Initial:
-			case ContainerTrackerDone:
+			case tracker.Initial:
+			case tracker.ContainerTrackerDone:
 				return nil
 			default:
 				return fmt.Errorf("unknown Pod's `%s` Container `%s` tracker state `%s`", pod.ResourceName, containerName, state)
 			}
 
 		case <-pod.Context.Done():
-			return ErrTrackTimeout
+			return tracker.ErrTrackTimeout
 		}
 	}
 }
 
-func (pod *PodTracker) runContainersTrackers(object *corev1.Pod) error {
+func (pod *Tracker) runContainersTrackers(object *corev1.Pod) error {
 	allContainersNames := make([]string, 0)
 	for _, containerConf := range object.Spec.InitContainers {
 		allContainersNames = append(allContainersNames, containerConf.Name)
@@ -487,11 +376,11 @@ func (pod *PodTracker) runContainersTrackers(object *corev1.Pod) error {
 	for i := range allContainersNames {
 		containerName := allContainersNames[i]
 
-		pod.ContainerTrackerStates[containerName] = Initial
+		pod.ContainerTrackerStates[containerName] = tracker.Initial
 		pod.TrackedContainers = append(pod.TrackedContainers, containerName)
 
 		go func() {
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("Starting to track Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
 			}
 
@@ -500,7 +389,7 @@ func (pod *PodTracker) runContainersTrackers(object *corev1.Pod) error {
 				pod.errors <- err
 			}
 
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("Done tracking Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
 			}
 
@@ -511,7 +400,7 @@ func (pod *PodTracker) runContainersTrackers(object *corev1.Pod) error {
 	return nil
 }
 
-func (pod *PodTracker) runInformer() error {
+func (pod *Tracker) runInformer() error {
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
 		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String()
 		return options
@@ -527,7 +416,7 @@ func (pod *PodTracker) runInformer() error {
 
 	go func() {
 		_, err := watchtools.UntilWithSync(pod.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("Pod `%s` informer event: %#v\n", pod.ResourceName, e.Type)
 			}
 
@@ -558,7 +447,7 @@ func (pod *PodTracker) runInformer() error {
 			pod.errors <- err
 		}
 
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("Pod `%s` informer done\n", pod.ResourceName)
 		}
 	}()
@@ -567,12 +456,12 @@ func (pod *PodTracker) runInformer() error {
 }
 
 // runEventsInformer watch for DaemonSet events
-func (pod *PodTracker) runEventsInformer() {
+func (pod *Tracker) runEventsInformer() {
 	if pod.lastObject == nil {
 		return
 	}
 
-	eventInformer := NewEventInformer(pod.Tracker, pod.lastObject)
+	eventInformer := event.NewEventInformer(&pod.Tracker, pod.lastObject)
 	eventInformer.WithChannels(pod.EventMsg, pod.objectFailed, pod.errors)
 	eventInformer.Run()
 

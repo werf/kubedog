@@ -115,6 +115,87 @@ TrackDaemonSet(name, namespace string, kube kubernetes.Interface, opts tracker.O
 TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 ```
 
+### Multitracker (NEW)
+
+Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical so status reports with info about all resources, that are being tracked.
+
+Multitracker is now available only as rollout-type tracker, so it will tracker resources till readyness condition reached.
+
+Import package:
+
+```
+import "github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+```
+
+Available functions:
+
+```
+Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts MultitrackOptions) error
+```
+
+With `MultitrackSpecs` user can specify `Pods`, `Deployments`, `StatefulSets`, `DaemonSets` and `Jobs` to track using `MultitrackSpec` structure. `MultitrackSpec` allow to specify different modes of tracking (such as allowed failures count, log regex and other) per-resource:
+
+```
+type MultitrackSpecs struct {
+	Pods         []MultitrackSpec
+	Deployments  []MultitrackSpec
+	StatefulSets []MultitrackSpec
+	DaemonSets   []MultitrackSpec
+	Jobs         []MultitrackSpec
+}
+
+type MultitrackSpec struct {
+	ResourceName string
+	Namespace    string
+
+	FailMode                FailMode
+	AllowFailuresCount      *int
+	FailureThresholdSeconds *int
+
+	LogWatchRegex                string
+	LogWatchRegexByContainerName map[string]string
+	ShowLogsUntil                DeployCondition
+	SkipLogsForContainers        []string
+	ShowLogsOnlyForContainers    []string
+}
+```
+
+For example let's track deployments `tiller-deploy`, `coredns`, pod `etcd-minikube` and job `myjob` at the same time till all of the resources reach ready conditions:
+
+```
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/flant/kubedog/pkg/tracker"
+  "github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+)
+
+func main() {
+  _ = kube.Init(kube.InitOptions{})
+
+	err := multitrack.Multitrack(kube.Kubernetes, multitrack.MultitrackSpecs{
+		Pods: []multitrack.MultitrackSpec{
+			multitrack.MultitrackSpec{ResourceName: "etcd-minikube", Namespace: "kube-system"},
+		},
+		Deployments: []multitrack.MultitrackSpec{
+			multitrack.MultitrackSpec{ResourceName: "tiller-deploy", Namespace: "kube-system"},
+			multitrack.MultitrackSpec{ResourceName: "coredns", Namespace: "kube-system"},
+		},
+		Jobs: []multitrack.MultitrackSpec{
+			multitrack.MultitrackSpec{ResourceName: "myjob", Namespace: "myns"},
+		},
+	}, multitrack.MultitrackOptions{})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: resources cannot reach ready condition: %s", err)
+    os.Exit(1)
+	}
+}
+```
+
 ## Use trackers examples
 
 Track `mydeployment` Deployment in namespace `mynamespace` using rollout tracker:
@@ -122,6 +203,7 @@ Track `mydeployment` Deployment in namespace `mynamespace` using rollout tracker
 ```
 import (
   "fmt"
+  "os"
 
   "github.com/flant/kubedog/pkg/trackers/rollout"
   "github.com/flant/kubedog/pkg/tracker"
@@ -129,17 +211,11 @@ import (
 )
 
 func main() {
-  var err error
+  _ = kube.Init()
 
-  err = kube.Init()
+  err := rollout.TrackDeployment("mydeployment", "mynamespace", kube.Kubernetes, tracker.Options{Timeout: 300 * time.Second})
   if err != nil {
-    fmt.Printf("ERROR: %s\n", err)
-    os.Exit(1)
-  }
-
-  err = rollout.TrackDeployment("mydeployment", "mynamespace", kube.Kubernetes, tracker.Options{Timeout: 300 * time.Second})
-  if err != nil {
-    fmt.Printf("ERROR: %s\n", err)
+    fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
     os.Exit(1)
   }
 }
@@ -150,6 +226,7 @@ Track `myjob` Job in namespace `mynamespace` using follow tracker:
 ```
 import (
   "fmt"
+  "os"
 
   "github.com/flant/kubedog/pkg/trackers/follow"
   "github.com/flant/kubedog/pkg/tracker"
@@ -157,17 +234,11 @@ import (
 )
 
 func main() {
-  var err error
-
-  err = kube.Init()
-  if err != nil {
-    fmt.Printf("ERROR: %s\n", err)
-    os.Exit(1)
-  }
+  _ = kube.Init()
 
   err = follow.TrackJob("myjob", "mynamespace", kube.Kubernetes, tracker.Options{Timeout: 300 * time.Second})
   if err != nil {
-    fmt.Printf("ERROR: %s\n", err)
+    fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
     os.Exit(1)
   }
 }
@@ -175,36 +246,77 @@ func main() {
 
 ## Custom trackers
 
-To define a custom tracker one should call one of Track* function from `tracker` pkg and define callbacks for the resource events.
-
-`feed` interface is used to specify callbacks. This interface defines a set of callbacks related to the resource events.
-
-For example Track function for Pod resource is defined like this:
+To define a custom tracker one should create feed object with `NewFeed` function for needed tracker from one of the following packages:
 
 ```
-TrackPod(name, namespace string, kube kubernetes.Interface, feed PodFeed, opts Options) error
+import "github.com/flant/kubedog/pkg/tracker/pod"
+import "github.com/flant/kubedog/pkg/tracker/deployment"
+import "github.com/flant/kubedog/pkg/tracker/statefulset"
+import "github.com/flant/kubedog/pkg/tracker/daemonset"
+import "github.com/flant/kubedog/pkg/tracker/job"
 ```
 
-`PodFeed` is a set of callbacks:
+User then can specify needed callbacks using `On*` methods of feed object. For example pod feed looks like:
 
 ```
-type PodFeed interface {
-	Added() error
-	Succeeded() error
-	Failed() error
-	EventMsg(msg string) error
-	Ready() error
-	ContainerLogChunk(*ContainerLogChunk) error
-	ContainerError(ContainerError) error
+type Feed interface {
+	OnAdded(func() error)
+	OnSucceeded(func() error)
+	OnFailed(func(reason string) error)
+	OnEventMsg(func(msg string) error)
+	OnReady(func() error)
+	OnContainerLogChunk(func(*ContainerLogChunk) error)
+	OnContainerError(func(ContainerError) error)
+	OnStatusReport(func(PodStatus) error)
+
+	GetStatus() PodStatus
+	Track(podName, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 }
 ```
 
+Function `feed.Track` is blocking and must be called to start tracking.
+
 Each callback may return some error to interrupt the whole tracking process with error. Also special value `tracker.StopTrack` can be returned to interrupt tracking process without error.
 
-Import package:
+Function `feed.GetStatus` can be called in any callback to get structured resource status avaiable at the moment.
+
+For example let's track pod `mypod` :
 
 ```
-import "github.com/flant/kubedog/pkg/tracker"
+package main
+
+import (
+	"fmt"
+  "os"
+
+	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/pod"
+)
+
+func main() {
+	kube.Init(kube.InitOptions{})
+
+	feed := pod.NewFeed()
+
+	feed.OnReady(func() error {
+		fmt.Printf("Pod ready!\n")
+		fmt.Printf("Pod status: %#v\n", feed.GetStatus())
+		return tracker.StopTrack
+	})
+	feed.OnFailed(func(reason string) error {
+		return fmt.Errorf("pod failed: %s", reason)
+	})
+  feed.OnStatusReport(func(status pod.PodStatus) error {
+    fmt.Printf("Pod status: %#v\n", status)
+    return nil
+  })
+
+	err := feed.Track("mypod", "mynamespace", kube.Interface, tracker.Options{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: po/mypod tracker failed: %s", err)
+    os.Exit(1)
+	}
+}
 ```
 
 # Support

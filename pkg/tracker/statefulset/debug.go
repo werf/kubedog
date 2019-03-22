@@ -1,9 +1,10 @@
-package tracker
+package statefulset
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/flant/kubedog/pkg/tracker/debug"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
@@ -13,8 +14,8 @@ func getStatefulSetStatus(obj *appsv1.StatefulSet) string {
 	_, ready, _ := StatefulSetRolloutStatus(obj)
 	complete := StatefulSetComplete(obj)
 	msgs = append(msgs, fmt.Sprintf("        Ready: %v. Complete: %v. Generation: %d, observed gen: %d.",
-		yesNo(ready),
-		yesNo(complete),
+		debug.YesNo(ready),
+		debug.YesNo(complete),
 		obj.Generation,
 		obj.Status.ObservedGeneration))
 	msgs = append(msgs, fmt.Sprintf("        Revision: current: %s, update: %s",

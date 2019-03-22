@@ -1,12 +1,14 @@
-package tracker
+package deployment
 
 import (
 	"fmt"
 	"strings"
 
 	extensions "k8s.io/api/extensions/v1beta1"
+
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/flant/kubedog/pkg/tracker/debug"
 	"github.com/flant/kubedog/pkg/utils"
 )
 
@@ -20,9 +22,9 @@ func getDeploymentStatus(client kubernetes.Interface, prevObj *extensions.Deploy
 		msgs = append(msgs, fmt.Sprintf("        - %s - %s - %s: \"%s\"", c.Type, c.Status, c.Reason, c.Message))
 	}
 	msgs = append(msgs, fmt.Sprintf("        cpl: %v, prg: %v, tim: %v,    gn: %d, ogn: %d, des: %d, rdy: %d, upd: %d, avl: %d, uav: %d",
-		yesNo(utils.DeploymentComplete(prevObj, &newObj.Status)),
-		yesNo(utils.DeploymentProgressing(prevObj, &newObj.Status)),
-		yesNo(utils.DeploymentTimedOut(prevObj, &newObj.Status)),
+		debug.YesNo(utils.DeploymentComplete(prevObj, &newObj.Status)),
+		debug.YesNo(utils.DeploymentProgressing(prevObj, &newObj.Status)),
+		debug.YesNo(utils.DeploymentTimedOut(prevObj, &newObj.Status)),
 		newObj.Generation,
 		newObj.Status.ObservedGeneration,
 		newObj.Status.Replicas,
@@ -68,11 +70,4 @@ func getReplicaSetsStatus(client kubernetes.Interface, deployment *extensions.De
 	}
 
 	return strings.Join(msgs, "\n")
-}
-
-func yesNo(v bool) string {
-	if v {
-		return "YES"
-	}
-	return " no"
 }
