@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/flant/kubedog"
 	"github.com/flant/kubedog/pkg/kube"
-	"github.com/flant/kubedog/pkg/kubedog"
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/trackers/follow"
 	"github.com/flant/kubedog/pkg/trackers/rollout"
