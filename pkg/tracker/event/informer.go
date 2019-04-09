@@ -1,4 +1,4 @@
-package tracker
+package event
 
 import (
 	"fmt"
@@ -13,11 +13,13 @@ import (
 
 	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/debug"
 	"github.com/flant/kubedog/pkg/utils"
 )
 
 type EventInformer struct {
-	Tracker
+	tracker.Tracker
 	Resource interface{}
 	Messages chan string
 	Failures chan string
@@ -26,18 +28,18 @@ type EventInformer struct {
 	initialEventUids map[types.UID]bool
 }
 
-func NewEventInformer(tracker Tracker, resource interface{}) *EventInformer {
-	if debug() {
-		fmt.Printf("> NewEventInformer for %s\n", tracker.FullResourceName)
+func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer {
+	if debug.Debug() {
+		fmt.Printf("> NewEventInformer for %s\n", trk.FullResourceName)
 	}
 
 	return &EventInformer{
-		Tracker: Tracker{
-			Kube:             tracker.Kube,
-			Namespace:        tracker.Namespace,
-			FullResourceName: tracker.FullResourceName,
-			Context:          tracker.Context,
-			ContextCancel:    tracker.ContextCancel,
+		Tracker: tracker.Tracker{
+			Kube:             trk.Kube,
+			Namespace:        trk.Namespace,
+			FullResourceName: trk.FullResourceName,
+			Context:          trk.Context,
+			ContextCancel:    trk.ContextCancel,
 		},
 		Resource:         resource,
 		Errors:           make(chan error, 0),
@@ -73,11 +75,11 @@ func (e *EventInformer) Run() {
 	}
 
 	go func() {
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("> %s run event informer\n", e.FullResourceName)
 		}
 		_, err := watchtools.UntilWithSync(e.Context, lwe, &corev1.Event{}, nil, func(ev watch.Event) (bool, error) {
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("    %s event: %#v\n", e.FullResourceName, ev.Type)
 			}
 
@@ -94,16 +96,16 @@ func (e *EventInformer) Run() {
 			switch ev.Type {
 			case watch.Added:
 				e.handleEvent(object)
-				//if debug() {
+				//if debug.Debug() {
 				//	fmt.Printf("> Event: %#v\n", object)
 				//}
 			case watch.Modified:
 				e.handleEvent(object)
-				//if debug() {
+				//if debug.Debug() {
 				//	fmt.Printf("> Event: %#v\n", object)
 				//}
 			case watch.Deleted:
-				//if debug() {
+				//if debug.Debug() {
 				//	fmt.Printf("> Event: %#v\n", object)
 				//}
 			case watch.Error:
@@ -118,7 +120,7 @@ func (e *EventInformer) Run() {
 			e.Errors <- err
 		}
 
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("     %s event informer DONE\n", e.FullResourceName)
 		}
 	}()
@@ -133,7 +135,7 @@ func (e *EventInformer) handleInitialEvents() {
 		fmt.Printf("list event error: %v\n", err)
 		return
 	}
-	if debug() {
+	if debug.Debug() {
 		utils.DescribeEvents(evList)
 	}
 
@@ -147,7 +149,7 @@ func (e *EventInformer) handleEvent(event *corev1.Event) {
 	uid := event.UID
 
 	if _, ok := e.initialEventUids[uid]; ok {
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("IGNORE initial event %s %s\n", event.Reason, event.Message)
 		}
 		delete(e.initialEventUids, uid)
@@ -156,14 +158,14 @@ func (e *EventInformer) handleEvent(event *corev1.Event) {
 
 	reason := event.Reason
 
-	if debug() {
+	if debug.Debug() {
 		fmt.Printf("  %s got normal event: %s %s\n", e.FullResourceName, event.Reason, event.Message)
 	}
 
 	e.Messages <- fmt.Sprintf("%s: %s", reason, event.Message)
 
 	if strings.Contains(reason, "Failed") {
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("got FAILED EVENT!!! %s %s\n", event.Reason, event.Message)
 		}
 		e.Failures <- fmt.Sprintf("%s: %s", reason, event.Message)

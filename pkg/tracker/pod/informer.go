@@ -1,4 +1,4 @@
-package tracker
+package pod
 
 import (
 	"fmt"
@@ -10,28 +10,30 @@ import (
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/debug"
 	"github.com/flant/kubedog/pkg/utils"
 )
 
 // PodInformer monitor pod add events to use with controllers (Deployment, StatefulSet, DaemonSet)
 type PodsInformer struct {
-	Tracker
+	tracker.Tracker
 	Controller utils.ControllerMetadata
 	PodAdded   chan *corev1.Pod
 	Errors     chan error
 }
 
-func NewPodsInformer(tracker Tracker, controller utils.ControllerMetadata) *PodsInformer {
-	if debug() {
+func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) *PodsInformer {
+	if debug.Debug() {
 		fmt.Printf("> NewPodsInformer\n")
 	}
 	return &PodsInformer{
-		Tracker: Tracker{
-			Kube:             tracker.Kube,
-			Namespace:        tracker.Namespace,
-			FullResourceName: tracker.FullResourceName,
-			Context:          tracker.Context,
-			ContextCancel:    tracker.ContextCancel,
+		Tracker: tracker.Tracker{
+			Kube:             trk.Kube,
+			Namespace:        trk.Namespace,
+			FullResourceName: trk.FullResourceName,
+			Context:          trk.Context,
+			ContextCancel:    trk.ContextCancel,
 		},
 		Controller: controller,
 		PodAdded:   make(chan *corev1.Pod, 1),
@@ -46,6 +48,10 @@ func (p *PodsInformer) WithChannels(added chan *corev1.Pod, errors chan error) *
 }
 
 func (p *PodsInformer) Run() {
+	if debug.Debug() {
+		fmt.Printf("> PodsInformer.Run\n")
+	}
+
 	client := p.Kube
 
 	selector, err := metav1.LabelSelectorAsSelector(p.Controller.LabelSelector())
@@ -69,7 +75,7 @@ func (p *PodsInformer) Run() {
 
 	go func() {
 		_, err := watchtools.UntilWithSync(p.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("    %s pod event: %#v\n", p.FullResourceName, e.Type)
 			}
 
@@ -99,7 +105,7 @@ func (p *PodsInformer) Run() {
 			p.Errors <- err
 		}
 
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("      %s pods informer DONE\n", p.FullResourceName)
 		}
 	}()

@@ -28,6 +28,20 @@ type LogLine struct {
 	Message   string
 }
 
+func fWriteF(stream io.Writer, format string, args ...interface{}) (n int, err error) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	return fmt.Fprintf(stream, format, args...)
+}
+
+func OutF(format string, args ...interface{}) (n int, err error) {
+	return fWriteF(Out, format, args...)
+}
+
+func ErrF(format string, args ...interface{}) (n int, err error) {
+	return fWriteF(Err, format, args...)
+}
+
 func SetLogHeader(logHeader string) {
 	mutex.Lock()
 	defer mutex.Unlock()

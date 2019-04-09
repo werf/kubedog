@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -30,7 +29,7 @@ type Tracker struct {
 	Kube             kubernetes.Interface
 	Namespace        string
 	ResourceName     string
-	FullResourceName string // full resource name with resource kind (deploy/superapp
+	FullResourceName string // full resource name with resource kind (deploy/superapp)
 	Context          context.Context
 	ContextCancel    context.CancelFunc
 }
@@ -39,20 +38,6 @@ type Options struct {
 	ParentContext context.Context
 	Timeout       time.Duration
 	LogsFromTime  time.Time
-}
-
-type PodLogChunk struct {
-	*ContainerLogChunk
-	PodName string
-}
-
-type PodError struct {
-	ContainerError
-	PodName string
-}
-
-func debug() bool {
-	return os.Getenv("KUBEDOG_TRACKER_DEBUG") == "1"
 }
 
 type ResourceError struct {

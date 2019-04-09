@@ -1,4 +1,4 @@
-package tracker
+package replicaset
 
 import (
 	"fmt"
@@ -10,6 +10,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/debug"
+	"github.com/flant/kubedog/pkg/tracker/pod"
 	"github.com/flant/kubedog/pkg/utils"
 )
 
@@ -25,18 +28,18 @@ type ReplicaSetPod struct {
 }
 
 type ReplicaSetPodLogChunk struct {
-	*PodLogChunk
+	*pod.PodLogChunk
 	ReplicaSet ReplicaSet
 }
 
 type ReplicaSetPodError struct {
-	PodError
+	pod.PodError
 	ReplicaSet ReplicaSet
 }
 
 // ReplicaSetInformer monitor ReplicaSet events to use with controllers (Deployment, StatefulSet, DaemonSet)
 type ReplicaSetInformer struct {
-	Tracker
+	tracker.Tracker
 	Controller         utils.ControllerMetadata
 	ReplicaSetAdded    chan *extensions.ReplicaSet
 	ReplicaSetModified chan *extensions.ReplicaSet
@@ -44,17 +47,17 @@ type ReplicaSetInformer struct {
 	Errors             chan error
 }
 
-func NewReplicaSetInformer(tracker Tracker, controller utils.ControllerMetadata) *ReplicaSetInformer {
-	if debug() {
+func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) *ReplicaSetInformer {
+	if debug.Debug() {
 		fmt.Printf("> NewReplicaSetInformer\n")
 	}
 	return &ReplicaSetInformer{
-		Tracker: Tracker{
-			Kube:             tracker.Kube,
-			Namespace:        tracker.Namespace,
-			FullResourceName: tracker.FullResourceName,
-			Context:          tracker.Context,
-			ContextCancel:    tracker.ContextCancel,
+		Tracker: tracker.Tracker{
+			Kube:             trk.Kube,
+			Namespace:        trk.Namespace,
+			FullResourceName: trk.FullResourceName,
+			Context:          trk.Context,
+			ContextCancel:    trk.ContextCancel,
 		},
 		Controller:         controller,
 		ReplicaSetAdded:    make(chan *extensions.ReplicaSet, 1),
@@ -99,7 +102,7 @@ func (r *ReplicaSetInformer) Run() {
 
 	go func() {
 		_, err := watchtools.UntilWithSync(r.Context, lw, &extensions.ReplicaSet{}, nil, func(e watch.Event) (bool, error) {
-			if debug() {
+			if debug.Debug() {
 				fmt.Printf("    %s replica set event: %#v\n", r.FullResourceName, e.Type)
 			}
 
@@ -129,7 +132,7 @@ func (r *ReplicaSetInformer) Run() {
 			r.Errors <- err
 		}
 
-		if debug() {
+		if debug.Debug() {
 			fmt.Printf("      %s replicaSets informer DONE\n", r.FullResourceName)
 		}
 	}()
