@@ -117,9 +117,9 @@ TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker
 
 ### Multitracker (NEW)
 
-Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical so status reports with info about all resources, that are being tracked.
+Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical status reports with info about all resources, that are being tracked.
 
-Multitracker is now available only as rollout-type tracker, so it will tracker resources till readyness condition reached.
+Multitracker is now available only as rollout-type tracker, so it will block until all resources reach readyness condition.
 
 Import package:
 
