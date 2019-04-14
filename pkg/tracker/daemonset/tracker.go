@@ -198,7 +198,8 @@ func (d *Tracker) Track() error {
 			d.TrackedPods = trackedPods
 
 		case <-d.Context.Done():
-			return tracker.ErrTrackTimeout
+			return tracker.ErrTrackInterrupted
+
 		case err := <-d.errors:
 			return err
 		}

@@ -194,7 +194,7 @@ func (pod *Tracker) Start() error {
 			pod.Failed <- reason
 
 		case <-pod.Context.Done():
-			return tracker.ErrTrackTimeout // FIXME
+			return tracker.ErrTrackInterrupted
 
 		case err := <-pod.errors:
 			return err
@@ -326,7 +326,7 @@ func (pod *Tracker) followContainerLogs(containerName string) error {
 
 		select {
 		case <-pod.Context.Done():
-			return tracker.ErrTrackTimeout
+			return tracker.ErrTrackInterrupted
 		default:
 		}
 	}
@@ -360,7 +360,7 @@ func (pod *Tracker) trackContainer(containerName string) error {
 			}
 
 		case <-pod.Context.Done():
-			return tracker.ErrTrackTimeout
+			return tracker.ErrTrackInterrupted
 		}
 	}
 }
