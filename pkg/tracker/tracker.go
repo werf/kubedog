@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	ErrTrackTimeout = errors.New("timed out tracking resource")
-	StopTrack       = errors.New("stop tracking now")
+	ErrTrackInterrupted = errors.New("tracker interrupted")
+	StopTrack           = errors.New("stop tracking now")
 )
 
 const (
