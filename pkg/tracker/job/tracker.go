@@ -56,12 +56,13 @@ type Tracker struct {
 	lastObject  *batchv1.Job
 	podStatuses map[string]pod.PodStatus
 
-	objectAdded    chan *batchv1.Job
-	objectModified chan *batchv1.Job
-	objectDeleted  chan *batchv1.Job
-	objectFailed   chan string
-	podDone        chan string
-	errors         chan error
+	objectAdded       chan *batchv1.Job
+	objectModified    chan *batchv1.Job
+	objectDeleted     chan *batchv1.Job
+	objectFailed      chan string
+	podDone           chan string
+	errors            chan error
+	podStatusesReport chan map[string]pod.PodStatus
 }
 
 func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *Tracker {
@@ -88,12 +89,13 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		State:       tracker.Initial,
 		TrackedPods: make([]string, 0),
 
-		objectAdded:    make(chan *batchv1.Job, 0),
-		objectModified: make(chan *batchv1.Job, 0),
-		objectDeleted:  make(chan *batchv1.Job, 0),
-		objectFailed:   make(chan string, 1),
-		podDone:        make(chan string, 10),
-		errors:         make(chan error, 0),
+		objectAdded:       make(chan *batchv1.Job, 0),
+		objectModified:    make(chan *batchv1.Job, 0),
+		objectDeleted:     make(chan *batchv1.Job, 0),
+		objectFailed:      make(chan string, 1),
+		podDone:           make(chan string, 10),
+		errors:            make(chan error, 0),
+		podStatusesReport: make(chan map[string]pod.PodStatus),
 	}
 }
 
@@ -172,6 +174,14 @@ func (job *Tracker) Track() error {
 			}
 			if done {
 				return nil
+			}
+
+		case podStatuses := <-job.podStatusesReport:
+			for podName, podStatus := range podStatuses {
+				job.podStatuses[podName] = podStatus
+			}
+			if job.lastObject != nil {
+				job.StatusReport <- NewJobStatus(job.lastObject.Status, job.podStatuses)
 			}
 
 		case <-job.Context.Done():
@@ -375,11 +385,7 @@ func (job *Tracker) runPodTracker(podName string) error {
 			case <-podTracker.Failed:
 			case <-podTracker.Ready:
 			case podStatus := <-podTracker.StatusReport:
-				job.podStatuses[podTracker.ResourceName] = podStatus
-				if job.lastObject != nil {
-					job.StatusReport <- NewJobStatus(job.lastObject.Status, job.podStatuses)
-				}
-
+				job.podStatusesReport <- map[string]pod.PodStatus{podTracker.ResourceName: podStatus}
 			case err := <-errorChan:
 				job.errors <- err
 				return
