@@ -47,13 +47,14 @@ type Tracker struct {
 	PodError     chan replicaset.ReplicaSetPodError
 	StatusReport chan StatefulSetStatus
 
-	resourceAdded    chan *appsv1.StatefulSet
-	resourceModified chan *appsv1.StatefulSet
-	resourceDeleted  chan *appsv1.StatefulSet
-	resourceFailed   chan string
-	podAdded         chan *corev1.Pod
-	podDone          chan string
-	errors           chan error
+	resourceAdded     chan *appsv1.StatefulSet
+	resourceModified  chan *appsv1.StatefulSet
+	resourceDeleted   chan *appsv1.StatefulSet
+	resourceFailed    chan string
+	podAdded          chan *corev1.Pod
+	podDone           chan string
+	errors            chan error
+	podStatusesReport chan map[string]pod.PodStatus
 
 	FailedReason chan error
 
@@ -87,13 +88,14 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		podStatuses: make(map[string]pod.PodStatus),
 		TrackedPods: make([]string, 0),
 
-		resourceAdded:    make(chan *appsv1.StatefulSet, 1),
-		resourceModified: make(chan *appsv1.StatefulSet, 1),
-		resourceDeleted:  make(chan *appsv1.StatefulSet, 1),
-		resourceFailed:   make(chan string, 1),
-		podAdded:         make(chan *corev1.Pod, 1),
-		podDone:          make(chan string, 1),
-		errors:           make(chan error, 0),
+		resourceAdded:     make(chan *appsv1.StatefulSet, 1),
+		resourceModified:  make(chan *appsv1.StatefulSet, 1),
+		resourceDeleted:   make(chan *appsv1.StatefulSet, 1),
+		resourceFailed:    make(chan string, 1),
+		podAdded:          make(chan *corev1.Pod, 1),
+		podDone:           make(chan string, 1),
+		errors:            make(chan error, 0),
+		podStatusesReport: make(chan map[string]pod.PodStatus),
 	}
 }
 
@@ -188,6 +190,14 @@ func (d *Tracker) Track() (err error) {
 				}
 			}
 			d.TrackedPods = trackedPods
+
+		case podStatuses := <-d.podStatusesReport:
+			for podName, podStatus := range podStatuses {
+				d.podStatuses[podName] = podStatus
+			}
+			if d.lastObject != nil {
+				d.StatusReport <- NewStatefulSetStatus(d.lastObject.Status, d.podStatuses)
+			}
 
 		case <-d.Context.Done():
 			return tracker.ErrTrackInterrupted
@@ -333,11 +343,7 @@ func (d *Tracker) runPodTracker(podName string) error {
 			case <-podTracker.Failed:
 			case <-podTracker.Ready:
 			case podStatus := <-podTracker.StatusReport:
-				d.podStatuses[podTracker.ResourceName] = podStatus
-				if d.lastObject != nil {
-					d.StatusReport <- NewStatefulSetStatus(d.lastObject.Status, d.podStatuses)
-				}
-
+				d.podStatusesReport <- map[string]pod.PodStatus{podTracker.ResourceName: podStatus}
 			case err := <-errorChan:
 				d.errors <- err
 				return
