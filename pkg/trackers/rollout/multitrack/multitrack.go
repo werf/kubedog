@@ -97,11 +97,10 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		setDefaultSpecValues(&specs.Jobs[i])
 	}
 
-	internalErrorChan := make(chan error, 0)
+	errorChan := make(chan error, 0)
+	doneChan := make(chan struct{}, 0)
 
 	mt := multitracker{
-		doneChan: make(chan struct{}, 0),
-
 		TrackingPods: make(map[string]*multitrackerResourceState),
 		PodsStatuses: make(map[string]pod.PodStatus),
 
@@ -118,54 +117,81 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		JobsStatuses: make(map[string]job.JobStatus),
 	}
 
-	statusReportTicker := time.NewTicker(5 * time.Second)
+	statusReportTicker := time.NewTicker(20 * time.Second)
 	defer statusReportTicker.Stop()
+
+	var wg sync.WaitGroup
 
 	for _, spec := range specs.Pods {
 		mt.TrackingPods[spec.ResourceName] = &multitrackerResourceState{}
 
+		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackPod(kube, spec, opts); err != nil {
-				internalErrorChan <- fmt.Errorf("po/%s track failed: %s", spec.ResourceName, err)
+				errorChan <- fmt.Errorf("po/%s track failed: %s", spec.ResourceName, err)
 			}
+			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.Deployments {
 		mt.TrackingDeployments[spec.ResourceName] = &multitrackerResourceState{}
 
+		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackDeployment(kube, spec, opts); err != nil {
-				internalErrorChan <- fmt.Errorf("deploy/%s track failed: %s", spec.ResourceName, err)
+				errorChan <- fmt.Errorf("deploy/%s track failed: %s", spec.ResourceName, err)
 			}
+			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.StatefulSets {
 		mt.TrackingStatefulSets[spec.ResourceName] = &multitrackerResourceState{}
 
+		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackStatefulSet(kube, spec, opts); err != nil {
-				internalErrorChan <- fmt.Errorf("sts/%s track failed: %s", spec.ResourceName, err)
+				errorChan <- fmt.Errorf("sts/%s track failed: %s", spec.ResourceName, err)
 			}
+			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.DaemonSets {
 		mt.TrackingDaemonSets[spec.ResourceName] = &multitrackerResourceState{}
 
+		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackDaemonSet(kube, spec, opts); err != nil {
-				internalErrorChan <- fmt.Errorf("ds/%s track failed: %s", spec.ResourceName, err)
+				errorChan <- fmt.Errorf("ds/%s track failed: %s", spec.ResourceName, err)
 			}
+			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.Jobs {
 		mt.TrackingJobs[spec.ResourceName] = &multitrackerResourceState{}
 
+		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackJob(kube, spec, opts); err != nil {
-				internalErrorChan <- fmt.Errorf("job/%s track failed: %s", spec.ResourceName, err)
+				errorChan <- fmt.Errorf("job/%s track failed: %s", spec.ResourceName, err)
 			}
+			wg.Done()
 		}(spec)
 	}
+
+	go func() {
+		wg.Wait()
+
+		if err := mt.PrintStatusReport(); err != nil {
+			errorChan <- err
+			return
+		}
+
+		if mt.hasFailedTrackingResources() {
+			errorChan <- mt.formatFailedTrackingResourcesError()
+		} else {
+			doneChan <- struct{}{}
+		}
+	}()
 
 	for {
 		select {
@@ -174,27 +200,29 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 				mt.handlerMux.Lock()
 				defer mt.handlerMux.Unlock()
 
-				return mt.PrintStatusReport()
+				if err := mt.PrintStatusReport(); err != nil {
+					return err
+				}
+
+				time.Sleep(time.Duration(5) * time.Second)
+
+				return nil
 			}()
 
 			if err != nil {
 				return err
 			}
 
-		case <-mt.doneChan:
+		case <-doneChan:
 			return nil
-		case err := <-mt.errorChan:
-			return err
-		case err := <-internalErrorChan:
+
+		case err := <-errorChan:
 			return err
 		}
 	}
 }
 
 type multitracker struct {
-	doneChan  chan struct{}
-	errorChan chan error
-
 	TrackingPods map[string]*multitrackerResourceState
 	PodsStatuses map[string]pod.PodStatus
 
@@ -293,20 +321,6 @@ func (mt *multitracker) formatFailedTrackingResourcesError() error {
 
 func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]*multitrackerResourceState, spec MultitrackSpec) error {
 	delete(resourcesStates, spec.ResourceName)
-
-	if mt.isTrackingAnyNonFailedResource() {
-		return nil
-	}
-
-	mt.PrintStatusReport()
-
-	if mt.hasFailedTrackingResources() {
-		mt.errorChan <- mt.formatFailedTrackingResourcesError()
-		return tracker.StopTrack
-	}
-
-	// Completely stop, all other goroutines should be already stopped by invariant
-	mt.doneChan <- struct{}{}
 	return tracker.StopTrack
 }
 
@@ -333,19 +347,6 @@ func (mt *multitracker) PrintStatusReport() error {
 			}
 			display.OutF("\n")
 		}
-
-		if len(status.InitContainerStatuses) > 0 {
-			display.OutF("│   InitContainers:\n")
-		}
-		for _, container := range status.InitContainerStatuses {
-			display.OutF("│   - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-		}
-		if len(status.ContainerStatuses) > 0 {
-			display.OutF("│   Containers:\n")
-		}
-		for _, container := range status.ContainerStatuses {
-			display.OutF("│   - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-		}
 	}
 
 	for name, status := range mt.DeploymentsStatuses {
@@ -363,41 +364,6 @@ func (mt *multitracker) PrintStatusReport() error {
 				display.OutF(" %s", cond.Message)
 			}
 			display.OutF("\n")
-		}
-
-		for podName, podStatus := range status.Pods {
-			display.OutF("│   po/%s:\n", podName)
-
-			if podStatus.Phase != "" {
-				display.OutF("│     Phase:%s\n", podStatus.Phase)
-			}
-
-			if len(podStatus.Conditions) > 0 {
-				display.OutF("│     Conditions:\n")
-			}
-			for _, cond := range podStatus.Conditions {
-				display.OutF("│     - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-				if cond.Reason != "" {
-					display.OutF(" %s", cond.Reason)
-				}
-				if cond.Message != "" {
-					display.OutF(" %s", cond.Message)
-				}
-				display.OutF("\n")
-			}
-
-			if len(podStatus.InitContainerStatuses) > 0 {
-				display.OutF("│     InitContainers:\n")
-			}
-			for _, container := range podStatus.InitContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
-			if len(podStatus.ContainerStatuses) > 0 {
-				display.OutF("│     Containers:\n")
-			}
-			for _, container := range podStatus.ContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
 		}
 	}
 
@@ -417,41 +383,6 @@ func (mt *multitracker) PrintStatusReport() error {
 			}
 			display.OutF("\n")
 		}
-
-		for podName, podStatus := range status.Pods {
-			display.OutF("│   po/%s:\n", podName)
-
-			if podStatus.Phase != "" {
-				display.OutF("│     Phase:%s\n", podStatus.Phase)
-			}
-
-			if len(podStatus.Conditions) > 0 {
-				display.OutF("│     Conditions:\n")
-			}
-			for _, cond := range podStatus.Conditions {
-				display.OutF("│     - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-				if cond.Reason != "" {
-					display.OutF(" %s", cond.Reason)
-				}
-				if cond.Message != "" {
-					display.OutF(" %s", cond.Message)
-				}
-				display.OutF("\n")
-			}
-
-			if len(podStatus.InitContainerStatuses) > 0 {
-				display.OutF("│     InitContainers:\n")
-			}
-			for _, container := range podStatus.InitContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
-			if len(podStatus.ContainerStatuses) > 0 {
-				display.OutF("│     Containers:\n")
-			}
-			for _, container := range podStatus.ContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
-		}
 	}
 
 	for name, status := range mt.DaemonSetsStatuses {
@@ -469,41 +400,6 @@ func (mt *multitracker) PrintStatusReport() error {
 				display.OutF(" %s", cond.Message)
 			}
 			display.OutF("\n")
-		}
-
-		for podName, podStatus := range status.Pods {
-			display.OutF("│   po/%s:\n", podName)
-
-			if podStatus.Phase != "" {
-				display.OutF("│     Phase:%s\n", podStatus.Phase)
-			}
-
-			if len(podStatus.Conditions) > 0 {
-				display.OutF("│     Conditions:\n")
-			}
-			for _, cond := range podStatus.Conditions {
-				display.OutF("│     - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-				if cond.Reason != "" {
-					display.OutF(" %s", cond.Reason)
-				}
-				if cond.Message != "" {
-					display.OutF(" %s", cond.Message)
-				}
-				display.OutF("\n")
-			}
-
-			if len(podStatus.InitContainerStatuses) > 0 {
-				display.OutF("│     InitContainers:\n")
-			}
-			for _, container := range podStatus.InitContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
-			if len(podStatus.ContainerStatuses) > 0 {
-				display.OutF("│     Containers:\n")
-			}
-			for _, container := range podStatus.ContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
 		}
 	}
 
@@ -523,41 +419,6 @@ func (mt *multitracker) PrintStatusReport() error {
 				display.OutF(" %s", cond.Message)
 			}
 			display.OutF("\n")
-		}
-
-		for podName, podStatus := range status.Pods {
-			display.OutF("│   po/%s:\n", podName)
-
-			if podStatus.Phase != "" {
-				display.OutF("│     Phase:%s\n", podStatus.Phase)
-			}
-
-			if len(podStatus.Conditions) > 0 {
-				display.OutF("│     Conditions:\n")
-			}
-			for _, cond := range podStatus.Conditions {
-				display.OutF("│     - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-				if cond.Reason != "" {
-					display.OutF(" %s", cond.Reason)
-				}
-				if cond.Message != "" {
-					display.OutF(" %s", cond.Message)
-				}
-				display.OutF("\n")
-			}
-
-			if len(podStatus.InitContainerStatuses) > 0 {
-				display.OutF("│     InitContainers:\n")
-			}
-			for _, container := range podStatus.InitContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
-			if len(podStatus.ContainerStatuses) > 0 {
-				display.OutF("│     Containers:\n")
-			}
-			for _, container := range podStatus.ContainerStatuses {
-				display.OutF("│     - %s Ready:%v RestartCount:%d Image:%s\n", container.Name, container.Ready, container.RestartCount, container.Image)
-			}
 		}
 	}
 
@@ -604,10 +465,8 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 	}
 
 	if spec.FailMode == FailWholeDeployProcessImmediately {
-		delete(resourcesStates, spec.ResourceName)
+		resourcesStates[spec.ResourceName].IsFailed = true
 		resourcesStates[spec.ResourceName].LastFailureReason = reason
-
-		mt.errorChan <- mt.formatFailedTrackingResourcesError()
 		return tracker.StopTrack
 	} else if spec.FailMode == HopeUntilEndOfDeployProcess {
 		resourcesStates[spec.ResourceName].IsFailed = true
