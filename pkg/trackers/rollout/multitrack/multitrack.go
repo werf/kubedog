@@ -117,7 +117,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		JobsStatuses: make(map[string]job.JobStatus),
 	}
 
-	statusReportTicker := time.NewTicker(20 * time.Second)
+	statusReportTicker := time.NewTicker(5 * time.Second)
 	defer statusReportTicker.Stop()
 
 	var wg sync.WaitGroup
@@ -181,7 +181,13 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 	go func() {
 		wg.Wait()
 
-		if err := mt.PrintStatusReport(); err != nil {
+		err := func() error {
+			mt.handlerMux.Lock()
+			defer mt.handlerMux.Unlock()
+			return mt.PrintStatusReport()
+		}()
+
+		if err != nil {
 			errorChan <- err
 			return
 		}
@@ -325,7 +331,7 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 }
 
 func (mt *multitracker) PrintStatusReport() error {
-	display.OutF("┌ Status Report\n")
+	display.OutF("\n┌ Status Report\n")
 
 	for name, status := range mt.PodsStatuses {
 		display.OutF("├ po/%s\n", name)
