@@ -81,6 +81,10 @@ func setDefaultSpecValues(spec *MultitrackSpec) {
 }
 
 func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts MultitrackOptions) error {
+	if len(specs.Pods)+len(specs.Deployments)+len(specs.StatefulSets)+len(specs.DaemonSets)+len(specs.Jobs) == 0 {
+		return nil
+	}
+
 	for i := range specs.Pods {
 		setDefaultSpecValues(&specs.Pods[i])
 	}
