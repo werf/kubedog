@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -18,6 +20,7 @@ const (
 
 var (
 	Kubernetes       kubernetes.Interface
+	DynamicClient    dynamic.Interface
 	DefaultNamespace string
 	Context          string
 )
@@ -60,6 +63,14 @@ func Init(opts InitOptions) error {
 		return err
 	}
 	Kubernetes = clientset
+
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+	DynamicClient = dynamicClient
+
+	clientset.Discovery()
 
 	return nil
 }
@@ -210,4 +221,40 @@ func getInClusterContext() (context kubernetes.Interface, err error) {
 	}
 
 	return
+}
+
+func GroupVersionResourceByKind(kind string) (schema.GroupVersionResource, error) {
+	lists, err := Kubernetes.Discovery().ServerPreferredResources()
+	if err != nil {
+		return schema.GroupVersionResource{}, err
+	}
+
+	for _, list := range lists {
+		if len(list.APIResources) == 0 {
+			continue
+		}
+
+		gv, err := schema.ParseGroupVersion(list.GroupVersion)
+		if err != nil {
+			continue
+		}
+
+		for _, resource := range list.APIResources {
+			if len(resource.Verbs) == 0 {
+				continue
+			}
+
+			if kind == resource.Kind {
+				groupVersionResource := schema.GroupVersionResource{
+					Resource: resource.Name,
+					Group:    gv.Group,
+					Version:  gv.Version,
+				}
+
+				return groupVersionResource, nil
+			}
+		}
+	}
+
+	return schema.GroupVersionResource{}, fmt.Errorf("kind %s is not supported", kind)
 }
