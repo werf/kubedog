@@ -10,6 +10,9 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	// load the gcp plugin (only required to authenticate against GKE clusters)
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+
 	"github.com/flant/kubedog/pkg/utils"
 )
 
