@@ -128,10 +128,14 @@ func (mt *multitracker) podContainerLogChunk(spec MultitrackSpec, feed pod.Feed,
 		fmt.Printf("-- podContainerLogChunk %#v %#v\n", spec, chunk)
 	}
 
-	header := fmt.Sprintf("po/%s %s", spec.ResourceName, chunk.ContainerName)
-	display.OutputLogLines(header, chunk.LogLines)
+	header := podContainerLogChunkHeader(spec.ResourceName, chunk)
+	displayContainerLogChunk(header, spec, chunk)
 
 	return nil
+}
+
+func podContainerLogChunkHeader(podName string, chunk *pod.ContainerLogChunk) string {
+	return fmt.Sprintf("po/%s %s", podName, chunk.ContainerName)
 }
 
 func (mt *multitracker) podStatusReport(spec MultitrackSpec, feed pod.Feed, status pod.PodStatus) error {

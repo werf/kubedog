@@ -161,8 +161,9 @@ func (mt *multitracker) deploymentPodLogChunk(spec MultitrackSpec, feed deployme
 	if !chunk.ReplicaSet.IsNew {
 		return nil
 	}
-	header := fmt.Sprintf("po/%s %s", chunk.PodName, chunk.ContainerName)
-	display.OutputLogLines(header, chunk.LogLines)
+
+	header := fmt.Sprintf("deploy/%s %s", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk))
+	displayContainerLogChunk(header, spec, chunk.ContainerLogChunk)
 
 	return nil
 }

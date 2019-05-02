@@ -2,6 +2,7 @@ package multitrack
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +50,8 @@ type MultitrackSpec struct {
 	AllowFailuresCount      *int
 	FailureThresholdSeconds *int
 
-	LogWatchRegex                string
-	LogWatchRegexByContainerName map[string]string
+	LogWatchRegex                *regexp.Regexp
+	LogWatchRegexByContainerName map[string]*regexp.Regexp
 	ShowLogsUntil                DeployCondition
 	SkipLogsForContainers        []string
 	ShowLogsOnlyForContainers    []string
@@ -488,4 +489,45 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 	} else {
 		panic(fmt.Sprintf("bad fail mode: %s", spec.FailMode))
 	}
+}
+
+func displayContainerLogChunk(header string, spec MultitrackSpec, chunk *pod.ContainerLogChunk) {
+	for _, containerName := range spec.SkipLogsForContainers {
+		if containerName == chunk.ContainerName {
+			return
+		}
+	}
+
+	showLogs := len(spec.ShowLogsOnlyForContainers) == 0
+	for _, containerName := range spec.ShowLogsOnlyForContainers {
+		if containerName == chunk.ContainerName {
+			showLogs = true
+		}
+	}
+
+	if !showLogs {
+		return
+	}
+
+	var logRegexp *regexp.Regexp
+	if spec.LogWatchRegexByContainerName[chunk.ContainerName] != nil {
+		logRegexp = spec.LogWatchRegexByContainerName[chunk.ContainerName]
+	} else if spec.LogWatchRegex != nil {
+		logRegexp = spec.LogWatchRegex
+	}
+
+	var logLines []display.LogLine
+	if logRegexp != nil {
+		for _, logLine := range chunk.LogLines {
+			message := logRegexp.FindString(logLine.Message)
+			if message != "" {
+				logLine := display.LogLine{Message: message, Timestamp: logLine.Timestamp}
+				logLines = append(logLines, logLine)
+			}
+		}
+	} else {
+		logLines = chunk.LogLines
+	}
+
+	display.OutputLogLines(header, logLines)
 }
