@@ -514,18 +514,14 @@ func displayContainerLogChunk(header string, spec MultitrackSpec, chunk *pod.Con
 		logRegexp = spec.LogWatchRegex
 	}
 
-	var logLines []display.LogLine
 	if logRegexp != nil {
 		for _, logLine := range chunk.LogLines {
 			message := logRegexp.FindString(logLine.Message)
 			if message != "" {
-				logLine := display.LogLine{Message: message, Timestamp: logLine.Timestamp}
-				logLines = append(logLines, logLine)
+				display.OutputLogLines(header, []display.LogLine{logLine})
 			}
 		}
 	} else {
-		logLines = chunk.LogLines
+		display.OutputLogLines(header, chunk.LogLines)
 	}
-
-	display.OutputLogLines(header, logLines)
 }
