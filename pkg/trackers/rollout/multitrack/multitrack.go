@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/tracker/daemonset"
@@ -109,8 +110,10 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		TrackingPods: make(map[string]*multitrackerResourceState),
 		PodsStatuses: make(map[string]pod.PodStatus),
 
-		TrackingDeployments: make(map[string]*multitrackerResourceState),
-		DeploymentsStatuses: make(map[string]deployment.DeploymentStatus),
+		DeploymentsSpecs:        make(map[string]MultitrackSpec),
+		TrackingDeployments:     make(map[string]*multitrackerResourceState),
+		DeploymentsStatuses:     make(map[string]deployment.DeploymentStatus),
+		ShownDeploymentMessages: make(map[string]map[string]interface{}),
 
 		TrackingStatefulSets: make(map[string]*multitrackerResourceState),
 		StatefulSetsStatuses: make(map[string]statefulset.StatefulSetStatus),
@@ -139,6 +142,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		}(spec)
 	}
 	for _, spec := range specs.Deployments {
+		mt.DeploymentsSpecs[spec.ResourceName] = spec
 		mt.TrackingDeployments[spec.ResourceName] = &multitrackerResourceState{}
 
 		wg.Add(1)
@@ -232,11 +236,14 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 }
 
 type multitracker struct {
+	DeploymentsSpecs map[string]MultitrackSpec
+
 	TrackingPods map[string]*multitrackerResourceState
 	PodsStatuses map[string]pod.PodStatus
 
-	TrackingDeployments map[string]*multitrackerResourceState
-	DeploymentsStatuses map[string]deployment.DeploymentStatus
+	TrackingDeployments     map[string]*multitrackerResourceState
+	DeploymentsStatuses     map[string]deployment.DeploymentStatus
+	ShownDeploymentMessages map[string]map[string]interface{}
 
 	TrackingStatefulSets map[string]*multitrackerResourceState
 	StatefulSetsStatuses map[string]statefulset.StatefulSetStatus
@@ -334,7 +341,9 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 }
 
 func (mt *multitracker) PrintStatusReport() error {
-	display.OutF("\n┌ Status Report\n")
+	caption := color.New(color.Bold).Sprint("Status Report")
+
+	display.OutF("\n┌ %s\n", caption)
 
 	for name, status := range mt.PodsStatuses {
 		display.OutF("├ po/%s\n", name)
@@ -359,20 +368,79 @@ func (mt *multitracker) PrintStatusReport() error {
 	}
 
 	for name, status := range mt.DeploymentsStatuses {
-		display.OutF("├ deploy/%s\n", name)
-		display.OutF("│   Replicas:%d UpdatedReplicas:%d ReadyReplicas:%d AvailableReplicas:%d UnavailableReplicas:%d\n", status.Replicas, status.UpdatedReplicas, status.ReadyReplicas, status.AvailableReplicas, status.UnavailableReplicas)
-		if len(status.Conditions) > 0 {
-			display.OutF("│   Conditions:\n")
+		spec := mt.DeploymentsSpecs[name]
+
+		if _, hasKey := mt.ShownDeploymentMessages[name]; !hasKey {
+			mt.ShownDeploymentMessages[name] = make(map[string]interface{})
 		}
-		for _, cond := range status.Conditions {
-			display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-			if cond.Reason != "" {
-				display.OutF(" %s", cond.Reason)
+
+		var resource string
+
+		if spec.FailMode == FailWholeDeployProcessImmediately {
+			if status.ReadyStatus.IsReady {
+				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
+			} else if status.IsFailed {
+				resource = color.New(color.FgRed).Sprintf("deploy/%s", name)
+			} else {
+				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
 			}
-			if cond.Message != "" {
-				display.OutF(" %s", cond.Message)
+		} else if spec.FailMode == IgnoreAndContinueDeployProcess {
+			if status.ReadyStatus.IsReady {
+				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
+			} else {
+				resource = fmt.Sprintf("deploy/%s", name)
 			}
-			display.OutF("\n")
+		} else if spec.FailMode == HopeUntilEndOfDeployProcess {
+			if status.ReadyStatus.IsReady {
+				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
+			} else {
+				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
+			}
+		}
+
+		display.OutF("├ %s\n", resource)
+		if status.IsFailed {
+			display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ %s", status.FailedReason))
+
+			for podName, podStatus := range status.Pods {
+				if podStatus.IsFailed {
+					display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ pod/%s %s", podName, podStatus.FailedReason))
+				}
+			}
+		} else {
+			for _, cond := range status.ReadyStatus.ProgressingConditions {
+				if cond.IsSatisfied {
+					if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
+						display.OutF("│   %s\n", color.New(color.FgBlue).Sprintf("↻  %s", cond.Message))
+						mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
+					}
+				}
+			}
+
+			unreadyMsgs := []string{}
+			for _, cond := range status.ReadyStatus.ReadyConditions {
+				if !cond.IsSatisfied {
+					unreadyMsgs = append(unreadyMsgs, cond.Message)
+				}
+			}
+			if len(unreadyMsgs) > 0 {
+				display.OutF("│   %s\n", color.New(color.FgYellow).Sprintf("⌚ %s", strings.Join(unreadyMsgs, ", ")))
+			}
+
+			for _, cond := range status.ReadyStatus.ReadyConditions {
+				if cond.IsSatisfied {
+					if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
+						display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))
+						mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
+					}
+				}
+			}
+
+			for podName, podStatus := range status.Pods {
+				if podStatus.IsFailed {
+					display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ pod/%s %s", podName, podStatus.FailedReason))
+				}
+			}
 		}
 	}
 
@@ -462,7 +530,7 @@ func (mt *multitracker) PrintStatusReport() error {
 		display.OutF("├ job/%s status unavailable\n", name)
 	}
 
-	display.OutF("└ Status Report\n")
+	display.OutF("└ %s\n", caption)
 
 	return nil
 }
@@ -480,6 +548,7 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 	} else if spec.FailMode == HopeUntilEndOfDeployProcess {
 		resourcesStates[spec.ResourceName].IsFailed = true
 		resourcesStates[spec.ResourceName].LastFailureReason = reason
+		// TODO: goroutine for this resource should be stopped somehow at the end of deploy process
 		return nil
 	} else if spec.FailMode == IgnoreAndContinueDeployProcess {
 		delete(resourcesStates, spec.ResourceName)

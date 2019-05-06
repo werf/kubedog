@@ -25,6 +25,17 @@ import (
 
 type PodStatus struct {
 	corev1.PodStatus
+
+	IsFailed     bool
+	FailedReason string
+}
+
+func NewPodStatus(isFailed bool, failedReason string, kubeStatus corev1.PodStatus) PodStatus {
+	return PodStatus{
+		PodStatus:    kubeStatus,
+		IsFailed:     isFailed,
+		FailedReason: failedReason,
+	}
 }
 
 type ContainerError struct {
@@ -65,7 +76,9 @@ type Tracker struct {
 	TrackedContainers               []string
 	LogsFromTime                    time.Time
 
-	lastObject     *corev1.Pod
+	lastObject   *corev1.Pod
+	failedReason string
+
 	objectAdded    chan *corev1.Pod
 	objectModified chan *corev1.Pod
 	objectDeleted  chan *corev1.Pod
@@ -136,7 +149,7 @@ func (pod *Tracker) Start() error {
 
 		case object := <-pod.objectAdded:
 			pod.lastObject = object
-			pod.StatusReport <- PodStatus{pod.lastObject.Status}
+			pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
 
 			pod.runEventsInformer()
 
@@ -161,7 +174,7 @@ func (pod *Tracker) Start() error {
 
 		case object := <-pod.objectModified:
 			pod.lastObject = object
-			pod.StatusReport <- PodStatus{pod.lastObject.Status}
+			pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
 
 			done, err := pod.handlePodState(object)
 			if err != nil {
@@ -191,6 +204,11 @@ func (pod *Tracker) Start() error {
 
 		case reason := <-pod.objectFailed:
 			pod.State = "Failed"
+			pod.failedReason = reason
+
+			if pod.lastObject != nil {
+				pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
+			}
 			pod.Failed <- reason
 
 		case <-pod.Context.Done():
