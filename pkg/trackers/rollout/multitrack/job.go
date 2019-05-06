@@ -113,8 +113,8 @@ func (mt *multitracker) jobPodLogChunk(spec MultitrackSpec, feed job.Feed, chunk
 		fmt.Printf("-- jobPodLogChunk %#v %#v\n", spec, chunk)
 	}
 
-	header := fmt.Sprintf("job/%s po/%s container/%s", spec.ResourceName, chunk.PodName, chunk.ContainerName)
-	display.OutputLogLines(header, chunk.LogLines)
+	header := fmt.Sprintf("jobs/%s %s", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk))
+	displayContainerLogChunk(header, spec, chunk.ContainerLogChunk)
 
 	return nil
 }
