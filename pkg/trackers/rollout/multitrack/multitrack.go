@@ -215,8 +215,6 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 					return err
 				}
 
-				time.Sleep(time.Duration(5) * time.Second)
-
 				return nil
 			}()
 
