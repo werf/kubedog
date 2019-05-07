@@ -24,14 +24,25 @@ import (
 )
 
 type DeploymentStatus struct {
-	extensions.DeploymentStatus
 	Pods map[string]pod.PodStatus
+
+	extensions.DeploymentStatus
+	DesiredReplicas int32
+
+	IsFailed     bool
+	FailedReason string
+
+	ReadyStatus tracker.ReadyStatus
 }
 
-func NewDeploymentStatus(kubeStatus extensions.DeploymentStatus, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
+func NewDeploymentStatus(readyStatus tracker.ReadyStatus, isFailed bool, failedReason string, kubeSpec extensions.DeploymentSpec, kubeStatus extensions.DeploymentStatus, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
 	res := DeploymentStatus{
 		DeploymentStatus: kubeStatus,
+		DesiredReplicas:  *kubeSpec.Replicas,
 		Pods:             make(map[string]pod.PodStatus),
+		ReadyStatus:      readyStatus,
+		IsFailed:         isFailed,
+		FailedReason:     failedReason,
 	}
 	for k, v := range podsStatuses {
 		res.Pods[k] = v
@@ -51,6 +62,8 @@ type Tracker struct {
 	NewReplicaSetName     string
 	knownReplicaSets      map[string]*extensions.ReplicaSet
 	lastObject            *extensions.Deployment
+	readyStatus           tracker.ReadyStatus
+	failedReason          string
 	podStatuses           map[string]pod.PodStatus
 
 	Added           chan bool
@@ -76,8 +89,6 @@ type Tracker struct {
 	podStatusesReport     chan map[string]pod.PodStatus
 	replicaSetPodLogChunk chan *replicaset.ReplicaSetPodLogChunk
 	replicaSetPodError    chan replicaset.ReplicaSetPodError
-
-	FailedReason chan error
 
 	TrackedPods []string
 }
@@ -185,6 +196,11 @@ func (d *Tracker) Track() (err error) {
 
 		case reason := <-d.resourceFailed:
 			d.State = "Failed"
+			d.failedReason = reason
+
+			if d.lastObject != nil {
+				d.StatusReport <- NewDeploymentStatus(d.readyStatus, (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
+			}
 			d.Failed <- reason
 
 		case rs := <-d.replicaSetAdded:
@@ -254,7 +270,7 @@ func (d *Tracker) Track() (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				d.StatusReport <- NewDeploymentStatus(d.lastObject.Status, d.podStatuses)
+				d.StatusReport <- NewDeploymentStatus(d.readyStatus, (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
 			}
 
 		case rsChunk := <-d.replicaSetPodLogChunk:
@@ -471,12 +487,15 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	// calc new status
 	if d.lastObject != nil {
 		prevReady = d.CurrentReady
-		d.CurrentReady = utils.DeploymentComplete(d.lastObject, &newStatus)
+		d.readyStatus = utils.DeploymentReadyStatus(d.lastObject, &newStatus)
 	} else {
-		d.CurrentReady = utils.DeploymentComplete(object, &newStatus)
+		d.readyStatus = utils.DeploymentReadyStatus(object, &newStatus)
 	}
+
+	d.CurrentReady = d.readyStatus.IsReady
 	d.lastObject = object
-	d.StatusReport <- NewDeploymentStatus(d.lastObject.Status, d.podStatuses)
+
+	d.StatusReport <- NewDeploymentStatus(d.readyStatus, (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
 
 	if prevReady == false && d.CurrentReady == true {
 		d.FinalDeploymentStatus = newStatus

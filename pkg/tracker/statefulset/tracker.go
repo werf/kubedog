@@ -56,8 +56,6 @@ type Tracker struct {
 	errors            chan error
 	podStatusesReport chan map[string]pod.PodStatus
 
-	FailedReason chan error
-
 	TrackedPods []string
 }
 
