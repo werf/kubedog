@@ -54,20 +54,26 @@ func ResourceErrorf(format string, a ...interface{}) error {
 	}
 }
 
-type ReadyStatus struct {
-	IsReady         bool
-	ReadyConditions []ReadyCondition
-
-	IsProgressing         bool
-	ProgressingConditions []ProgressingCondition
+type StringEqualConditionIndicator struct {
+	Value                     string
+	PrevValue                 string
+	TargetValue               string
+	IsReadyConditionSatisfied bool
+	IsProgressing             bool
 }
 
-type ProgressingCondition struct {
-	Message     string
-	IsSatisfied bool
+type Int64GreaterOrEqualConditionIndicator struct {
+	Value                     int64
+	PrevValue                 int64
+	TargetValue               int64
+	IsReadyConditionSatisfied bool
+	IsProgressing             bool
 }
 
-type ReadyCondition struct {
-	Message     string
-	IsSatisfied bool
+type Int32EqualConditionIndicator struct {
+	Value                     int32
+	PrevValue                 int32
+	TargetValue               int32
+	IsReadyConditionSatisfied bool
+	IsProgressing             bool
 }
