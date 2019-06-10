@@ -114,7 +114,7 @@ TrackStatefulSet(
 - `name` — name of the resource
 - `namespace` — namespace of the resource
 - `kube` — configured Kubernetes client (see [kube.go](pkg/kube/kube.go#L36))
-- `opts` — tracker options (context, timeout, starting time for logs) 
+- `opts` — tracker options (context, timeout, starting time for logs)
 
 These functions run until specified resource is terminated. Error is returned only in exceptional situation or on timeout.
 
@@ -150,7 +150,7 @@ TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker
 - `name` — name of the resource
 - `namespace` — namespace of the resource
 - `kube` — configured Kubernetes client (see [kube.go](pkg/kube/kube.go#L36))
-- `opts` — tracker options (context, timeout, starting time for logs) 
+- `opts` — tracker options (context, timeout, starting time for logs)
 
 
 ## Multitracker (NEW)
@@ -198,11 +198,15 @@ type MultitrackSpec struct {
 	AllowFailuresCount      *int
 	FailureThresholdSeconds *int
 
-	LogWatchRegex                string
-	LogWatchRegexByContainerName map[string]string
-	ShowLogsUntil                DeployCondition
-	SkipLogsForContainers        []string
-	ShowLogsOnlyForContainers    []string
+	LogRegex                *regexp.Regexp
+	LogRegexByContainerName map[string]*regexp.Regexp
+
+	SkipLogs                  bool
+	SkipLogsForContainers     []string
+	ShowLogsOnlyForContainers []string
+	ShowLogsUntil             DeployCondition
+
+	SkipEvents bool
 }
 ```
 
@@ -244,7 +248,7 @@ func main() {
 ### Track forever
 
 **Task**: track `myjob` Job in namespace `mynamespace` forever.
- 
+
 **Solution**: Follow tracker can be used to track a resource forever or until it is deleted:
 
 ```
@@ -276,7 +280,7 @@ func main() {
 ### Track mutiple resources
 
 **Task**: track deployments `tiller-deploy`, `coredns`, pod `etcd-minikube` and job `myjob` simultaneously until all the resources become ready.
- 
+
 **Solution**: Multitrack tracker can be used to track multiple resources at once:
 
 ```
