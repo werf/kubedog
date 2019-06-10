@@ -153,11 +153,11 @@ TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker
 - `opts` — tracker options (context, timeout, starting time for logs) 
 
 
-## Multitracker
+## Multitracker (NEW)
 
 Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical status reports with info about all resources, that are being tracked.
 
-Multitracker is now available only as a rollout style tracker, so it runs until all resources reach a readiness state.
+Multitracker is now available only as a **rollout style tracker** (see [follow tracker](https://github.com/flant/kubedog#follow-tracker) and [rollout tracker](https://github.com/flant/kubedog#rollout-tracker)), so it runs until all resources reach a readiness state.
 
 Import package:
 
