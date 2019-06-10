@@ -51,11 +51,15 @@ type MultitrackSpec struct {
 	AllowFailuresCount      *int
 	FailureThresholdSeconds *int
 
-	LogWatchRegex                *regexp.Regexp
-	LogWatchRegexByContainerName map[string]*regexp.Regexp
-	ShowLogsUntil                DeployCondition
-	SkipLogsForContainers        []string
-	ShowLogsOnlyForContainers    []string
+	LogRegex                *regexp.Regexp
+	LogRegexByContainerName map[string]*regexp.Regexp
+
+	SkipLogs                  bool
+	SkipLogsForContainers     []string
+	ShowLogsOnlyForContainers []string
+	ShowLogsUntil             DeployCondition
+
+	SkipEvents bool
 }
 
 type MultitrackOptions struct {
@@ -577,10 +581,10 @@ func displayContainerLogChunk(header string, spec MultitrackSpec, chunk *pod.Con
 	}
 
 	var logRegexp *regexp.Regexp
-	if spec.LogWatchRegexByContainerName[chunk.ContainerName] != nil {
-		logRegexp = spec.LogWatchRegexByContainerName[chunk.ContainerName]
-	} else if spec.LogWatchRegex != nil {
-		logRegexp = spec.LogWatchRegex
+	if spec.LogRegexByContainerName[chunk.ContainerName] != nil {
+		logRegexp = spec.LogRegexByContainerName[chunk.ContainerName]
+	} else if spec.LogRegex != nil {
+		logRegexp = spec.LogRegex
 	}
 
 	if logRegexp != nil {
