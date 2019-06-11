@@ -23,21 +23,6 @@ import (
 	"github.com/flant/kubedog/pkg/tracker/event"
 )
 
-type PodStatus struct {
-	corev1.PodStatus
-
-	IsFailed     bool
-	FailedReason string
-}
-
-func NewPodStatus(isFailed bool, failedReason string, kubeStatus corev1.PodStatus) PodStatus {
-	return PodStatus{
-		PodStatus:    kubeStatus,
-		IsFailed:     isFailed,
-		FailedReason: failedReason,
-	}
-}
-
 type ContainerError struct {
 	Message       string
 	ContainerName string
@@ -76,8 +61,9 @@ type Tracker struct {
 	TrackedContainers               []string
 	LogsFromTime                    time.Time
 
-	lastObject   *corev1.Pod
-	failedReason string
+	lastObject     *corev1.Pod
+	readyIndicator PodReadyIndicator
+	failedReason   string
 
 	objectAdded    chan *corev1.Pod
 	objectModified chan *corev1.Pod
@@ -148,8 +134,13 @@ func (pod *Tracker) Start() error {
 			}
 
 		case object := <-pod.objectAdded:
-			pod.lastObject = object
-			pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
+			done, err := pod.handlePodState(object)
+			if err != nil {
+				return err
+			}
+			if done {
+				return nil
+			}
 
 			pod.runEventsInformer()
 
@@ -164,18 +155,7 @@ func (pod *Tracker) Start() error {
 				}
 			}
 
-			done, err := pod.handlePodState(object)
-			if err != nil {
-				return err
-			}
-			if done {
-				return nil
-			}
-
 		case object := <-pod.objectModified:
-			pod.lastObject = object
-			pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
-
 			done, err := pod.handlePodState(object)
 			if err != nil {
 				return err
@@ -207,7 +187,7 @@ func (pod *Tracker) Start() error {
 			pod.failedReason = reason
 
 			if pod.lastObject != nil {
-				pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
+				pod.StatusReport <- NewPodStatus(pod.readyIndicator, pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
 			}
 			pod.Failed <- reason
 
@@ -221,15 +201,22 @@ func (pod *Tracker) Start() error {
 }
 
 func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
+	if pod.lastObject != nil {
+		pod.readyIndicator = NewPodReadyIndicator(pod.lastObject, &object.Status)
+	} else {
+		pod.readyIndicator = NewPodReadyIndicator(object, &object.Status)
+	}
+	pod.lastObject = object
+
+	pod.StatusReport <- NewPodStatus(pod.readyIndicator, pod.State == "Failed", pod.failedReason, object.Status)
+
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
 	}
 
-	for _, cond := range object.Status.Conditions {
-		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-			pod.Ready <- struct{}{}
-		}
+	if pod.readyIndicator.IsReady {
+		pod.Ready <- struct{}{}
 	}
 
 	if len(pod.TrackedContainers) == 0 {
