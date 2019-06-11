@@ -381,7 +381,7 @@ func (mt *multitracker) PrintStatusReport() error {
 		var resource string
 
 		if spec.FailMode == FailWholeDeployProcessImmediately {
-			if status.ReadyStatus.IsReady {
+			if status.ReadyIndicator.IsReady {
 				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
 			} else if status.IsFailed {
 				resource = color.New(color.FgRed).Sprintf("deploy/%s", name)
@@ -389,13 +389,13 @@ func (mt *multitracker) PrintStatusReport() error {
 				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
 			}
 		} else if spec.FailMode == IgnoreAndContinueDeployProcess {
-			if status.ReadyStatus.IsReady {
+			if status.ReadyIndicator.IsReady {
 				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
 			} else {
 				resource = fmt.Sprintf("deploy/%s", name)
 			}
 		} else if spec.FailMode == HopeUntilEndOfDeployProcess {
-			if status.ReadyStatus.IsReady {
+			if status.ReadyIndicator.IsReady {
 				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
 			} else {
 				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
@@ -412,33 +412,33 @@ func (mt *multitracker) PrintStatusReport() error {
 				}
 			}
 		} else {
-			for _, cond := range status.ReadyStatus.ProgressingConditions {
-				if cond.IsSatisfied {
-					if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
-						display.OutF("│   %s\n", color.New(color.FgBlue).Sprintf("↻  %s", cond.Message))
-						mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
-					}
-				}
-			}
+			// for _, cond := range status.ReadyStatus.ProgressingConditions {
+			// 	if cond.IsSatisfied {
+			// 		if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
+			// 			display.OutF("│   %s\n", color.New(color.FgBlue).Sprintf("↻  %s", cond.Message))
+			// 			mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
+			// 		}
+			// 	}
+			// }
 
 			unreadyMsgs := []string{}
-			for _, cond := range status.ReadyStatus.ReadyConditions {
-				if !cond.IsSatisfied {
-					unreadyMsgs = append(unreadyMsgs, cond.Message)
-				}
-			}
+			// for _, cond := range status.ReadyStatus.ReadyConditions {
+			// 	if !cond.IsSatisfied {
+			// 		unreadyMsgs = append(unreadyMsgs, cond.Message)
+			// 	}
+			// }
 			if len(unreadyMsgs) > 0 {
 				display.OutF("│   %s\n", color.New(color.FgYellow).Sprintf("⌚ %s", strings.Join(unreadyMsgs, ", ")))
 			}
 
-			for _, cond := range status.ReadyStatus.ReadyConditions {
-				if cond.IsSatisfied {
-					if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
-						display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))
-						mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
-					}
-				}
-			}
+			// for _, cond := range status.ReadyStatus.ReadyConditions {
+			// 	if cond.IsSatisfied {
+			// 		if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
+			// 			display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))
+			// 			mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
+			// 		}
+			// 	}
+			// }
 
 			for podName, podStatus := range status.Pods {
 				if podStatus.IsFailed {

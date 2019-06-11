@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/flant/kubedog/pkg/tracker"
-
 	corev1 "k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -45,88 +43,6 @@ func greaterOrEqualSign(isGreaterOrEqual bool) string {
 	} else {
 		return "<"
 	}
-}
-
-// DeploymentReadyStatus considers a deployment to be complete once all of its desired replicas
-// are updated and available, and no old pods are running.
-func DeploymentReadyStatus(deployment *extensions.Deployment, newStatus *extensions.DeploymentStatus) tracker.ReadyStatus {
-	res := tracker.ReadyStatus{IsReady: true, IsProgressing: true}
-
-	var isSatisfied bool
-
-	isSatisfied = newStatus.Replicas == *(deployment.Spec.Replicas)
-	res.ReadyConditions = append(res.ReadyConditions, tracker.ReadyCondition{
-		Message:     fmt.Sprintf("overall %d %s %d", newStatus.Replicas, equalSign(isSatisfied), *(deployment.Spec.Replicas)),
-		IsSatisfied: isSatisfied,
-	})
-
-	isSatisfied = newStatus.UpdatedReplicas == *(deployment.Spec.Replicas)
-	res.ReadyConditions = append(res.ReadyConditions, tracker.ReadyCondition{
-		Message:     fmt.Sprintf("updated %d/%d", newStatus.UpdatedReplicas, *(deployment.Spec.Replicas)),
-		IsSatisfied: isSatisfied,
-	})
-
-	isSatisfied = newStatus.AvailableReplicas == *(deployment.Spec.Replicas)
-	res.ReadyConditions = append(res.ReadyConditions, tracker.ReadyCondition{
-		Message:     fmt.Sprintf("available %d/%d", newStatus.AvailableReplicas, *(deployment.Spec.Replicas)),
-		IsSatisfied: isSatisfied,
-	})
-
-	isSatisfied = newStatus.ObservedGeneration >= deployment.Generation
-	res.ReadyConditions = append(res.ReadyConditions, tracker.ReadyCondition{
-		Message:     fmt.Sprintf("observed generation %d %s %d", deployment.Generation, greaterOrEqualSign(isSatisfied), newStatus.ObservedGeneration),
-		IsSatisfied: isSatisfied,
-	})
-
-	for _, cond := range res.ReadyConditions {
-		res.IsReady = (res.IsReady && cond.IsSatisfied)
-	}
-
-	oldStatus := deployment.Status
-	// Old replicas that need to be scaled down
-	oldStatusOldReplicas := oldStatus.Replicas - oldStatus.UpdatedReplicas
-	newStatusOldReplicas := newStatus.Replicas - newStatus.UpdatedReplicas
-
-	var msg string
-
-	isSatisfied = newStatus.UpdatedReplicas > oldStatus.UpdatedReplicas
-	if isSatisfied {
-		msg = fmt.Sprintf("updated replicas increased %d => %d", oldStatus.UpdatedReplicas, newStatus.UpdatedReplicas)
-	} else {
-		msg = fmt.Sprintf("updated replicas not changed %d", oldStatus.UpdatedReplicas)
-	}
-	res.ProgressingConditions = append(res.ProgressingConditions, tracker.ProgressingCondition{
-		Message:     msg,
-		IsSatisfied: isSatisfied,
-	})
-
-	isSatisfied = newStatusOldReplicas < oldStatusOldReplicas
-	if isSatisfied {
-		msg = fmt.Sprintf("old replicas decreased %d => %d", oldStatusOldReplicas, newStatusOldReplicas)
-	} else {
-		msg = fmt.Sprintf("old replicas not changed %d", oldStatusOldReplicas)
-	}
-	res.ProgressingConditions = append(res.ProgressingConditions, tracker.ProgressingCondition{
-		Message:     msg,
-		IsSatisfied: isSatisfied,
-	})
-
-	isSatisfied = newStatus.AvailableReplicas > oldStatus.AvailableReplicas
-	if isSatisfied {
-		msg = fmt.Sprintf("available replicas increased %d => %d", oldStatus.AvailableReplicas, newStatus.AvailableReplicas)
-	} else {
-		msg = fmt.Sprintf("available replicas not changed %d", oldStatus.AvailableReplicas)
-	}
-	res.ProgressingConditions = append(res.ProgressingConditions, tracker.ProgressingCondition{
-		Message:     msg,
-		IsSatisfied: isSatisfied,
-	})
-
-	for _, cond := range res.ProgressingConditions {
-		res.IsProgressing = (res.IsProgressing && cond.IsSatisfied)
-	}
-
-	return res
 }
 
 // DeploymentProgressing reports progress for a deployment. Progress is estimated by comparing the
