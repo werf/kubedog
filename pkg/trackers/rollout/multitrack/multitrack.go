@@ -345,31 +345,17 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 }
 
 func (mt *multitracker) PrintStatusReport() error {
-	caption := color.New(color.Bold).Sprint("Status Report")
+	caption := color.New(color.Bold).Sprint("Status progress")
 
 	display.OutF("\n┌ %s\n", caption)
 
-	for name, status := range mt.PodsStatuses {
-		display.OutF("├ po/%s\n", name)
+	controllersCaption := fmt.Sprintf("%30s %15s %15s %15s %15s %15s", "NAME", "DESIRED", "CURRENT", "UP-TO-DATE", "AVAILABLE", "OLD")
+	display.OutF("│ %s\n", controllersCaption)
+	podsCaption := fmt.Sprintf("          %30s %15s %15s %15s %15s", "POD_NAME", "POD_READY", "POD_STATUS", "POD_RESTARTS", "POD_AGE")
+	display.OutF("│ %s\n", podsCaption)
+	display.OutF("│\n")
 
-		if status.Phase != "" {
-			display.OutF("│   Phase:%s\n", status.Phase)
-		}
-
-		if len(status.Conditions) > 0 {
-			display.OutF("│   Conditions:\n")
-		}
-		for _, cond := range status.Conditions {
-			display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-			if cond.Reason != "" {
-				display.OutF(" %s", cond.Reason)
-			}
-			if cond.Message != "" {
-				display.OutF(" %s", cond.Message)
-			}
-			display.OutF("\n")
-		}
-	}
+	newlineNeeded := false
 
 	for name, status := range mt.DeploymentsStatuses {
 		spec := mt.DeploymentsSpecs[name]
@@ -401,140 +387,191 @@ func (mt *multitracker) PrintStatusReport() error {
 				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
 			}
 		}
+		resource = fmt.Sprintf("deploy/%s", name)
 
-		display.OutF("├ %s\n", resource)
+		desired := fmt.Sprintf("%d", status.ReadyIndicator.OverallReplicasIndicator.TargetValue)
+		current := status.ReadyIndicator.OverallReplicasIndicator.FormatTableElem(true)
+		uptodate := status.ReadyIndicator.UpdatedReplicasIndicator.FormatTableElem(true)
+		available := status.ReadyIndicator.AvailableReplicasIndicator.FormatTableElem(true)
+		old := status.ReadyIndicator.OldReplicasIndicator.FormatTableElem(true)
+
+		if newlineNeeded {
+			display.OutF("│\n")
+		}
+
+		display.OutF("│ %30s %15s %15s %15s %15s %15s\n", resource, desired, current, uptodate, available, old)
+
 		if status.IsFailed {
-			display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ %s", status.FailedReason))
+			display.OutF("│ %30s %s\n", " ", color.New(color.FgRed).Sprintf("%s", status.FailedReason))
+		}
 
-			for podName, podStatus := range status.Pods {
-				if podStatus.IsFailed {
-					display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ pod/%s %s", podName, podStatus.FailedReason))
+		if len(status.Pods) > 0 {
+			display.OutF("│\n")
+			newlineNeeded = true
+		}
+
+		for podName, podStatus := range status.Pods {
+			containersCount := 0
+			readyContainersCount := 0
+			restarts := int32(0)
+			for _, cs := range podStatus.ContainerStatuses {
+				containersCount++
+
+				if cs.Ready {
+					readyContainersCount++
 				}
-			}
-		} else {
-			// for _, cond := range status.ReadyStatus.ProgressingConditions {
-			// 	if cond.IsSatisfied {
-			// 		if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
-			// 			display.OutF("│   %s\n", color.New(color.FgBlue).Sprintf("↻  %s", cond.Message))
-			// 			mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
-			// 		}
-			// 	}
-			// }
 
-			unreadyMsgs := []string{}
-			// for _, cond := range status.ReadyStatus.ReadyConditions {
-			// 	if !cond.IsSatisfied {
-			// 		unreadyMsgs = append(unreadyMsgs, cond.Message)
-			// 	}
-			// }
-			if len(unreadyMsgs) > 0 {
-				display.OutF("│   %s\n", color.New(color.FgYellow).Sprintf("⌚ %s", strings.Join(unreadyMsgs, ", ")))
+				restarts += cs.RestartCount
 			}
+			restartsStr := fmt.Sprintf("%d", restarts)
 
-			// for _, cond := range status.ReadyStatus.ReadyConditions {
-			// 	if cond.IsSatisfied {
-			// 		if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
-			// 			display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))
-			// 			mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
-			// 		}
-			// 	}
-			// }
+			ready := fmt.Sprintf("%d/%d", readyContainersCount, containersCount)
+			resource := fmt.Sprintf("po/%s", podName)
 
-			for podName, podStatus := range status.Pods {
-				if podStatus.IsFailed {
-					display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ pod/%s %s", podName, podStatus.FailedReason))
-				}
-			}
-		}
-	}
+			display.OutF("│           %30s %15s %15s %15s %15s\n", resource, ready, podStatus.ReadyIndicator.PhaseIndicator.FormatTableElem(true), restartsStr, "<unknown>")
 
-	for name, status := range mt.StatefulSetsStatuses {
-		display.OutF("├ sts/%s\n", name)
-		display.OutF("│   Replicas:%d ReadyReplicas:%d CurrentReplicas:%d UpdatedReplicas:%d\n", status.Replicas, status.ReadyReplicas, status.CurrentReplicas, status.UpdatedReplicas)
-		if len(status.Conditions) > 0 {
-			display.OutF("│   Conditions:\n")
-		}
-		for _, cond := range status.Conditions {
-			display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-			if cond.Reason != "" {
-				display.OutF(" %s", cond.Reason)
+			if podStatus.IsFailed {
+				display.OutF("│           %30s %s\n", " ", color.New(color.FgRed).Sprintf("%s", podName, podStatus.FailedReason))
 			}
-			if cond.Message != "" {
-				display.OutF(" %s", cond.Message)
-			}
-			display.OutF("\n")
 		}
-	}
-
-	for name, status := range mt.DaemonSetsStatuses {
-		display.OutF("├ ds/%s\n", name)
-		display.OutF("│   CurrentNumberScheduled:%d NumberReady:%d NumberAvailable:%d NumberUnavailable:%d\n", status.CurrentNumberScheduled, status.NumberReady, status.NumberAvailable, status.NumberUnavailable)
-		if len(status.Conditions) > 0 {
-			display.OutF("│   Conditions:\n")
-		}
-		for _, cond := range status.Conditions {
-			display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-			if cond.Reason != "" {
-				display.OutF(" %s", cond.Reason)
-			}
-			if cond.Message != "" {
-				display.OutF(" %s", cond.Message)
-			}
-			display.OutF("\n")
-		}
-	}
-
-	for name, status := range mt.JobsStatuses {
-		display.OutF("├ job/%s\n", name)
-		display.OutF("│   Active:%d Succeeded:%d Failed:%d\n", status.Active, status.Succeeded, status.Failed)
-		display.OutF("│   StartTime:%s CompletionTime:%s\n", status.StartTime, status.CompletionTime)
-		if len(status.Conditions) > 0 {
-			display.OutF("│   Conditions:\n")
-		}
-		for _, cond := range status.Conditions {
-			display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-			if cond.Reason != "" {
-				display.OutF(" %s", cond.Reason)
-			}
-			if cond.Message != "" {
-				display.OutF(" %s", cond.Message)
-			}
-			display.OutF("\n")
-		}
-	}
-
-	for name := range mt.TrackingPods {
-		if _, hasKey := mt.PodsStatuses[name]; hasKey {
-			continue
-		}
-		display.OutF("├ po/%s status unavailable\n", name)
-	}
-	for name := range mt.TrackingDeployments {
-		if _, hasKey := mt.DeploymentsStatuses[name]; hasKey {
-			continue
-		}
-		display.OutF("├ deploy/%s status unavailable\n", name)
-	}
-	for name := range mt.TrackingStatefulSets {
-		if _, hasKey := mt.StatefulSetsStatuses[name]; hasKey {
-			continue
-		}
-		display.OutF("├ sts/%s status unavailable\n", name)
-	}
-	for name := range mt.TrackingDaemonSets {
-		if _, hasKey := mt.DaemonSetsStatuses[name]; hasKey {
-			continue
-		}
-		display.OutF("├ ds/%s status unavailable\n", name)
-	}
-	for name := range mt.TrackingJobs {
-		if _, hasKey := mt.JobsStatuses[name]; hasKey {
-			continue
-		}
-		display.OutF("├ job/%s status unavailable\n", name)
 	}
 
 	display.OutF("└ %s\n", caption)
+
+	// for name, status := range mt.PodsStatuses {
+	// 	display.OutF("├ po/%s\n", name)
+
+	// 	if status.Phase != "" {
+	// 		display.OutF("│   Phase:%s\n", status.Phase)
+	// 	}
+
+	// 	if len(status.Conditions) > 0 {
+	// 		display.OutF("│   Conditions:\n")
+	// 	}
+	// 	for _, cond := range status.Conditions {
+	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
+	// 		if cond.Reason != "" {
+	// 			display.OutF(" %s", cond.Reason)
+	// 		}
+	// 		if cond.Message != "" {
+	// 			display.OutF(" %s", cond.Message)
+	// 		}
+	// 		display.OutF("\n")
+	// 	}
+	// }
+
+	// unreadyMsgs := []string{}
+	// for _, cond := range status.ReadyStatus.ReadyConditions {
+	// 	if !cond.IsSatisfied {
+	// 		unreadyMsgs = append(unreadyMsgs, cond.Message)
+	// 	}
+	// }
+	// if len(unreadyMsgs) > 0 {
+	// 	display.OutF("│   %s\n", color.New(color.FgYellow).Sprintf("⌚ %s", strings.Join(unreadyMsgs, ", ")))
+	// }
+
+	// for _, cond := range status.ReadyStatus.ReadyConditions {
+	// 	if cond.IsSatisfied {
+	// 		if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
+	// 			display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))
+	// 			mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
+	// 		}
+	// 	}
+	// }
+
+	// 		for podName, podStatus := range status.Pods {
+	// 			if podStatus.IsFailed {
+	// 				display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ pod/%s %s", podName, podStatus.FailedReason))
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// for name, status := range mt.StatefulSetsStatuses {
+	// 	display.OutF("├ sts/%s\n", name)
+	// 	display.OutF("│   Replicas:%d ReadyReplicas:%d CurrentReplicas:%d UpdatedReplicas:%d\n", status.Replicas, status.ReadyReplicas, status.CurrentReplicas, status.UpdatedReplicas)
+	// 	if len(status.Conditions) > 0 {
+	// 		display.OutF("│   Conditions:\n")
+	// 	}
+	// 	for _, cond := range status.Conditions {
+	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
+	// 		if cond.Reason != "" {
+	// 			display.OutF(" %s", cond.Reason)
+	// 		}
+	// 		if cond.Message != "" {
+	// 			display.OutF(" %s", cond.Message)
+	// 		}
+	// 		display.OutF("\n")
+	// 	}
+	// }
+
+	// for name, status := range mt.DaemonSetsStatuses {
+	// 	display.OutF("├ ds/%s\n", name)
+	// 	display.OutF("│   CurrentNumberScheduled:%d NumberReady:%d NumberAvailable:%d NumberUnavailable:%d\n", status.CurrentNumberScheduled, status.NumberReady, status.NumberAvailable, status.NumberUnavailable)
+	// 	if len(status.Conditions) > 0 {
+	// 		display.OutF("│   Conditions:\n")
+	// 	}
+	// 	for _, cond := range status.Conditions {
+	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
+	// 		if cond.Reason != "" {
+	// 			display.OutF(" %s", cond.Reason)
+	// 		}
+	// 		if cond.Message != "" {
+	// 			display.OutF(" %s", cond.Message)
+	// 		}
+	// 		display.OutF("\n")
+	// 	}
+	// }
+
+	// for name, status := range mt.JobsStatuses {
+	// 	display.OutF("├ job/%s\n", name)
+	// 	display.OutF("│   Active:%d Succeeded:%d Failed:%d\n", status.Active, status.Succeeded, status.Failed)
+	// 	display.OutF("│   StartTime:%s CompletionTime:%s\n", status.StartTime, status.CompletionTime)
+	// 	if len(status.Conditions) > 0 {
+	// 		display.OutF("│   Conditions:\n")
+	// 	}
+	// 	for _, cond := range status.Conditions {
+	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
+	// 		if cond.Reason != "" {
+	// 			display.OutF(" %s", cond.Reason)
+	// 		}
+	// 		if cond.Message != "" {
+	// 			display.OutF(" %s", cond.Message)
+	// 		}
+	// 		display.OutF("\n")
+	// 	}
+	// }
+
+	// for name := range mt.TrackingPods {
+	// 	if _, hasKey := mt.PodsStatuses[name]; hasKey {
+	// 		continue
+	// 	}
+	// 	display.OutF("├ po/%s status unavailable\n", name)
+	// }
+	// for name := range mt.TrackingDeployments {
+	// 	if _, hasKey := mt.DeploymentsStatuses[name]; hasKey {
+	// 		continue
+	// 	}
+	// 	display.OutF("├ deploy/%s status unavailable\n", name)
+	// }
+	// for name := range mt.TrackingStatefulSets {
+	// 	if _, hasKey := mt.StatefulSetsStatuses[name]; hasKey {
+	// 		continue
+	// 	}
+	// 	display.OutF("├ sts/%s status unavailable\n", name)
+	// }
+	// for name := range mt.TrackingDaemonSets {
+	// 	if _, hasKey := mt.DaemonSetsStatuses[name]; hasKey {
+	// 		continue
+	// 	}
+	// 	display.OutF("├ ds/%s status unavailable\n", name)
+	// }
+	// for name := range mt.TrackingJobs {
+	// 	if _, hasKey := mt.JobsStatuses[name]; hasKey {
+	// 		continue
+	// 	}
+	// 	display.OutF("├ job/%s status unavailable\n", name)
+	// }
 
 	return nil
 }

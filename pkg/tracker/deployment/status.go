@@ -55,7 +55,7 @@ func NewDeploymentReadyIndicator(deployment *extensions.Deployment, newStatus *e
 	res.OverallReplicasIndicator.PrevValue = oldStatus.Replicas
 	res.OverallReplicasIndicator.TargetValue = *(deployment.Spec.Replicas)
 	res.OverallReplicasIndicator.IsReadyConditionSatisfied = (res.OverallReplicasIndicator.Value == res.OverallReplicasIndicator.TargetValue)
-	res.OverallReplicasIndicator.IsProgressing = (res.OverallReplicasIndicator.Value > res.OverallReplicasIndicator.PrevValue)
+	res.OverallReplicasIndicator.IsProgressing = (res.OverallReplicasIndicator.Value != res.OverallReplicasIndicator.PrevValue)
 	res.IsReady = res.IsReady && res.OverallReplicasIndicator.IsReadyConditionSatisfied
 
 	res.UpdatedReplicasIndicator.Value = newStatus.UpdatedReplicas
@@ -76,7 +76,7 @@ func NewDeploymentReadyIndicator(deployment *extensions.Deployment, newStatus *e
 	res.OldReplicasIndicator.Value = newStatus.Replicas - newStatus.UpdatedReplicas
 	res.OldReplicasIndicator.PrevValue = oldStatus.Replicas - oldStatus.UpdatedReplicas
 	res.OldReplicasIndicator.TargetValue = 0
-	res.OldReplicasIndicator.IsReadyConditionSatisfied = (res.AvailableReplicasIndicator.Value == res.AvailableReplicasIndicator.TargetValue)
+	res.OldReplicasIndicator.IsReadyConditionSatisfied = (res.OldReplicasIndicator.Value == res.OldReplicasIndicator.TargetValue)
 	res.OldReplicasIndicator.IsProgressing = (res.OldReplicasIndicator.Value < res.OldReplicasIndicator.PrevValue)
 	res.IsReady = res.IsReady && res.OldReplicasIndicator.IsReadyConditionSatisfied
 
