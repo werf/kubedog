@@ -44,9 +44,9 @@ func NewDeploymentStatus(readyIndicator DeploymentReadyIndicator, isFailed bool,
 	return res
 }
 
-// GetDeploymentReadyIndicator considers a deployment to be complete once all of its desired replicas
+// NewDeploymentReadyIndicator considers a deployment to be complete once all of its desired replicas
 // are updated and available, and no old pods are running.
-func GetDeploymentReadyIndicator(deployment *extensions.Deployment, newStatus *extensions.DeploymentStatus) DeploymentReadyIndicator {
+func NewDeploymentReadyIndicator(deployment *extensions.Deployment, newStatus *extensions.DeploymentStatus) DeploymentReadyIndicator {
 	oldStatus := deployment.Status
 
 	res := DeploymentReadyIndicator{IsReady: true}

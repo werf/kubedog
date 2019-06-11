@@ -460,15 +460,15 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	// calc new status
 	if d.lastObject != nil {
 		prevReady = d.CurrentReady
-		d.readyIndicator = GetDeploymentReadyIndicator(d.lastObject, &newStatus)
+		d.readyIndicator = NewDeploymentReadyIndicator(d.lastObject, &newStatus)
 	} else {
-		d.readyIndicator = GetDeploymentReadyIndicator(object, &newStatus)
+		d.readyIndicator = NewDeploymentReadyIndicator(object, &newStatus)
 	}
-
-	d.CurrentReady = d.readyIndicator.IsReady
 	d.lastObject = object
 
-	d.StatusReport <- NewDeploymentStatus(d.readyIndicator, (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
+	d.CurrentReady = d.readyIndicator.IsReady
+
+	d.StatusReport <- NewDeploymentStatus(d.readyIndicator, (d.State == "Failed"), d.failedReason, object.Spec, object.Status, d.podStatuses)
 
 	if prevReady == false && d.CurrentReady == true {
 		d.FinalDeploymentStatus = newStatus
