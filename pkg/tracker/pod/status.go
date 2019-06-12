@@ -3,11 +3,11 @@ package pod
 import (
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/indicators"
 )
 
 type PodReadyIndicator struct {
-	PhaseIndicator tracker.StringEqualConditionIndicator
+	PhaseIndicator *indicators.StringEqualConditionIndicator
 	IsReady        bool
 }
 
@@ -29,13 +29,13 @@ func NewPodStatus(readyIndicator PodReadyIndicator, isFailed bool, failedReason 
 }
 
 func NewPodReadyIndicator(pod *corev1.Pod, newStatus *corev1.PodStatus) PodReadyIndicator {
-	res := PodReadyIndicator{IsReady: false}
+	res := PodReadyIndicator{
+		IsReady:        false,
+		PhaseIndicator: &indicators.StringEqualConditionIndicator{},
+	}
 
 	res.PhaseIndicator.Value = string(newStatus.Phase)
-	res.PhaseIndicator.PrevValue = string(pod.Status.Phase)
 	res.PhaseIndicator.TargetValue = string(corev1.PodRunning)
-	res.PhaseIndicator.IsReadyConditionSatisfied = (res.PhaseIndicator.Value == res.PhaseIndicator.TargetValue)
-	res.PhaseIndicator.IsProgressing = (res.PhaseIndicator.PrevValue != res.PhaseIndicator.Value)
 
 	for _, cond := range newStatus.Conditions {
 		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
