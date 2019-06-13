@@ -3,7 +3,7 @@ package deployment
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/flant/kubedog/pkg/tracker/indicators"
 	"github.com/flant/kubedog/pkg/tracker/pod"
 	"github.com/flant/kubedog/pkg/utils"
 
@@ -11,11 +11,11 @@ import (
 )
 
 type DeploymentReadyIndicator struct {
-	OverallReplicasIndicator    tracker.Int32EqualConditionIndicator
-	UpdatedReplicasIndicator    tracker.Int32EqualConditionIndicator
-	AvailableReplicasIndicator  tracker.Int32EqualConditionIndicator
-	OldReplicasIndicator        tracker.Int32EqualConditionIndicator
-	ObservedGenerationIndicator tracker.Int64GreaterOrEqualConditionIndicator
+	OverallReplicasIndicator    *indicators.Int32EqualConditionIndicator
+	UpdatedReplicasIndicator    *indicators.Int32EqualConditionIndicator
+	AvailableReplicasIndicator  *indicators.Int32EqualConditionIndicator
+	OldReplicasIndicator        *indicators.Int32EqualConditionIndicator
+	ObservedGenerationIndicator *indicators.Int64GreaterOrEqualConditionIndicator
 
 	IsReady bool
 }
@@ -28,10 +28,13 @@ type DeploymentStatus struct {
 
 	IsFailed     bool
 	FailedReason string
+
+	StatusGeneration uint64
 }
 
-func NewDeploymentStatus(readyIndicator DeploymentReadyIndicator, isFailed bool, failedReason string, kubeSpec extensions.DeploymentSpec, kubeStatus extensions.DeploymentStatus, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
+func NewDeploymentStatus(statusGeneration uint64, readyIndicator DeploymentReadyIndicator, isFailed bool, failedReason string, kubeSpec extensions.DeploymentSpec, kubeStatus extensions.DeploymentStatus, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
 	res := DeploymentStatus{
+		StatusGeneration: statusGeneration,
 		DeploymentStatus: kubeStatus,
 		ReadyIndicator:   readyIndicator,
 		Pods:             make(map[string]pod.PodStatus),
@@ -46,46 +49,36 @@ func NewDeploymentStatus(readyIndicator DeploymentReadyIndicator, isFailed bool,
 
 // NewDeploymentReadyIndicator considers a deployment to be complete once all of its desired replicas
 // are updated and available, and no old pods are running.
-func NewDeploymentReadyIndicator(deployment *extensions.Deployment, newStatus *extensions.DeploymentStatus) DeploymentReadyIndicator {
-	oldStatus := deployment.Status
+func NewDeploymentReadyIndicator(object *extensions.Deployment) DeploymentReadyIndicator {
+	status := object.Status
 
-	res := DeploymentReadyIndicator{IsReady: true}
+	res := DeploymentReadyIndicator{IsReady: true,
+		OverallReplicasIndicator:    &indicators.Int32EqualConditionIndicator{},
+		UpdatedReplicasIndicator:    &indicators.Int32EqualConditionIndicator{},
+		AvailableReplicasIndicator:  &indicators.Int32EqualConditionIndicator{},
+		OldReplicasIndicator:        &indicators.Int32EqualConditionIndicator{},
+		ObservedGenerationIndicator: &indicators.Int64GreaterOrEqualConditionIndicator{},
+	}
 
-	res.OverallReplicasIndicator.Value = newStatus.Replicas
-	res.OverallReplicasIndicator.PrevValue = oldStatus.Replicas
-	res.OverallReplicasIndicator.TargetValue = *(deployment.Spec.Replicas)
-	res.OverallReplicasIndicator.IsReadyConditionSatisfied = (res.OverallReplicasIndicator.Value == res.OverallReplicasIndicator.TargetValue)
-	res.OverallReplicasIndicator.IsProgressing = (res.OverallReplicasIndicator.Value != res.OverallReplicasIndicator.PrevValue)
-	res.IsReady = res.IsReady && res.OverallReplicasIndicator.IsReadyConditionSatisfied
+	res.OverallReplicasIndicator.Value = status.Replicas
+	res.OverallReplicasIndicator.TargetValue = *(object.Spec.Replicas)
+	res.IsReady = res.IsReady && res.OverallReplicasIndicator.IsReady()
 
-	res.UpdatedReplicasIndicator.Value = newStatus.UpdatedReplicas
-	res.UpdatedReplicasIndicator.PrevValue = oldStatus.UpdatedReplicas
-	res.UpdatedReplicasIndicator.TargetValue = *(deployment.Spec.Replicas)
-	res.UpdatedReplicasIndicator.IsReadyConditionSatisfied = (res.UpdatedReplicasIndicator.Value == res.UpdatedReplicasIndicator.TargetValue)
-	res.UpdatedReplicasIndicator.IsProgressing = (res.UpdatedReplicasIndicator.Value > res.UpdatedReplicasIndicator.PrevValue)
-	res.IsReady = res.IsReady && res.UpdatedReplicasIndicator.IsReadyConditionSatisfied
+	res.UpdatedReplicasIndicator.Value = status.UpdatedReplicas
+	res.UpdatedReplicasIndicator.TargetValue = *(object.Spec.Replicas)
+	res.IsReady = res.IsReady && res.UpdatedReplicasIndicator.IsReady()
 
-	res.AvailableReplicasIndicator.Value = newStatus.AvailableReplicas
-	res.AvailableReplicasIndicator.PrevValue = oldStatus.AvailableReplicas
-	res.AvailableReplicasIndicator.TargetValue = *(deployment.Spec.Replicas)
-	res.AvailableReplicasIndicator.IsReadyConditionSatisfied = (res.AvailableReplicasIndicator.Value == res.AvailableReplicasIndicator.TargetValue)
-	res.AvailableReplicasIndicator.IsProgressing = (res.AvailableReplicasIndicator.Value > res.AvailableReplicasIndicator.PrevValue)
-	res.IsReady = res.IsReady && res.AvailableReplicasIndicator.IsReadyConditionSatisfied
+	res.AvailableReplicasIndicator.Value = status.AvailableReplicas
+	res.AvailableReplicasIndicator.TargetValue = *(object.Spec.Replicas)
+	res.IsReady = res.IsReady && res.AvailableReplicasIndicator.IsReady()
 
-	// Old replicas that need to be scaled down
-	res.OldReplicasIndicator.Value = newStatus.Replicas - newStatus.UpdatedReplicas
-	res.OldReplicasIndicator.PrevValue = oldStatus.Replicas - oldStatus.UpdatedReplicas
+	res.OldReplicasIndicator.Value = status.Replicas - status.UpdatedReplicas
 	res.OldReplicasIndicator.TargetValue = 0
-	res.OldReplicasIndicator.IsReadyConditionSatisfied = (res.OldReplicasIndicator.Value == res.OldReplicasIndicator.TargetValue)
-	res.OldReplicasIndicator.IsProgressing = (res.OldReplicasIndicator.Value < res.OldReplicasIndicator.PrevValue)
-	res.IsReady = res.IsReady && res.OldReplicasIndicator.IsReadyConditionSatisfied
+	res.IsReady = res.IsReady && res.OldReplicasIndicator.IsReady()
 
-	res.ObservedGenerationIndicator.Value = newStatus.ObservedGeneration
-	res.ObservedGenerationIndicator.PrevValue = oldStatus.ObservedGeneration
-	res.ObservedGenerationIndicator.TargetValue = deployment.Generation
-	res.ObservedGenerationIndicator.IsReadyConditionSatisfied = (res.ObservedGenerationIndicator.Value >= res.ObservedGenerationIndicator.TargetValue)
-	res.ObservedGenerationIndicator.IsProgressing = (res.ObservedGenerationIndicator.Value > res.ObservedGenerationIndicator.PrevValue)
-	res.IsReady = res.IsReady && res.ObservedGenerationIndicator.IsReadyConditionSatisfied
+	res.ObservedGenerationIndicator.Value = status.ObservedGeneration
+	res.ObservedGenerationIndicator.TargetValue = object.Generation
+	res.IsReady = res.IsReady && res.ObservedGenerationIndicator.IsReady()
 
 	return res
 }

@@ -3,20 +3,24 @@ package multitrack
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/acarl005/stripansi"
 	"github.com/fatih/color"
+
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/tracker/daemonset"
 	"github.com/flant/kubedog/pkg/tracker/deployment"
+	"github.com/flant/kubedog/pkg/tracker/indicators"
 	"github.com/flant/kubedog/pkg/tracker/job"
 	"github.com/flant/kubedog/pkg/tracker/pod"
 	"github.com/flant/kubedog/pkg/tracker/statefulset"
-
-	"k8s.io/client-go/kubernetes"
 )
 
 type FailMode string
@@ -116,8 +120,8 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 		DeploymentsSpecs:        make(map[string]MultitrackSpec),
 		TrackingDeployments:     make(map[string]*multitrackerResourceState),
+		PrevDeploymentsStatuses: make(map[string]deployment.DeploymentStatus),
 		DeploymentsStatuses:     make(map[string]deployment.DeploymentStatus),
-		ShownDeploymentMessages: make(map[string]map[string]interface{}),
 
 		TrackingStatefulSets: make(map[string]*multitrackerResourceState),
 		StatefulSetsStatuses: make(map[string]statefulset.StatefulSetStatus),
@@ -197,7 +201,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		err := func() error {
 			mt.handlerMux.Lock()
 			defer mt.handlerMux.Unlock()
-			return mt.PrintStatusReport()
+			return mt.PrintStatusProgress()
 		}()
 
 		if err != nil {
@@ -219,7 +223,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 				mt.handlerMux.Lock()
 				defer mt.handlerMux.Unlock()
 
-				if err := mt.PrintStatusReport(); err != nil {
+				if err := mt.PrintStatusProgress(); err != nil {
 					return err
 				}
 
@@ -240,14 +244,13 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 }
 
 type multitracker struct {
-	DeploymentsSpecs map[string]MultitrackSpec
-
 	TrackingPods map[string]*multitrackerResourceState
 	PodsStatuses map[string]pod.PodStatus
 
+	DeploymentsSpecs        map[string]MultitrackSpec
 	TrackingDeployments     map[string]*multitrackerResourceState
+	PrevDeploymentsStatuses map[string]deployment.DeploymentStatus
 	DeploymentsStatuses     map[string]deployment.DeploymentStatus
-	ShownDeploymentMessages map[string]map[string]interface{}
 
 	TrackingStatefulSets map[string]*multitrackerResourceState
 	StatefulSetsStatuses map[string]statefulset.StatefulSetStatus
@@ -344,65 +347,87 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 	return tracker.StopTrack
 }
 
-func (mt *multitracker) PrintStatusReport() error {
+func formatColorItemByWidth(itemData string, width int) string {
+	strippedItemData := stripansi.Strip(itemData)
+	excessSymbols := len(itemData) - len(strippedItemData)
+	return fmt.Sprintf(fmt.Sprintf("%%%ds", width+excessSymbols), itemData)
+}
+
+func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool) string {
+	switch resourceFailMode {
+	case FailWholeDeployProcessImmediately:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else if isFailed {
+			return color.New(color.FgRed).Sprintf("%s", resourceCaption)
+		} else {
+			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+		}
+
+	case IgnoreAndContinueDeployProcess:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else {
+			return resourceCaption
+		}
+
+	case HopeUntilEndOfDeployProcess:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else {
+			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported resource fail mode '%s'", resourceFailMode))
+	}
+}
+
+func (mt *multitracker) PrintStatusProgress() error {
 	caption := color.New(color.Bold).Sprint("Status progress")
 
 	display.OutF("\n┌ %s\n", caption)
 
-	controllersCaption := fmt.Sprintf("%30s %15s %15s %15s %15s %15s", "NAME", "DESIRED", "CURRENT", "UP-TO-DATE", "AVAILABLE", "OLD")
+	controllersCaption := fmt.Sprintf("%30s %15s %15s %15s %15s", "NAME", "CURRENT", "UP-TO-DATE", "AVAILABLE", "OLD")
 	display.OutF("│ %s\n", controllersCaption)
-	podsCaption := fmt.Sprintf("          %30s %15s %15s %15s %15s", "POD_NAME", "POD_READY", "POD_STATUS", "POD_RESTARTS", "POD_AGE")
+
+	podsCaption := fmt.Sprintf("          %30s %15s %25s %15s %15s", "POD_NAME", "POD_READY", "POD_STATUS", "POD_RESTARTS", "POD_AGE")
 	display.OutF("│ %s\n", podsCaption)
 	display.OutF("│\n")
 
 	newlineNeeded := false
 
-	for name, status := range mt.DeploymentsStatuses {
+	deploymentsNames := []string{}
+	for name := range mt.DeploymentsStatuses {
+		deploymentsNames = append(deploymentsNames, name)
+	}
+	sort.Strings(deploymentsNames)
+
+	for _, name := range deploymentsNames {
+		prevStatus := mt.PrevDeploymentsStatuses[name]
+		status := mt.DeploymentsStatuses[name]
+
 		spec := mt.DeploymentsSpecs[name]
 
-		if _, hasKey := mt.ShownDeploymentMessages[name]; !hasKey {
-			mt.ShownDeploymentMessages[name] = make(map[string]interface{})
+		formatOpts := indicators.FormatTableElemOptions{
+			ShowProgress:         (status.StatusGeneration > prevStatus.StatusGeneration),
+			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
 		}
 
-		var resource string
-
-		if spec.FailMode == FailWholeDeployProcessImmediately {
-			if status.ReadyIndicator.IsReady {
-				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
-			} else if status.IsFailed {
-				resource = color.New(color.FgRed).Sprintf("deploy/%s", name)
-			} else {
-				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
-			}
-		} else if spec.FailMode == IgnoreAndContinueDeployProcess {
-			if status.ReadyIndicator.IsReady {
-				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
-			} else {
-				resource = fmt.Sprintf("deploy/%s", name)
-			}
-		} else if spec.FailMode == HopeUntilEndOfDeployProcess {
-			if status.ReadyIndicator.IsReady {
-				resource = color.New(color.FgGreen).Sprintf("deploy/%s", name)
-			} else {
-				resource = color.New(color.FgYellow).Sprintf("deploy/%s", name)
-			}
-		}
-		resource = fmt.Sprintf("deploy/%s", name)
-
-		desired := fmt.Sprintf("%d", status.ReadyIndicator.OverallReplicasIndicator.TargetValue)
-		current := status.ReadyIndicator.OverallReplicasIndicator.FormatTableElem(true)
-		uptodate := status.ReadyIndicator.UpdatedReplicasIndicator.FormatTableElem(true)
-		available := status.ReadyIndicator.AvailableReplicasIndicator.FormatTableElem(true)
-		old := status.ReadyIndicator.OldReplicasIndicator.FormatTableElem(true)
+		resource := formatResourceCaption(fmt.Sprintf("deploy/%s", name), spec.FailMode, status.ReadyIndicator.IsReady, status.IsFailed)
+		current := status.ReadyIndicator.OverallReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.OverallReplicasIndicator, formatOpts)
+		uptodate := status.ReadyIndicator.UpdatedReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.UpdatedReplicasIndicator, formatOpts)
+		available := status.ReadyIndicator.AvailableReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.AvailableReplicasIndicator, formatOpts)
+		old := status.ReadyIndicator.OldReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.OldReplicasIndicator, formatOpts)
 
 		if newlineNeeded {
 			display.OutF("│\n")
 		}
 
-		display.OutF("│ %30s %15s %15s %15s %15s %15s\n", resource, desired, current, uptodate, available, old)
+		display.OutF("│ %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(current, 15), formatColorItemByWidth(uptodate, 15), formatColorItemByWidth(available, 15), formatColorItemByWidth(old, 15))
 
 		if status.IsFailed {
-			display.OutF("│ %30s %s\n", " ", color.New(color.FgRed).Sprintf("%s", status.FailedReason))
+			display.OutF("│ %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", status.FailedReason))
 		}
 
 		if len(status.Pods) > 0 {
@@ -410,7 +435,18 @@ func (mt *multitracker) PrintStatusReport() error {
 			newlineNeeded = true
 		}
 
-		for podName, podStatus := range status.Pods {
+		podsNames := []string{}
+		for podName := range status.Pods {
+			podsNames = append(podsNames, podName)
+		}
+		sort.Strings(podsNames)
+
+		for _, podName := range podsNames {
+			prevPodStatus := prevStatus.Pods[podName]
+			podStatus := status.Pods[podName]
+
+			resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.ReadyIndicator.IsReady, podStatus.IsFailed)
+
 			containersCount := 0
 			readyContainersCount := 0
 			restarts := int32(0)
@@ -426,14 +462,17 @@ func (mt *multitracker) PrintStatusReport() error {
 			restartsStr := fmt.Sprintf("%d", restarts)
 
 			ready := fmt.Sprintf("%d/%d", readyContainersCount, containersCount)
-			resource := fmt.Sprintf("po/%s", podName)
 
-			display.OutF("│           %30s %15s %15s %15s %15s\n", resource, ready, podStatus.ReadyIndicator.PhaseIndicator.FormatTableElem(true), restartsStr, "<unknown>")
+			phase := podStatus.ReadyIndicator.PhaseIndicator.FormatTableElem(prevPodStatus.ReadyIndicator.PhaseIndicator, formatOpts)
+
+			display.OutF("│           %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(ready, 15), formatColorItemByWidth(phase, 25), formatColorItemByWidth(restartsStr, 15), formatColorItemByWidth("<unknown>", 15))
 
 			if podStatus.IsFailed {
-				display.OutF("│           %30s %s\n", " ", color.New(color.FgRed).Sprintf("%s", podName, podStatus.FailedReason))
+				display.OutF("│           %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", podStatus.FailedReason))
 			}
 		}
+
+		mt.PrevDeploymentsStatuses[name] = status
 	}
 
 	display.OutF("└ %s\n", caption)

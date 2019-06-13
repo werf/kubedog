@@ -35,7 +35,7 @@ type Tracker struct {
 	NewReplicaSetName     string
 	knownReplicaSets      map[string]*extensions.ReplicaSet
 	lastObject            *extensions.Deployment
-	readyIndicator        DeploymentReadyIndicator
+	statusGeneration      uint64
 	failedReason          string
 	podStatuses           map[string]pod.PodStatus
 
@@ -172,7 +172,8 @@ func (d *Tracker) Track() (err error) {
 			d.failedReason = reason
 
 			if d.lastObject != nil {
-				d.StatusReport <- NewDeploymentStatus(d.readyIndicator, (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
+				d.statusGeneration++
+				d.StatusReport <- NewDeploymentStatus(d.statusGeneration, NewDeploymentReadyIndicator(d.lastObject), (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
 			}
 			d.Failed <- reason
 
@@ -243,7 +244,8 @@ func (d *Tracker) Track() (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				d.StatusReport <- NewDeploymentStatus(d.readyIndicator, (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
+				d.statusGeneration++
+				d.StatusReport <- NewDeploymentStatus(d.statusGeneration, NewDeploymentReadyIndicator(d.lastObject), (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
 			}
 
 		case rsChunk := <-d.replicaSetPodLogChunk:
@@ -439,7 +441,6 @@ func (d *Tracker) runPodTracker(podName, rsName string) error {
 	return nil
 }
 
-// TODO get rid of previous object
 func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bool, err error) {
 	if debug.Debug() {
 		fmt.Printf("%s\n%s\n",
@@ -456,22 +457,20 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	}
 
 	prevReady := false
-	newStatus := object.Status
-	// calc new status
+
 	if d.lastObject != nil {
 		prevReady = d.CurrentReady
-		d.readyIndicator = NewDeploymentReadyIndicator(d.lastObject, &newStatus)
-	} else {
-		d.readyIndicator = NewDeploymentReadyIndicator(object, &newStatus)
 	}
 	d.lastObject = object
 
-	d.CurrentReady = d.readyIndicator.IsReady
+	readyIndicator := NewDeploymentReadyIndicator(object)
+	d.CurrentReady = readyIndicator.IsReady
 
-	d.StatusReport <- NewDeploymentStatus(d.readyIndicator, (d.State == "Failed"), d.failedReason, object.Spec, object.Status, d.podStatuses)
+	d.statusGeneration++
+	d.StatusReport <- NewDeploymentStatus(d.statusGeneration, readyIndicator, (d.State == "Failed"), d.failedReason, object.Spec, object.Status, d.podStatuses)
 
 	if prevReady == false && d.CurrentReady == true {
-		d.FinalDeploymentStatus = newStatus
+		d.FinalDeploymentStatus = object.Status
 		ready = true
 	}
 
