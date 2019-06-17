@@ -445,27 +445,12 @@ func (mt *multitracker) PrintStatusProgress() error {
 			prevPodStatus := prevStatus.Pods[podName]
 			podStatus := status.Pods[podName]
 
-			resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.ReadyIndicator.IsReady, podStatus.IsFailed)
+			resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.IsReady, podStatus.IsFailed)
+			restartsStr := fmt.Sprintf("%d", podStatus.Restarts)
+			ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
+			status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
 
-			containersCount := 0
-			readyContainersCount := 0
-			restarts := int32(0)
-			for _, cs := range podStatus.ContainerStatuses {
-				containersCount++
-
-				if cs.Ready {
-					readyContainersCount++
-				}
-
-				restarts += cs.RestartCount
-			}
-			restartsStr := fmt.Sprintf("%d", restarts)
-
-			ready := fmt.Sprintf("%d/%d", readyContainersCount, containersCount)
-
-			phase := podStatus.ReadyIndicator.PhaseIndicator.FormatTableElem(prevPodStatus.ReadyIndicator.PhaseIndicator, formatOpts)
-
-			display.OutF("│           %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(ready, 15), formatColorItemByWidth(phase, 25), formatColorItemByWidth(restartsStr, 15), formatColorItemByWidth("<unknown>", 15))
+			display.OutF("│           %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(ready, 15), formatColorItemByWidth(status, 25), formatColorItemByWidth(restartsStr, 15), formatColorItemByWidth(podStatus.Age, 15))
 
 			if podStatus.IsFailed {
 				display.OutF("│           %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", podStatus.FailedReason))

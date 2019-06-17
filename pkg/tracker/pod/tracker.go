@@ -61,9 +61,8 @@ type Tracker struct {
 	TrackedContainers               []string
 	LogsFromTime                    time.Time
 
-	lastObject     *corev1.Pod
-	readyIndicator PodReadyIndicator
-	failedReason   string
+	lastObject   *corev1.Pod
+	failedReason string
 
 	objectAdded    chan *corev1.Pod
 	objectModified chan *corev1.Pod
@@ -187,7 +186,7 @@ func (pod *Tracker) Start() error {
 			pod.failedReason = reason
 
 			if pod.lastObject != nil {
-				pod.StatusReport <- NewPodStatus(pod.readyIndicator, pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
+				pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject)
 			}
 			pod.Failed <- reason
 
@@ -201,21 +200,18 @@ func (pod *Tracker) Start() error {
 }
 
 func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
-	if pod.lastObject != nil {
-		pod.readyIndicator = NewPodReadyIndicator(pod.lastObject, &object.Status)
-	} else {
-		pod.readyIndicator = NewPodReadyIndicator(object, &object.Status)
-	}
 	pod.lastObject = object
 
-	pod.StatusReport <- NewPodStatus(pod.readyIndicator, pod.State == "Failed", pod.failedReason, object.Status)
+	podStatus := NewPodStatus(pod.State == "Failed", pod.failedReason, object)
+
+	pod.StatusReport <- podStatus
 
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
 	}
 
-	if pod.readyIndicator.IsReady {
+	if podStatus.IsReady {
 		pod.Ready <- struct{}{}
 	}
 

@@ -9,7 +9,7 @@ import (
 type FormatTableElemOptions struct {
 	ShowProgress bool
 
-	//  disables yellow and red colors for resources with fail-mode=IgnoreAndContinueDeployProcess
+	// disables yellow and red colors for resources with fail-mode=IgnoreAndContinueDeployProcess
 	DisableWarningColors bool
 }
 
