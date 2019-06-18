@@ -392,29 +392,9 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 }
 
 func (mt *multitracker) printDeploymentsStatusProgress() {
-	t := utils.NewTable(.55, .15, .15, .15)
+	t := utils.NewTable(.6, .1, .1, .1, .1)
 	t.SetWidth(logboek.ContentWidth() - 1)
-	t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
-
-	// t.Raw("deploy/extended-monitoring", "1/1", 1, 1)
-	//t.Raw("deploy/extended-monitoring", "1/1", 1, 1, color.RedString("Error: See the server log for details. BUILD FAILED (total time: 1 second)"), color.RedString("Error: An individual language user's deviations from standard language norms in grammar, pronunciation and orthography are sometimes referred to as errors"))
-	// st := t.SubTable(.4, .1, .3, .1, .1)
-	// st.Header("NAME", "READY", "STATUS", "RESTARTS", "AGE")
-	// st.Raws([][]interface{}{
-	// 	{"654fc55df-5zs4m", "3/3", "Pulling", "0", "49m", color.RedString("pod/myapp-backend-cbdb856d7-bvplx Failed: Error: ImagePullBackOff"), color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found")},
-	// 	{"654fc55df-hsm67", "3/3", color.GreenString("Running") + " -> " + color.RedString("Terminating"), "0", "49m"},
-	// 	{"654fc55df-fffff", "3/3", "Ready", "0", "49m"},
-	// }...)
-	// t.Raw("deploy/grafana", "1/1", 1, 1)
-	// t.Raw("deploy/kube-state-metrics", "1/1", 1, 1)
-	// t.Raw("deploy/madison-proxy-0450d21f50d1e3f3b3131a07bcbcfe85ec02dd9758b7ee12968ee6eaee7057fc", "1/1", 1, 1)
-	// t.Raw("deploy/madison-proxy-2c5bdd9ba9f80394e478714dc299d007182bc49fed6c319d67b6645e4812b198", "1/1", 1, 1)
-	// t.Raw("deploy/madison-proxy-9c6b5f859895442cb645c7f3d1ef647e1ed5388c159a9e5f7e1cf50163a878c1", "1/1", 1, "1 (-1)")
-	// t.Raw("deploy/prometheus-metrics-adapter", "1/1", 1, "1 (-1)")
-	// t.Raw("sts/mysql", "1/1", 1, "1 (-1)")
-	// t.Raw("ds/node-exporter", "1/1", 1, "1 (-1)")
-	// t.Raw("deploy/trickster", "1/1", 1, "1 (-1)")
-	// t.Render()
+	t.Header("NAME", "RDY", "UPD", "AVAIL", "OLD")
 
 	resourcesNames := []string{}
 	for name := range mt.DeploymentsStatuses {
@@ -434,19 +414,20 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 		}
 
 		resource := formatResourceCaption(fmt.Sprintf("deploy/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
-		overall := status.OverallReplicasIndicator.FormatTableElem(prevStatus.OverallReplicasIndicator, formatOpts)
-		uptodate := status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
+		ready := status.ReadyReplicasIndicator.FormatTableElem(prevStatus.ReadyReplicasIndicator, formatOpts)
+		upToDate := status.UpToDateReplicasIndicator.FormatTableElem(prevStatus.UpToDateReplicasIndicator, formatOpts)
 		available := status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
+		old := status.OldReplicasIndicator.FormatTableElem(prevStatus.OldReplicasIndicator, formatOpts)
 
 		if status.IsFailed {
-			t.Row(resource, overall, uptodate, available, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, ready, upToDate, available, old, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
 		} else {
-			t.Row(resource, overall, uptodate, available)
+			t.Row(resource, ready, upToDate, available, old)
 		}
 
 		if len(status.Pods) > 0 {
-			st := t.SubTable(.3, .15, .25, .15, .15)
-			st.Header("NAME", "READY", "STATUS", "RESTARTS", "AGE")
+			st := t.SubTable(.3, .16, .2, .16, .16)
+			st.Header("NAME", "RDY", "STATUS", "RESTARTS", "AGE")
 
 			podsNames := []string{}
 			for podName := range status.Pods {
@@ -455,13 +436,14 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 			sort.Strings(podsNames)
 
 			var podRows [][]interface{}
+
 			for _, podName := range podsNames {
 				var podRow []interface{}
 
 				prevPodStatus := prevStatus.Pods[podName]
 				podStatus := status.Pods[podName]
 
-				resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.IsReady, podStatus.IsFailed)
+				resource := formatResourceCaption(strings.Join(strings.Split(podName, "-")[1:], "-"), spec.FailMode, podStatus.IsReady, podStatus.IsFailed)
 				ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
 				status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
 
@@ -579,7 +561,7 @@ func (mt *multitracker) PrintStatusProgress() error {
 	// 		}
 	// 		display.OutF("\n")
 	// 	}
-	// }
+	// 			display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))// }
 
 	// unreadyMsgs := []string{}
 	// for _, cond := range status.ReadyStatus.ReadyConditions {
