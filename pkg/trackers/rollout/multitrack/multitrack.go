@@ -21,6 +21,7 @@ import (
 	"github.com/flant/kubedog/pkg/tracker/job"
 	"github.com/flant/kubedog/pkg/tracker/pod"
 	"github.com/flant/kubedog/pkg/tracker/statefulset"
+	"github.com/flant/kubedog/pkg/utils"
 )
 
 type FailMode string
@@ -389,7 +390,29 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 }
 
 func (mt *multitracker) printDeploymentsStatusProgress() {
-	newlineNeeded := false
+	t := utils.NewTable(.55, .15, .15, .15)
+	t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
+
+	// t.Raw("deploy/extended-monitoring", "1/1", 1, 1)
+	//t.Raw("deploy/extended-monitoring", "1/1", 1, 1, color.RedString("Error: See the server log for details. BUILD FAILED (total time: 1 second)"), color.RedString("Error: An individual language user's deviations from standard language norms in grammar, pronunciation and orthography are sometimes referred to as errors"))
+	// st := t.SubTable(.4, .1, .3, .1, .1)
+	// st.Header("NAME", "READY", "STATUS", "RESTARTS", "AGE")
+	// st.Raws([][]interface{}{
+	// 	{"654fc55df-5zs4m", "3/3", "Pulling", "0", "49m", color.RedString("pod/myapp-backend-cbdb856d7-bvplx Failed: Error: ImagePullBackOff"), color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found")},
+	// 	{"654fc55df-hsm67", "3/3", color.GreenString("Running") + " -> " + color.RedString("Terminating"), "0", "49m"},
+	// 	{"654fc55df-fffff", "3/3", "Ready", "0", "49m"},
+	// }...)
+	// t.Raw("deploy/grafana", "1/1", 1, 1)
+	// t.Raw("deploy/kube-state-metrics", "1/1", 1, 1)
+	// t.Raw("deploy/madison-proxy-0450d21f50d1e3f3b3131a07bcbcfe85ec02dd9758b7ee12968ee6eaee7057fc", "1/1", 1, 1)
+	// t.Raw("deploy/madison-proxy-2c5bdd9ba9f80394e478714dc299d007182bc49fed6c319d67b6645e4812b198", "1/1", 1, 1)
+	// t.Raw("deploy/madison-proxy-9c6b5f859895442cb645c7f3d1ef647e1ed5388c159a9e5f7e1cf50163a878c1", "1/1", 1, "1 (-1)")
+	// t.Raw("deploy/prometheus-metrics-adapter", "1/1", 1, "1 (-1)")
+	// t.Raw("sts/mysql", "1/1", 1, "1 (-1)")
+	// t.Raw("ds/node-exporter", "1/1", 1, "1 (-1)")
+	// t.Raw("deploy/trickster", "1/1", 1, "1 (-1)")
+	// t.Render()
+
 	resourcesNames := []string{}
 	for name := range mt.DeploymentsStatuses {
 		resourcesNames = append(resourcesNames, name)
@@ -408,50 +431,46 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 		}
 
 		resource := formatResourceCaption(fmt.Sprintf("deploy/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
-		current := status.OverallReplicasIndicator.FormatTableElem(prevStatus.OverallReplicasIndicator, formatOpts)
+		overall := status.OverallReplicasIndicator.FormatTableElem(prevStatus.OverallReplicasIndicator, formatOpts)
 		uptodate := status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
 		available := status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
-		old := status.OldReplicasIndicator.FormatTableElem(prevStatus.OldReplicasIndicator, formatOpts)
-
-		if newlineNeeded {
-			display.OutF("│\n")
-		}
-
-		display.OutF("│ %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(current, 15), formatColorItemByWidth(uptodate, 15), formatColorItemByWidth(available, 15), formatColorItemByWidth(old, 15))
 
 		if status.IsFailed {
-			display.OutF("│ %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", status.FailedReason))
+			t.Raw(resource, overall, uptodate, available, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+		} else {
+			t.Raw(resource, overall, uptodate, available)
 		}
 
 		if len(status.Pods) > 0 {
-			display.OutF("│\n")
-			newlineNeeded = true
-		}
+			st := t.SubTable(.3, .15, .25, .15, .15)
+			st.Header("NAME", "READY", "STATUS", "RESTARTS", "AGE")
 
-		podsNames := []string{}
-		for podName := range status.Pods {
-			podsNames = append(podsNames, podName)
-		}
-		sort.Strings(podsNames)
+			podsNames := []string{}
+			for podName := range status.Pods {
+				podsNames = append(podsNames, podName)
+			}
+			sort.Strings(podsNames)
 
-		for _, podName := range podsNames {
-			prevPodStatus := prevStatus.Pods[podName]
-			podStatus := status.Pods[podName]
+			for _, podName := range podsNames {
+				prevPodStatus := prevStatus.Pods[podName]
+				podStatus := status.Pods[podName]
 
-			resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.IsReady, podStatus.IsFailed)
-			restartsStr := fmt.Sprintf("%d", podStatus.Restarts)
-			ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
-			status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
+				resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.IsReady, podStatus.IsFailed)
+				ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
+				status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
 
-			display.OutF("│           %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(ready, 15), formatColorItemByWidth(status, 25), formatColorItemByWidth(restartsStr, 15), formatColorItemByWidth(podStatus.Age, 15))
-
-			if podStatus.IsFailed {
-				display.OutF("│           %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", podStatus.FailedReason))
+				if podStatus.IsFailed {
+					st.Raw(resource, ready, status, podStatus.Restarts, podStatus.Age, color.New(color.FgRed).Sprintf("Error: %s", podStatus.FailedReason))
+				} else {
+					st.Raw(resource, ready, status, podStatus.Restarts, podStatus.Age)
+				}
 			}
 		}
 
 		mt.PrevDeploymentsStatuses[name] = status
 	}
+
+	t.Render()
 }
 
 func (mt *multitracker) printStatefulSetsStatusProgress() {
@@ -526,15 +545,8 @@ func (mt *multitracker) PrintStatusProgress() error {
 
 	display.OutF("\n┌ %s\n", caption)
 
-	controllersCaption := fmt.Sprintf("%30s %15s %15s %15s %15s", "NAME", "CURRENT", "UP-TO-DATE", "AVAILABLE", "OLD")
-	display.OutF("│ %s\n", controllersCaption)
-
-	podsCaption := fmt.Sprintf("          %30s %15s %25s %15s %15s", "POD_NAME", "POD_READY", "POD_STATUS", "POD_RESTARTS", "POD_AGE")
-	display.OutF("│ %s\n", podsCaption)
-	display.OutF("│\n")
-
 	mt.printDeploymentsStatusProgress()
-	mt.printStatefulSetsStatusProgress()
+	// mt.printStatefulSetsStatusProgress()
 
 	display.OutF("└ %s\n", caption)
 
