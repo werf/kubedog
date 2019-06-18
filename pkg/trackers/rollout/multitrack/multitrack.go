@@ -120,11 +120,13 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 		DeploymentsSpecs:        make(map[string]MultitrackSpec),
 		TrackingDeployments:     make(map[string]*multitrackerResourceState),
-		PrevDeploymentsStatuses: make(map[string]deployment.DeploymentStatus),
 		DeploymentsStatuses:     make(map[string]deployment.DeploymentStatus),
+		PrevDeploymentsStatuses: make(map[string]deployment.DeploymentStatus),
 
-		TrackingStatefulSets: make(map[string]*multitrackerResourceState),
-		StatefulSetsStatuses: make(map[string]statefulset.StatefulSetStatus),
+		StatefulSetsSpecs:        make(map[string]MultitrackSpec),
+		TrackingStatefulSets:     make(map[string]*multitrackerResourceState),
+		StatefulSetsStatuses:     make(map[string]statefulset.StatefulSetStatus),
+		PrevStatefulSetsStatuses: make(map[string]statefulset.StatefulSetStatus),
 
 		TrackingDaemonSets: make(map[string]*multitrackerResourceState),
 		DaemonSetsStatuses: make(map[string]daemonset.DaemonSetStatus),
@@ -162,6 +164,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		}(spec)
 	}
 	for _, spec := range specs.StatefulSets {
+		mt.StatefulSetsSpecs[spec.ResourceName] = spec
 		mt.TrackingStatefulSets[spec.ResourceName] = &multitrackerResourceState{}
 
 		wg.Add(1)
@@ -249,11 +252,13 @@ type multitracker struct {
 
 	DeploymentsSpecs        map[string]MultitrackSpec
 	TrackingDeployments     map[string]*multitrackerResourceState
-	PrevDeploymentsStatuses map[string]deployment.DeploymentStatus
 	DeploymentsStatuses     map[string]deployment.DeploymentStatus
+	PrevDeploymentsStatuses map[string]deployment.DeploymentStatus
 
-	TrackingStatefulSets map[string]*multitrackerResourceState
-	StatefulSetsStatuses map[string]statefulset.StatefulSetStatus
+	StatefulSetsSpecs        map[string]MultitrackSpec
+	TrackingStatefulSets     map[string]*multitrackerResourceState
+	StatefulSetsStatuses     map[string]statefulset.StatefulSetStatus
+	PrevStatefulSetsStatuses map[string]statefulset.StatefulSetStatus
 
 	TrackingDaemonSets map[string]*multitrackerResourceState
 	DaemonSetsStatuses map[string]daemonset.DaemonSetStatus
@@ -383,27 +388,15 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 	}
 }
 
-func (mt *multitracker) PrintStatusProgress() error {
-	caption := color.New(color.Bold).Sprint("Status progress")
-
-	display.OutF("\n┌ %s\n", caption)
-
-	controllersCaption := fmt.Sprintf("%30s %15s %15s %15s %15s", "NAME", "CURRENT", "UP-TO-DATE", "AVAILABLE", "OLD")
-	display.OutF("│ %s\n", controllersCaption)
-
-	podsCaption := fmt.Sprintf("          %30s %15s %25s %15s %15s", "POD_NAME", "POD_READY", "POD_STATUS", "POD_RESTARTS", "POD_AGE")
-	display.OutF("│ %s\n", podsCaption)
-	display.OutF("│\n")
-
+func (mt *multitracker) printDeploymentsStatusProgress() {
 	newlineNeeded := false
-
-	deploymentsNames := []string{}
+	resourcesNames := []string{}
 	for name := range mt.DeploymentsStatuses {
-		deploymentsNames = append(deploymentsNames, name)
+		resourcesNames = append(resourcesNames, name)
 	}
-	sort.Strings(deploymentsNames)
+	sort.Strings(resourcesNames)
 
-	for _, name := range deploymentsNames {
+	for _, name := range resourcesNames {
 		prevStatus := mt.PrevDeploymentsStatuses[name]
 		status := mt.DeploymentsStatuses[name]
 
@@ -414,11 +407,11 @@ func (mt *multitracker) PrintStatusProgress() error {
 			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
 		}
 
-		resource := formatResourceCaption(fmt.Sprintf("deploy/%s", name), spec.FailMode, status.ReadyIndicator.IsReady, status.IsFailed)
-		current := status.ReadyIndicator.OverallReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.OverallReplicasIndicator, formatOpts)
-		uptodate := status.ReadyIndicator.UpdatedReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.UpdatedReplicasIndicator, formatOpts)
-		available := status.ReadyIndicator.AvailableReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.AvailableReplicasIndicator, formatOpts)
-		old := status.ReadyIndicator.OldReplicasIndicator.FormatTableElem(prevStatus.ReadyIndicator.OldReplicasIndicator, formatOpts)
+		resource := formatResourceCaption(fmt.Sprintf("deploy/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
+		current := status.OverallReplicasIndicator.FormatTableElem(prevStatus.OverallReplicasIndicator, formatOpts)
+		uptodate := status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
+		available := status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
+		old := status.OldReplicasIndicator.FormatTableElem(prevStatus.OldReplicasIndicator, formatOpts)
 
 		if newlineNeeded {
 			display.OutF("│\n")
@@ -459,6 +452,89 @@ func (mt *multitracker) PrintStatusProgress() error {
 
 		mt.PrevDeploymentsStatuses[name] = status
 	}
+}
+
+func (mt *multitracker) printStatefulSetsStatusProgress() {
+	newlineNeeded := false
+	resourcesNames := []string{}
+	for name := range mt.StatefulSetsStatuses {
+		resourcesNames = append(resourcesNames, name)
+	}
+	sort.Strings(resourcesNames)
+
+	for _, name := range resourcesNames {
+		prevStatus := mt.PrevStatefulSetsStatuses[name]
+		status := mt.StatefulSetsStatuses[name]
+
+		spec := mt.StatefulSetsSpecs[name]
+
+		formatOpts := indicators.FormatTableElemOptions{
+			ShowProgress:         (status.StatusGeneration > prevStatus.StatusGeneration),
+			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
+		}
+
+		resource := formatResourceCaption(fmt.Sprintf("sts/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
+
+		current := "-"
+		if status.OverallReplicasIndicator != nil {
+			current = status.OverallReplicasIndicator.FormatTableElem(prevStatus.OverallReplicasIndicator, formatOpts)
+		}
+
+		if newlineNeeded {
+			display.OutF("│\n")
+		}
+
+		display.OutF("│ %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(current, 15), formatColorItemByWidth("", 15), formatColorItemByWidth("", 15), formatColorItemByWidth("", 15))
+
+		if status.IsFailed {
+			display.OutF("│ %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", status.FailedReason))
+		}
+
+		if len(status.Pods) > 0 {
+			display.OutF("│\n")
+			newlineNeeded = true
+		}
+
+		podsNames := []string{}
+		for podName := range status.Pods {
+			podsNames = append(podsNames, podName)
+		}
+		sort.Strings(podsNames)
+
+		for _, podName := range podsNames {
+			prevPodStatus := prevStatus.Pods[podName]
+			podStatus := status.Pods[podName]
+
+			resource := formatResourceCaption(fmt.Sprintf("po/%s", podName), spec.FailMode, podStatus.IsReady, podStatus.IsFailed)
+			restartsStr := fmt.Sprintf("%d", podStatus.Restarts)
+			ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
+			status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
+
+			display.OutF("│           %s %s %s %s %s\n", formatColorItemByWidth(resource, 30), formatColorItemByWidth(ready, 15), formatColorItemByWidth(status, 25), formatColorItemByWidth(restartsStr, 15), formatColorItemByWidth(podStatus.Age, 15))
+
+			if podStatus.IsFailed {
+				display.OutF("│           %s %s\n", formatColorItemByWidth(resource, 30), color.New(color.FgRed).Sprintf("%s", podStatus.FailedReason))
+			}
+		}
+
+		mt.PrevStatefulSetsStatuses[name] = status
+	}
+}
+
+func (mt *multitracker) PrintStatusProgress() error {
+	caption := color.New(color.Bold).Sprint("Status progress")
+
+	display.OutF("\n┌ %s\n", caption)
+
+	controllersCaption := fmt.Sprintf("%30s %15s %15s %15s %15s", "NAME", "CURRENT", "UP-TO-DATE", "AVAILABLE", "OLD")
+	display.OutF("│ %s\n", controllersCaption)
+
+	podsCaption := fmt.Sprintf("          %30s %15s %25s %15s %15s", "POD_NAME", "POD_READY", "POD_STATUS", "POD_RESTARTS", "POD_AGE")
+	display.OutF("│ %s\n", podsCaption)
+	display.OutF("│\n")
+
+	mt.printDeploymentsStatusProgress()
+	mt.printStatefulSetsStatusProgress()
 
 	display.OutF("└ %s\n", caption)
 

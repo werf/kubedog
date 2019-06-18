@@ -162,10 +162,11 @@ func (d *Tracker) Track() (err error) {
 
 		case <-d.resourceDeleted:
 			d.lastObject = nil
-			d.StatusReport <- DeploymentStatus{}
-
 			d.State = "Deleted"
-			d.Failed <- "resource deleted"
+			d.failedReason = "resource deleted"
+			d.StatusReport <- DeploymentStatus{}
+			d.Failed <- d.failedReason
+			// TODO: This is not fail on tracker level
 
 		case reason := <-d.resourceFailed:
 			d.State = "Failed"
@@ -173,7 +174,7 @@ func (d *Tracker) Track() (err error) {
 
 			if d.lastObject != nil {
 				d.statusGeneration++
-				d.StatusReport <- NewDeploymentStatus(d.statusGeneration, NewDeploymentReadyIndicator(d.lastObject), (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
+				d.StatusReport <- NewDeploymentStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
 			}
 			d.Failed <- reason
 
@@ -245,7 +246,7 @@ func (d *Tracker) Track() (err error) {
 			}
 			if d.lastObject != nil {
 				d.statusGeneration++
-				d.StatusReport <- NewDeploymentStatus(d.statusGeneration, NewDeploymentReadyIndicator(d.lastObject), (d.State == "Failed"), d.failedReason, d.lastObject.Spec, d.lastObject.Status, d.podStatuses)
+				d.StatusReport <- NewDeploymentStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
 			}
 
 		case rsChunk := <-d.replicaSetPodLogChunk:
@@ -463,11 +464,11 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	}
 	d.lastObject = object
 
-	readyIndicator := NewDeploymentReadyIndicator(object)
-	d.CurrentReady = readyIndicator.IsReady
+	status := NewDeploymentStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+	d.CurrentReady = status.IsReady
 
 	d.statusGeneration++
-	d.StatusReport <- NewDeploymentStatus(d.statusGeneration, readyIndicator, (d.State == "Failed"), d.failedReason, object.Spec, object.Status, d.podStatuses)
+	d.StatusReport <- status
 
 	if prevReady == false && d.CurrentReady == true {
 		d.FinalDeploymentStatus = object.Status

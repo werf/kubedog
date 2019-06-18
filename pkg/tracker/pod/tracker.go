@@ -186,7 +186,7 @@ func (pod *Tracker) Start() error {
 			pod.failedReason = reason
 
 			if pod.lastObject != nil {
-				pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject)
+				pod.StatusReport <- NewPodStatus(pod.lastObject, pod.State == "Failed", pod.failedReason)
 			}
 			pod.Failed <- reason
 
@@ -202,7 +202,7 @@ func (pod *Tracker) Start() error {
 func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
 	pod.lastObject = object
 
-	podStatus := NewPodStatus(pod.State == "Failed", pod.failedReason, object)
+	podStatus := NewPodStatus(object, pod.State == "Failed", pod.failedReason)
 
 	pod.StatusReport <- podStatus
 

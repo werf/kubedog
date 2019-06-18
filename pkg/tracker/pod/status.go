@@ -26,7 +26,7 @@ type PodStatus struct {
 	FailedReason string
 }
 
-func NewPodStatus(isFailed bool, failedReason string, pod *corev1.Pod) PodStatus {
+func NewPodStatus(pod *corev1.Pod, isFailed bool, failedReason string) PodStatus {
 	res := PodStatus{
 		PodStatus:       pod.Status,
 		IsFailed:        isFailed,
