@@ -10,73 +10,60 @@ import (
 	extensions "k8s.io/api/extensions/v1beta1"
 )
 
-type DeploymentReadyIndicator struct {
+type DeploymentStatus struct {
+	extensions.DeploymentStatus
+
+	StatusGeneration uint64
+
 	OverallReplicasIndicator    *indicators.Int32EqualConditionIndicator
 	UpdatedReplicasIndicator    *indicators.Int32EqualConditionIndicator
 	AvailableReplicasIndicator  *indicators.Int32EqualConditionIndicator
 	OldReplicasIndicator        *indicators.Int32EqualConditionIndicator
 	ObservedGenerationIndicator *indicators.Int64GreaterOrEqualConditionIndicator
 
-	IsReady bool
-}
-
-type DeploymentStatus struct {
-	extensions.DeploymentStatus
-	ReadyIndicator DeploymentReadyIndicator
-
-	Pods map[string]pod.PodStatus
-
+	IsReady      bool
 	IsFailed     bool
 	FailedReason string
 
-	StatusGeneration uint64
+	Pods map[string]pod.PodStatus
 }
 
-func NewDeploymentStatus(statusGeneration uint64, readyIndicator DeploymentReadyIndicator, isFailed bool, failedReason string, kubeSpec extensions.DeploymentSpec, kubeStatus extensions.DeploymentStatus, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
+func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
 	res := DeploymentStatus{
-		StatusGeneration: statusGeneration,
-		DeploymentStatus: kubeStatus,
-		ReadyIndicator:   readyIndicator,
-		Pods:             make(map[string]pod.PodStatus),
-		IsFailed:         isFailed,
-		FailedReason:     failedReason,
-	}
-	for k, v := range podsStatuses {
-		res.Pods[k] = v
-	}
-	return res
-}
-
-// NewDeploymentReadyIndicator considers a deployment to be complete once all of its desired replicas
-// are updated and available, and no old pods are running.
-func NewDeploymentReadyIndicator(object *extensions.Deployment) DeploymentReadyIndicator {
-	status := object.Status
-
-	res := DeploymentReadyIndicator{IsReady: true,
+		StatusGeneration:            statusGeneration,
+		DeploymentStatus:            object.Status,
+		Pods:                        make(map[string]pod.PodStatus),
 		OverallReplicasIndicator:    &indicators.Int32EqualConditionIndicator{},
 		UpdatedReplicasIndicator:    &indicators.Int32EqualConditionIndicator{},
 		AvailableReplicasIndicator:  &indicators.Int32EqualConditionIndicator{},
 		OldReplicasIndicator:        &indicators.Int32EqualConditionIndicator{},
 		ObservedGenerationIndicator: &indicators.Int64GreaterOrEqualConditionIndicator{},
+		IsReady:                     true,
+		IsFailed:                    isFailed,
+		FailedReason:                failedReason,
 	}
 
-	res.OverallReplicasIndicator.Value = status.Replicas
+	for k, v := range podsStatuses {
+		res.Pods[k] = v
+	}
+
+	res.OverallReplicasIndicator.Value = object.Status.Replicas
 	res.OverallReplicasIndicator.TargetValue = *(object.Spec.Replicas)
 	res.IsReady = res.IsReady && res.OverallReplicasIndicator.IsReady()
 
-	res.UpdatedReplicasIndicator.Value = status.UpdatedReplicas
+	res.UpdatedReplicasIndicator.Value = object.Status.UpdatedReplicas
 	res.UpdatedReplicasIndicator.TargetValue = *(object.Spec.Replicas)
 	res.IsReady = res.IsReady && res.UpdatedReplicasIndicator.IsReady()
 
-	res.AvailableReplicasIndicator.Value = status.AvailableReplicas
+	res.AvailableReplicasIndicator.Value = object.Status.AvailableReplicas
 	res.AvailableReplicasIndicator.TargetValue = *(object.Spec.Replicas)
 	res.IsReady = res.IsReady && res.AvailableReplicasIndicator.IsReady()
 
-	res.OldReplicasIndicator.Value = status.Replicas - status.UpdatedReplicas
+	res.OldReplicasIndicator.Value = object.Status.Replicas - object.Status.UpdatedReplicas
 	res.OldReplicasIndicator.TargetValue = 0
 	res.IsReady = res.IsReady && res.OldReplicasIndicator.IsReady()
 
-	res.ObservedGenerationIndicator.Value = status.ObservedGeneration
+	res.ObservedGenerationIndicator.Value = object.Status.ObservedGeneration
 	res.ObservedGenerationIndicator.TargetValue = object.Generation
 	res.IsReady = res.IsReady && res.ObservedGenerationIndicator.IsReady()
 
