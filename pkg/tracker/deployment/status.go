@@ -15,11 +15,10 @@ type DeploymentStatus struct {
 
 	StatusGeneration uint64
 
-	OverallReplicasIndicator    *indicators.Int32EqualConditionIndicator
-	UpdatedReplicasIndicator    *indicators.Int32EqualConditionIndicator
-	AvailableReplicasIndicator  *indicators.Int32EqualConditionIndicator
-	OldReplicasIndicator        *indicators.Int32EqualConditionIndicator
-	ObservedGenerationIndicator *indicators.Int64GreaterOrEqualConditionIndicator
+	ReadyReplicasIndicator     *indicators.Int32EqualConditionIndicator
+	UpToDateReplicasIndicator  *indicators.Int32EqualConditionIndicator
+	AvailableReplicasIndicator *indicators.Int32EqualConditionIndicator
+	OldReplicasIndicator       *indicators.Int32EqualConditionIndicator
 
 	IsReady      bool
 	IsFailed     bool
@@ -30,42 +29,50 @@ type DeploymentStatus struct {
 
 func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
 	res := DeploymentStatus{
-		StatusGeneration:            statusGeneration,
-		DeploymentStatus:            object.Status,
-		Pods:                        make(map[string]pod.PodStatus),
-		OverallReplicasIndicator:    &indicators.Int32EqualConditionIndicator{},
-		UpdatedReplicasIndicator:    &indicators.Int32EqualConditionIndicator{},
-		AvailableReplicasIndicator:  &indicators.Int32EqualConditionIndicator{},
-		OldReplicasIndicator:        &indicators.Int32EqualConditionIndicator{},
-		ObservedGenerationIndicator: &indicators.Int64GreaterOrEqualConditionIndicator{},
-		IsReady:                     true,
-		IsFailed:                    isFailed,
-		FailedReason:                failedReason,
+		StatusGeneration: statusGeneration,
+		DeploymentStatus: object.Status,
+		Pods:             make(map[string]pod.PodStatus),
+		IsReady:          true,
+		IsFailed:         isFailed,
+		FailedReason:     failedReason,
 	}
 
 	for k, v := range podsStatuses {
 		res.Pods[k] = v
 	}
 
-	res.OverallReplicasIndicator.Value = object.Status.Replicas
-	res.OverallReplicasIndicator.TargetValue = *(object.Spec.Replicas)
-	res.IsReady = res.IsReady && res.OverallReplicasIndicator.IsReady()
+	res.IsReady = false
 
-	res.UpdatedReplicasIndicator.Value = object.Status.UpdatedReplicas
-	res.UpdatedReplicasIndicator.TargetValue = *(object.Spec.Replicas)
-	res.IsReady = res.IsReady && res.UpdatedReplicasIndicator.IsReady()
+	if object.Generation <= object.Status.ObservedGeneration {
+		if object.Spec.Replicas == nil {
+			return res
+		}
 
-	res.AvailableReplicasIndicator.Value = object.Status.AvailableReplicas
-	res.AvailableReplicasIndicator.TargetValue = *(object.Spec.Replicas)
-	res.IsReady = res.IsReady && res.AvailableReplicasIndicator.IsReady()
+		res.ReadyReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+			Value:       object.Status.ReadyReplicas,
+			TargetValue: *object.Spec.Replicas,
+		}
+		res.UpToDateReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+			Value:       object.Status.UpdatedReplicas,
+			TargetValue: *object.Spec.Replicas,
+		}
+		res.AvailableReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+			Value:       object.Status.AvailableReplicas,
+			TargetValue: *object.Spec.Replicas,
+		}
+		res.OldReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+			Value:       object.Status.Replicas - object.Status.UpdatedReplicas,
+			TargetValue: 0,
+		}
 
-	res.OldReplicasIndicator.Value = object.Status.Replicas - object.Status.UpdatedReplicas
-	res.OldReplicasIndicator.TargetValue = 0
-	res.IsReady = res.IsReady && res.OldReplicasIndicator.IsReady()
-
-	res.ObservedGenerationIndicator.Value = object.Status.ObservedGeneration
-	res.ObservedGenerationIndicator.TargetValue = object.Generation
-	res.IsReady = res.IsReady && res.ObservedGenerationIndicator.IsReady()
+		if object.Status.UpdatedReplicas == *(object.Spec.Replicas) &&
+			object.Status.Replicas == *(object.Spec.Replicas) &&
+			object.Status.AvailableReplicas == *(object.Spec.Replicas) &&
+			object.Status.ObservedGeneration >= object.Generation {
+			res.IsReady = true
+			return res
+		}
+	}
 
 	return res
 }

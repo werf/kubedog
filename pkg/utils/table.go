@@ -3,11 +3,13 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"github.com/acarl005/stripansi"
-	"github.com/flant/logboek"
 	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"strings"
+
+	"github.com/acarl005/stripansi"
+
+	"github.com/flant/logboek"
 )
 
 type Table struct {
@@ -23,14 +25,14 @@ type Table struct {
 	service struct {
 		header           string
 		headerRest       string
-		raw              string
-		rawRest          string
-		lastRaw          string
-		lastRawRest      string
-		extraRaw         string
-		extraRawRest     string
-		lastExtraRaw     string
-		lastExtraRawRest string
+		row              string
+		rowRest          string
+		lastRow          string
+		lastRowRest      string
+		extraRow         string
+		extraRowRest     string
+		lastExtraRow     string
+		lastExtraRowRest string
 	}
 
 	buf *bytes.Buffer
@@ -53,14 +55,14 @@ func (t *Table) SubTable(columnsRatio ...float64) Table {
 
 	st.service.header = "│   "
 	st.service.headerRest = "│   "
-	st.service.raw = "├── "
-	st.service.rawRest = "│   "
-	st.service.lastRaw = "└── "
-	st.service.lastRawRest = "    "
-	st.service.extraRaw = "│   ├── "
-	st.service.extraRawRest = "│   │   "
-	st.service.lastExtraRaw = "│   └── "
-	st.service.lastExtraRawRest = "│       "
+	st.service.row = "├── "
+	st.service.rowRest = "│   "
+	st.service.lastRow = "└── "
+	st.service.lastRowRest = "    "
+	st.service.extraRow = "│   ├── "
+	st.service.extraRowRest = "│   │   "
+	st.service.lastExtraRow = "│   └── "
+	st.service.lastExtraRowRest = "│       "
 
 	return st
 }
@@ -75,48 +77,48 @@ func (t *Table) Header(columns ...interface{}) {
 	})
 }
 
-func (t *Table) Raws(raws ...[]interface{}) {
-	if len(raws) != 0 {
-		t.withService(t.service.raw, t.service.rawRest, func() {
-			for _, rawColumns := range raws[:len(raws)-1] {
-				t.Raw(rawColumns...)
+func (t *Table) Rows(rows ...[]interface{}) {
+	if len(rows) != 0 {
+		t.withService(t.service.row, t.service.rowRest, func() {
+			for _, rowColumns := range rows[:len(rows)-1] {
+				t.Row(rowColumns...)
 			}
 		})
 
-		t.withService(t.service.lastRaw, t.service.lastRawRest, func() {
-			t.Raw(raws[len(raws)-1]...)
+		t.withService(t.service.lastRow, t.service.lastRowRest, func() {
+			t.Row(rows[len(rows)-1]...)
 		})
 	}
 }
 
-func (t *Table) Raw(columns ...interface{}) {
+func (t *Table) Row(columns ...interface{}) {
 	if t.columnsCount == 0 {
 		panic("headers should be rendered first")
 	}
 
-	var rawColumns []interface{}
-	var extraRawColumns []interface{}
+	var rowColumns []interface{}
+	var extraRowColumns []interface{}
 
 	if len(columns) < t.columnsCount {
 		panic(fmt.Sprintf("itemFields items count can not be less than headers (got %d, expected %d)", len(columns), t.columnsCount))
 	} else {
-		rawColumns = columns[:t.columnsCount]
+		rowColumns = columns[:t.columnsCount]
 		if len(columns) > t.columnsCount {
-			extraRawColumns = columns[t.columnsCount:]
+			extraRowColumns = columns[t.columnsCount:]
 		}
 	}
 
-	t.apply(rawColumns...)
+	t.apply(rowColumns...)
 
-	if len(extraRawColumns) != 0 {
-		t.withService(t.service.extraRaw, t.service.extraRawRest, func() {
-			for _, column := range extraRawColumns[:len(extraRawColumns)-1] {
+	if len(extraRowColumns) != 0 {
+		t.withService(t.service.extraRow, t.service.extraRowRest, func() {
+			for _, column := range extraRowColumns[:len(extraRowColumns)-1] {
 				t.apply(column)
 			}
 		})
 
-		t.withService(t.service.lastExtraRaw, t.service.lastExtraRawRest, func() {
-			t.apply(extraRawColumns[len(extraRawColumns)-1])
+		t.withService(t.service.lastExtraRow, t.service.lastExtraRowRest, func() {
+			t.apply(extraRowColumns[len(extraRowColumns)-1])
 		})
 	}
 }
@@ -135,7 +137,7 @@ func (t *Table) withService(serviceText, serviceRestText string, f func()) {
 func (t *Table) apply(columns ...interface{}) {
 	columnsContentWidth := t.getColumnsContentWidth(len(columns))
 
-	rawsCount := 0
+	rowsCount := 0
 	columnsContent := make([][]string, len(columnsContentWidth))
 	for ind, field := range columns {
 		value := fmt.Sprintf("%v", field)
@@ -150,32 +152,32 @@ func (t *Table) apply(columns ...interface{}) {
 			columnsContent[ind] = append(columnsContent[ind], formatCellContent(line, columnsContentWidth[ind]))
 		}
 
-		if len(columnsContent[ind]) > rawsCount {
-			rawsCount = len(columnsContent[ind])
+		if len(columnsContent[ind]) > rowsCount {
+			rowsCount = len(columnsContent[ind])
 		}
 	}
 
-	for rawNumber := 0; rawNumber < rawsCount; rawNumber++ {
-		var raw []string
+	for rowNumber := 0; rowNumber < rowsCount; rowNumber++ {
+		var row []string
 
-		if rawNumber == 0 {
-			raw = append(raw, t.serviceText)
+		if rowNumber == 0 {
+			row = append(row, t.serviceText)
 		} else {
-			raw = append(raw, t.serviceRestText)
+			row = append(row, t.serviceRestText)
 		}
 
 		for ind, columnLines := range columnsContent {
-			var columnRawValue string
-			if len(columnLines) > rawNumber {
-				columnRawValue = columnLines[rawNumber]
+			var columnRowValue string
+			if len(columnLines) > rowNumber {
+				columnRowValue = columnLines[rowNumber]
 			} else {
-				columnRawValue = strings.Repeat(" ", columnsContentWidth[ind])
+				columnRowValue = strings.Repeat(" ", columnsContentWidth[ind])
 			}
 
-			raw = append(raw, columnRawValue)
+			row = append(row, columnRowValue)
 		}
 
-		t.buf.WriteString(strings.Join(raw, ""))
+		t.buf.WriteString(strings.Join(row, ""))
 		t.buf.WriteString("\n")
 	}
 }
@@ -241,7 +243,6 @@ func terminalWidth() int {
 	return 0
 }
 
-func (t *Table) Render() {
-	t.apply("")
-	fmt.Printf(t.buf.String())
+func (t *Table) Render() string {
+	return t.buf.String()
 }
