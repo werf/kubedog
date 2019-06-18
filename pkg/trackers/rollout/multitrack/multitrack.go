@@ -13,6 +13,8 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/flant/logboek"
+
 	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/tracker/daemonset"
@@ -391,6 +393,7 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 
 func (mt *multitracker) printDeploymentsStatusProgress() {
 	t := utils.NewTable(.55, .15, .15, .15)
+	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
 
 	// t.Raw("deploy/extended-monitoring", "1/1", 1, 1)
@@ -436,9 +439,9 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 		available := status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
 
 		if status.IsFailed {
-			t.Raw(resource, overall, uptodate, available, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, overall, uptodate, available, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
 		} else {
-			t.Raw(resource, overall, uptodate, available)
+			t.Row(resource, overall, uptodate, available)
 		}
 
 		if len(status.Pods) > 0 {
@@ -451,7 +454,10 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 			}
 			sort.Strings(podsNames)
 
+			var podRows [][]interface{}
 			for _, podName := range podsNames {
+				var podRow []interface{}
+
 				prevPodStatus := prevStatus.Pods[podName]
 				podStatus := status.Pods[podName]
 
@@ -459,18 +465,21 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 				ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
 				status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
 
+				podRow = append(podRow, resource, ready, status, podStatus.Restarts, podStatus.Age)
 				if podStatus.IsFailed {
-					st.Raw(resource, ready, status, podStatus.Restarts, podStatus.Age, color.New(color.FgRed).Sprintf("Error: %s", podStatus.FailedReason))
-				} else {
-					st.Raw(resource, ready, status, podStatus.Restarts, podStatus.Age)
+					podRow = append(podRow, color.New(color.FgRed).Sprintf("Error: %s", podStatus.FailedReason))
 				}
+
+				podRows = append(podRows, podRow)
 			}
+
+			st.Rows(podRows...)
 		}
 
 		mt.PrevDeploymentsStatuses[name] = status
 	}
 
-	t.Render()
+	_, _ = logboek.OutF(t.Render())
 }
 
 func (mt *multitracker) printStatefulSetsStatusProgress() {
@@ -543,12 +552,12 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 func (mt *multitracker) PrintStatusProgress() error {
 	caption := color.New(color.Bold).Sprint("Status progress")
 
-	display.OutF("\n┌ %s\n", caption)
+	_ = logboek.LogProcess(caption, logboek.LogProcessOptions{}, func() error {
+		mt.printDeploymentsStatusProgress()
+		return nil
+	})
 
-	mt.printDeploymentsStatusProgress()
 	// mt.printStatefulSetsStatusProgress()
-
-	display.OutF("└ %s\n", caption)
 
 	// for name, status := range mt.PodsStatuses {
 	// 	display.OutF("├ po/%s\n", name)
