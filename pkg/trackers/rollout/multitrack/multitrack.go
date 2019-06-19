@@ -389,7 +389,7 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 	}
 }
 
-func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, failMode FailMode, formatOpts indicators.FormatTableElemOptions) {
+func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
 	st := t.SubTable(.3, .16, .2, .16, .16)
 	st.Header("NAME", "RDY", "STATUS", "RESTARTS", "AGE")
 
@@ -411,7 +411,10 @@ func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods ma
 		ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
 		status := "-"
 		if podStatus.StatusIndicator != nil {
-			status = podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
+			status = podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
 		podRow = append(podRow, resource, ready, status, podStatus.Restarts, podStatus.Age)
@@ -423,12 +426,14 @@ func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods ma
 	}
 
 	st.Rows(podRows...)
+
+	return &st
 }
 
-func (mt *multitracker) printDeploymentsAndDaemonSetsStatusProgress() {
-	t := utils.NewTable(.6, .1, .1, .1, .1)
+func (mt *multitracker) printDeploymentsStatusProgress() {
+	t := utils.NewTable(.7, .1, .1, .1)
 	t.SetWidth(logboek.ContentWidth() - 1)
-	t.Header("NAME", "RDY", "UPD", "AVAIL", "OLD")
+	t.Header("DEPLOYMENT", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
 	for name := range mt.DeploymentsStatuses {
@@ -442,47 +447,59 @@ func (mt *multitracker) printDeploymentsAndDaemonSetsStatusProgress() {
 
 		spec := mt.DeploymentsSpecs[name]
 
-		formatOpts := indicators.FormatTableElemOptions{
-			ShowProgress:         (status.StatusGeneration > prevStatus.StatusGeneration),
-			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
-		}
+		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
+		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
 
-		resource := formatResourceCaption(fmt.Sprintf("deploy/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
+		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed)
 
-		ready := "-"
-		if status.ReadyReplicasIndicator != nil {
-			ready = status.ReadyReplicasIndicator.FormatTableElem(prevStatus.ReadyReplicasIndicator, formatOpts)
-		}
-
-		updated := "-"
-		if status.UpdatedReplicasIndicator != nil {
-			updated = status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
+		replicas := "-"
+		if status.ReplicasIndicator != nil {
+			replicas = status.ReplicasIndicator.FormatTableElem(prevStatus.ReplicasIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+				WithTargetValue:      true,
+			})
 		}
 
 		available := "-"
-		if status.AvailableReplicasIndicator != nil {
-			available = status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
+		if status.AvailableIndicator != nil {
+			available = status.AvailableIndicator.FormatTableElem(prevStatus.AvailableIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
-		old := "-"
-		if status.OldReplicasIndicator != nil {
-			old = status.OldReplicasIndicator.FormatTableElem(prevStatus.OldReplicasIndicator, formatOpts)
+		uptodate := "-"
+		if status.UpToDateIndicator != nil {
+			uptodate = status.UpToDateIndicator.FormatTableElem(prevStatus.UpToDateIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
 		if status.IsFailed {
-			t.Row(resource, ready, updated, available, old, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, replicas, available, uptodate, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
 		} else {
-			t.Row(resource, ready, updated, available, old)
+			t.Row(resource, replicas, available, uptodate)
 		}
 
 		if len(status.Pods) > 0 {
-			mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, formatOpts)
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, showProgress, disableWarningColors)
+			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3", "Компания «Флант» — специалисты по DevOps и высоконагруженному (highload) вебу на базе Kubernetes, Docker, GitLab, Linux и других Open Source-проектов.\n\nНа рынке — с 2008 года. Начинали с комплексного обслуживания корпоративных ИТ-инфраструктур на базе свободного ПО, но со временем пришли к более узкой специализации (DevOps, web, микросервисы), накопив в ней огромный опыт.\n\nПредлагаем гибкие варианты обслуживания (SLA, T&M​, круглосуточная техническая поддержка) и прозрачное ценообразование, ориентируемся на долгосрочное сотрудничество.\n")
 		}
 
 		mt.PrevDeploymentsStatuses[name] = status
 	}
 
-	resourcesNames = []string{}
+	_, _ = logboek.OutF(t.Render())
+}
+
+func (mt *multitracker) printDaemonSetsStatusProgress() {
+	t := utils.NewTable(.7, .1, .1, .1)
+	t.SetWidth(logboek.ContentWidth() - 1)
+	t.Header("DAEMONSET", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
+
+	resourcesNames := []string{}
 	for name := range mt.DaemonSetsStatuses {
 		resourcesNames = append(resourcesNames, name)
 	}
@@ -494,41 +511,45 @@ func (mt *multitracker) printDeploymentsAndDaemonSetsStatusProgress() {
 
 		spec := mt.DaemonSetsSpecs[name]
 
-		formatOpts := indicators.FormatTableElemOptions{
-			ShowProgress:         (status.StatusGeneration > prevStatus.StatusGeneration),
-			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
-		}
+		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
+		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
 
-		resource := formatResourceCaption(fmt.Sprintf("ds/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
+		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed)
 
-		ready := "-"
-		if status.ReadyReplicasIndicator != nil {
-			ready = status.ReadyReplicasIndicator.FormatTableElem(prevStatus.ReadyReplicasIndicator, formatOpts)
-		}
-
-		updated := "-"
-		if status.UpdatedReplicasIndicator != nil {
-			updated = status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
+		replicas := "-"
+		if status.ReplicasIndicator != nil {
+			replicas = status.ReplicasIndicator.FormatTableElem(prevStatus.ReplicasIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+				WithTargetValue:      true,
+			})
 		}
 
 		available := "-"
-		if status.AvailableReplicasIndicator != nil {
-			available = status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
+		if status.AvailableIndicator != nil {
+			available = status.AvailableIndicator.FormatTableElem(prevStatus.AvailableIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
-		old := "-"
-		if status.OldReplicasIndicator != nil {
-			old = status.OldReplicasIndicator.FormatTableElem(prevStatus.OldReplicasIndicator, formatOpts)
+		uptodate := "-"
+		if status.UpToDateIndicator != nil {
+			uptodate = status.UpToDateIndicator.FormatTableElem(prevStatus.UpToDateIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
 		if status.IsFailed {
-			t.Row(resource, ready, updated, available, old, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, replicas, available, uptodate, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
 		} else {
-			t.Row(resource, ready, updated, available, old)
+			t.Row(resource, replicas, available, uptodate)
 		}
 
 		if len(status.Pods) > 0 {
-			mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, formatOpts)
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, showProgress, disableWarningColors)
+			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3")
 		}
 
 		mt.PrevDaemonSetsStatuses[name] = status
@@ -540,7 +561,7 @@ func (mt *multitracker) printDeploymentsAndDaemonSetsStatusProgress() {
 func (mt *multitracker) printStatefulSetsStatusProgress() {
 	t := utils.NewTable(.7, .1, .1, .1)
 	t.SetWidth(logboek.ContentWidth() - 1)
-	t.Header("NAME", "CUR", "RDY", "UPD")
+	t.Header("STATEFULSET", "REPLICAS", "READY", "UP-TO-DATE")
 
 	resourcesNames := []string{}
 	for name := range mt.StatefulSetsStatuses {
@@ -554,36 +575,45 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 
 		spec := mt.StatefulSetsSpecs[name]
 
-		formatOpts := indicators.FormatTableElemOptions{
-			ShowProgress:         (status.StatusGeneration > prevStatus.StatusGeneration),
-			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
-		}
+		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
+		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
 
-		resource := formatResourceCaption(fmt.Sprintf("sts/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
+		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed)
 
-		current := "-"
-		if status.CurrentReplicasIndicator != nil {
-			current = status.CurrentReplicasIndicator.FormatTableElem(prevStatus.CurrentReplicasIndicator, formatOpts)
+		replicas := "-"
+		if status.ReplicasIndicator != nil {
+			replicas = status.ReplicasIndicator.FormatTableElem(prevStatus.ReplicasIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+				WithTargetValue:      true,
+			})
 		}
 
 		ready := "-"
-		if status.ReadyReplicasIndicator != nil {
-			ready = status.ReadyReplicasIndicator.FormatTableElem(prevStatus.ReadyReplicasIndicator, formatOpts)
+		if status.ReadyIndicator != nil {
+			ready = status.ReadyIndicator.FormatTableElem(prevStatus.ReadyIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
-		updated := "-"
-		if status.UpdatedReplicasIndicator != nil {
-			updated = status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
+		uptodate := "-"
+		if status.UpToDateIndicator != nil {
+			uptodate = status.UpToDateIndicator.FormatTableElem(prevStatus.UpToDateIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
 		}
 
 		if status.IsFailed {
-			t.Row(resource, current, ready, updated, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, replicas, ready, uptodate, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
 		} else {
-			t.Row(resource, current, ready, updated)
+			t.Row(resource, replicas, ready, uptodate)
 		}
 
 		if len(status.Pods) > 0 {
-			mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, formatOpts)
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, showProgress, disableWarningColors)
+			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3")
 		}
 
 		mt.PrevStatefulSetsStatuses[name] = status
@@ -596,7 +626,11 @@ func (mt *multitracker) PrintStatusProgress() error {
 	caption := color.New(color.Bold).Sprint("Status progress")
 
 	_ = logboek.LogProcess(caption, logboek.LogProcessOptions{}, func() error {
-		mt.printDeploymentsAndDaemonSetsStatusProgress()
+		mt.printDeploymentsStatusProgress()
+
+		logboek.OutF("\n")
+
+		mt.printDaemonSetsStatusProgress()
 
 		logboek.OutF("\n")
 

@@ -7,10 +7,14 @@ import (
 )
 
 type FormatTableElemOptions struct {
+	// Show previous value as progressing OLD_VALUE->NEW_VALUE if the value has changed
 	ShowProgress bool
 
-	// disables yellow and red colors for resources with fail-mode=IgnoreAndContinueDeployProcess
+	// Disable yellow and red colors for resources with fail-mode=IgnoreAndContinueDeployProcess
 	DisableWarningColors bool
+
+	// Show target value in format VALUE/TARGET, show only VALUE by default
+	WithTargetValue bool
 }
 
 type StringEqualConditionIndicator struct {
@@ -35,7 +39,7 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		} else {
 			res += color.New(color.FgYellow).Sprintf("%s", prevIndicator.Value)
 		}
-		res += "=>"
+		res += "->"
 	}
 
 	if indicator.IsReady() {
@@ -51,52 +55,17 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 	return res
 }
 
-type Int32MultipleEqualConditialIndicator struct {
-	Value        int32
-	TargetValues []int32
-}
-
-func (indicator *Int32MultipleEqualConditialIndicator) IsReady() bool {
-	for _, val := range indicator.TargetValues {
-		if val == indicator.Value {
-			return true
-		}
-	}
-	return false
-}
-
-func (indicator *Int32MultipleEqualConditialIndicator) IsProgressing(prevIndicator *Int32MultipleEqualConditialIndicator) bool {
-	return (prevIndicator != nil) && (indicator.Value != prevIndicator.Value)
-}
-
-func (indicator *Int32MultipleEqualConditialIndicator) FormatTableElem(prevIndicator *Int32MultipleEqualConditialIndicator, opts FormatTableElemOptions) string {
-	res := ""
-
-	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
-		if opts.DisableWarningColors {
-			res += fmt.Sprintf("%d", prevIndicator.Value)
-		} else {
-			res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
-		}
-		res += "=>"
-	}
-
-	if indicator.IsReady() {
-		res += color.New(color.FgGreen).Sprintf("%d", indicator.Value)
-	} else {
-		if opts.DisableWarningColors {
-			res += fmt.Sprintf("%d", indicator.Value)
-		} else {
-			res += color.New(color.FgYellow).Sprintf("%d", indicator.Value)
-		}
-	}
-
-	return res
-}
-
 type Int32EqualConditionIndicator struct {
 	Value       int32
 	TargetValue int32
+}
+
+func (indicator *Int32EqualConditionIndicator) formatValue(withTargetValue bool) string {
+	if withTargetValue {
+		return fmt.Sprintf("%d/%d", indicator.Value, indicator.TargetValue)
+	} else {
+		return fmt.Sprintf("%d", indicator.Value)
+	}
 }
 
 func (indicator *Int32EqualConditionIndicator) IsProgressing(prevIndicator *Int32EqualConditionIndicator) bool {
@@ -111,21 +80,25 @@ func (indicator *Int32EqualConditionIndicator) FormatTableElem(prevIndicator *In
 	res := ""
 
 	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
-		if opts.DisableWarningColors {
-			res += fmt.Sprintf("%d/%d", prevIndicator.Value, prevIndicator.TargetValue)
+		if prevIndicator.IsReady() {
+			res += color.New(color.FgGreen).Sprintf("%d", prevIndicator.Value)
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%d/%d", prevIndicator.Value, prevIndicator.TargetValue)
+			if opts.DisableWarningColors {
+				res += fmt.Sprintf("%d", prevIndicator.Value)
+			} else {
+				res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+			}
 		}
-		res += "=>"
+		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += color.New(color.FgGreen).Sprintf("%d/%d", indicator.Value, indicator.TargetValue)
+		res += color.New(color.FgGreen).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
 	} else {
 		if opts.DisableWarningColors {
-			res += fmt.Sprintf("%d/%d", indicator.Value, indicator.TargetValue)
+			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%d/%d", indicator.Value, indicator.TargetValue)
+			res += color.New(color.FgYellow).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	}
 
@@ -143,4 +116,84 @@ func (indicator *Int64GreaterOrEqualConditionIndicator) IsProgressing(prevIndica
 
 func (indicator *Int64GreaterOrEqualConditionIndicator) IsReady() bool {
 	return (indicator.Value >= indicator.TargetValue)
+}
+
+func (indicator *Int64GreaterOrEqualConditionIndicator) formatValue(withTargetValue bool) string {
+	if withTargetValue {
+		return fmt.Sprintf("%d/%d", indicator.Value, indicator.TargetValue)
+	} else {
+		return fmt.Sprintf("%d", indicator.Value)
+	}
+}
+
+func (indicator *Int64GreaterOrEqualConditionIndicator) FormatTableElem(prevIndicator *Int64GreaterOrEqualConditionIndicator, opts FormatTableElemOptions) string {
+	res := ""
+
+	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
+		if prevIndicator.IsReady() {
+			res += color.New(color.FgGreen).Sprintf("%d", prevIndicator.Value)
+		} else {
+			if opts.DisableWarningColors {
+				res += fmt.Sprintf("%d", prevIndicator.Value)
+			} else {
+				res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+			}
+		}
+		res += "->"
+	}
+
+	if indicator.IsReady() {
+		res += color.New(color.FgGreen).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
+	} else {
+		if opts.DisableWarningColors {
+			res += indicator.formatValue(opts.WithTargetValue)
+		} else {
+			res += color.New(color.FgYellow).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
+		}
+	}
+
+	return res
+}
+
+type Int32MultipleEqualConditionIndicator struct {
+	Value        int32
+	TargetValues []int32
+}
+
+func (indicator *Int32MultipleEqualConditionIndicator) IsReady() bool {
+	for _, val := range indicator.TargetValues {
+		if val == indicator.Value {
+			return true
+		}
+	}
+	return false
+}
+
+func (indicator *Int32MultipleEqualConditionIndicator) IsProgressing(prevIndicator *Int32MultipleEqualConditionIndicator) bool {
+	return (prevIndicator != nil) && (indicator.Value != prevIndicator.Value)
+}
+
+func (indicator *Int32MultipleEqualConditionIndicator) FormatTableElem(prevIndicator *Int32MultipleEqualConditionIndicator, opts FormatTableElemOptions) string {
+	res := ""
+
+	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
+		if opts.DisableWarningColors {
+			res += fmt.Sprintf("%d", prevIndicator.Value)
+		} else {
+			res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+		}
+		res += "->"
+	}
+
+	if indicator.IsReady() {
+		res += color.New(color.FgGreen).Sprintf("%d", indicator.Value)
+	} else {
+		if opts.DisableWarningColors {
+			res += fmt.Sprintf("%d", indicator.Value)
+		} else {
+			res += color.New(color.FgYellow).Sprintf("%d", indicator.Value)
+		}
+	}
+
+	return res
 }

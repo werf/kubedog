@@ -27,17 +27,17 @@ type Tracker struct {
 	tracker.Tracker
 	LogsFromTime time.Time
 
-	CurrentReady bool
-
 	State                 string
 	Conditions            []string
 	FinalDeploymentStatus extensions.DeploymentStatus
 	NewReplicaSetName     string
-	knownReplicaSets      map[string]*extensions.ReplicaSet
-	lastObject            *extensions.Deployment
-	statusGeneration      uint64
-	failedReason          string
-	podStatuses           map[string]pod.PodStatus
+	CurrentReady          bool
+
+	knownReplicaSets map[string]*extensions.ReplicaSet
+	lastObject       *extensions.Deployment
+	statusGeneration uint64
+	failedReason     string
+	podStatuses      map[string]pod.PodStatus
 
 	Added           chan bool
 	Ready           chan bool
@@ -463,10 +463,12 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	}
 	d.lastObject = object
 
+	d.statusGeneration++
+
 	status := NewDeploymentStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+
 	d.CurrentReady = status.IsReady
 
-	d.statusGeneration++
 	d.StatusReport <- status
 
 	if prevReady == false && d.CurrentReady == true {

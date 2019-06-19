@@ -1,6 +1,8 @@
 package statefulset
 
 import (
+	"fmt"
+
 	"github.com/flant/kubedog/pkg/tracker/indicators"
 	"github.com/flant/kubedog/pkg/tracker/pod"
 
@@ -12,9 +14,9 @@ type StatefulSetStatus struct {
 
 	StatusGeneration uint64
 
-	ReadyReplicasIndicator   *indicators.Int32EqualConditionIndicator
-	CurrentReplicasIndicator *indicators.Int32EqualConditionIndicator
-	UpdatedReplicasIndicator *indicators.Int32MultipleEqualConditialIndicator
+	ReplicasIndicator *indicators.Int64GreaterOrEqualConditionIndicator
+	ReadyIndicator    *indicators.Int64GreaterOrEqualConditionIndicator
+	UpToDateIndicator *indicators.Int64GreaterOrEqualConditionIndicator
 
 	IsReady      bool
 	IsFailed     bool
@@ -28,6 +30,7 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 		StatusGeneration:  statusGeneration,
 		StatefulSetStatus: object.Status,
 		Pods:              make(map[string]pod.PodStatus),
+		IsReady:           true,
 		IsFailed:          isFailed,
 		FailedReason:      failedReason,
 	}
@@ -36,91 +39,107 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 		res.Pods[k] = v
 	}
 
-	if object.Status.ObservedGeneration == 0 || object.Generation != object.Status.ObservedGeneration {
+	//if sts.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
+	//	return "", true, fmt.Errorf("rollout status is only available for %s strategy type", appsv1.RollingUpdateStatefulSetStrategyType)
+	//}
+
+	if object.Status.ObservedGeneration == 0 || object.Generation > object.Status.ObservedGeneration {
+		// 		return "Waiting for statefulset spec update to be observed...\n", false, nil
+		//fmt.Printf("Waiting for statefulset spec update to be observed...\n", object.Status)
 		res.IsReady = false
-		return res
 	}
 
 	if object.Spec.Replicas != nil {
-		res.ReadyReplicasIndicator = &indicators.Int32EqualConditionIndicator{}
-		res.ReadyReplicasIndicator.Value = object.Status.ReadyReplicas
-		res.ReadyReplicasIndicator.TargetValue = *object.Spec.Replicas
+		res.ReplicasIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{
+			Value:       int64(object.Status.Replicas),
+			TargetValue: int64(*object.Spec.Replicas),
+		}
+		res.ReadyIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{
+			Value:       int64(object.Status.ReadyReplicas),
+			TargetValue: int64(*object.Spec.Replicas),
+		}
 
-		// desired == observed == ready
-		if (*object.Spec.Replicas != object.Status.Replicas) || (*object.Spec.Replicas != object.Status.ReadyReplicas) {
+		if object.Status.ReadyReplicas < *object.Spec.Replicas {
+			//return fmt.Sprintf("Waiting for %d pods to be ready...\n", *sts.Spec.Replicas-sts.Status.ReadyReplicas), false, nil
+			fmt.Printf("Waiting for %d pods to be ready...\n", *object.Spec.Replicas-object.Status.ReadyReplicas)
 			res.IsReady = false
-			return res
 		}
-	}
-
-	// No other conditions for OnDelete strategy
-	// FIXME: OnDelete strategy tracker should wait till user manually deletes old replicas
-	if object.Spec.UpdateStrategy.Type == appsv1.OnDeleteStatefulSetStrategyType {
-		res.IsReady = true
-		return res
-	}
-
-	if object.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType {
-		var partition int32 = 0
-		if object.Spec.UpdateStrategy.RollingUpdate != nil {
-			if object.Spec.Replicas != nil && object.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
-				partition = *object.Spec.UpdateStrategy.RollingUpdate.Partition
-			}
-		}
-
-		if partition == 0 {
-			// The last step in update is make revisions equal and so UpdatedReplicas becomes 0.
-			// Final ready condition is: currentRevision == updateRevision and currentReplicas == readyReplicas and updatedReplicas == 0
-			// This code also works for static checking when sts is not in progress.
-
-			// Revision are not equal — sts update still in progress.
-			if object.Status.UpdateRevision != object.Status.CurrentRevision {
-				res.IsReady = false
-				return res
-			}
-
-			res.CurrentReplicasIndicator = &indicators.Int32EqualConditionIndicator{
-				Value:       object.Status.CurrentReplicas,
-				TargetValue: object.Status.ReadyReplicas,
-			}
-			res.UpdatedReplicasIndicator = &indicators.Int32MultipleEqualConditialIndicator{
-				Value:        object.Status.UpdatedReplicas,
-				TargetValues: []int32{0, object.Status.CurrentReplicas},
-			}
-
-			//    current == ready, updated == 0
-			// or current == ready, updated == current (1.10 set updatedReplicas to 0, but 1.11 is not)
-			if object.Status.CurrentReplicas == object.Status.ReadyReplicas && (object.Status.UpdatedReplicas == 0 || object.Status.UpdatedReplicas == object.Status.CurrentReplicas) {
-				res.IsReady = true
-				return res
-			}
-		} else if object.Status.UpdateRevision == object.Status.CurrentRevision {
-			// Final ready condition for partitioned rollout is:
-			// revisions are not equal, currentReplicas == partition, updatedReplicas == desired - partition
-
-			res.IsReady = false
-			return res
-		} else {
-			res.CurrentReplicasIndicator = &indicators.Int32EqualConditionIndicator{
-				Value:       object.Status.CurrentReplicas,
-				TargetValue: partition,
-			}
-			res.UpdatedReplicasIndicator = &indicators.Int32MultipleEqualConditialIndicator{
-				Value:        object.Status.UpdatedReplicas,
-				TargetValues: []int32{(*object.Spec.Replicas - partition)},
-			}
-
-			if object.Status.CurrentReplicas == partition && object.Status.UpdatedReplicas == (*object.Spec.Replicas-partition) {
-				res.IsReady = true
-				return res
-			}
-		}
-
+	} else {
 		res.IsReady = false
-		return res
 	}
 
-	// Unknown UpdateStrategy. Behave like OnDelete.
-	res.IsReady = true
+	switch object.Spec.UpdateStrategy.Type {
+	case appsv1.RollingUpdateStatefulSetStrategyType:
+		if object.Spec.Replicas != nil {
+			if object.Spec.UpdateStrategy.RollingUpdate != nil && object.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+				// Partitioned rollout
+
+				res.UpToDateIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{
+					Value:       int64(object.Status.UpdatedReplicas),
+					TargetValue: int64(*object.Spec.Replicas - *object.Spec.UpdateStrategy.RollingUpdate.Partition),
+				}
+
+				if object.Status.UpdatedReplicas < (*object.Spec.Replicas - *object.Spec.UpdateStrategy.RollingUpdate.Partition) {
+					//return fmt.Sprintf("Waiting for partitioned roll out to finish: %d out of %d new pods have been updated...\n",
+					//	sts.Status.UpdatedReplicas, *sts.Spec.Replicas-*sts.Spec.UpdateStrategy.RollingUpdate.Partition), false, nil
+					//fmt.Printf("Waiting for partitioned roll out to finish: %d out of %d new pods have been updated...\n", object.Status.UpdatedReplicas, *object.Spec.Replicas-*object.Spec.UpdateStrategy.RollingUpdate.Partition)
+					res.IsReady = false
+				}
+				//return fmt.Sprintf("partitioned roll out complete: %d new pods have been updated...\n",
+				//	sts.Status.UpdatedReplicas), true, nil
+			} else {
+				// Not a partitioned rollout
+
+				res.UpToDateIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{
+					Value:       int64(object.Status.UpdatedReplicas),
+					TargetValue: int64(*object.Spec.Replicas),
+				}
+
+				if object.Status.UpdateRevision != object.Status.CurrentRevision {
+					//return fmt.Sprintf("waiting for statefulset rolling update to complete %d pods at revision %s...\n",
+					//	sts.Status.UpdatedReplicas, sts.Status.UpdateRevision), false, nil
+					//fmt.Printf("waiting for statefulset rolling update to complete %d pods at revision %s...\n", object.Status.UpdatedReplicas, object.Status.UpdateRevision)
+					res.IsReady = false
+				}
+				//return fmt.Sprintf("statefulset rolling update complete %d pods at revision %s...\n", sts.Status.CurrentReplicas, sts.Status.CurrentRevision), true, nil
+			}
+		} else {
+			res.IsReady = false
+		}
+
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		if object.Spec.Replicas != nil {
+			res.UpToDateIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{
+				Value:       int64(object.Status.UpdatedReplicas),
+				TargetValue: int64(*object.Spec.Replicas),
+			}
+
+			if object.Status.UpdatedReplicas < *object.Spec.Replicas {
+				res.IsReady = false
+				fmt.Printf("User needs to delete old pods manually!\n")
+			}
+		} else {
+			res.IsReady = false
+		}
+
+	default:
+		panic(fmt.Sprintf("StatefulSet %s UpdateStrategy.Type %#v is not supported", object.Name, object.Spec.UpdateStrategy.Type))
+	}
+
+	if object.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType && object.Spec.UpdateStrategy.RollingUpdate != nil {
+	} else {
+		res.UpToDateIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{
+			Value:       int64(object.Status.UpdatedReplicas),
+			TargetValue: int64(*object.Spec.Replicas),
+		}
+
+		if object.Spec.UpdateStrategy.Type == appsv1.OnDeleteStatefulSetStrategyType {
+			if !res.IsReady {
+				//fmt.Printf("User needs to delete old pods manually!\n")
+			}
+		} else {
+		}
+	}
+
 	return res
 }

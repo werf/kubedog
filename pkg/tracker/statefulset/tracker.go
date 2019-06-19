@@ -30,10 +30,12 @@ type Tracker struct {
 	State                  string
 	Conditions             []string
 	FinalStatefulSetStatus appsv1.StatefulSetStatus
-	lastObject             *appsv1.StatefulSet
-	statusGeneration       uint64
-	failedReason           string
-	podStatuses            map[string]pod.PodStatus
+	CurrentReady           bool
+
+	lastObject       *appsv1.StatefulSet
+	statusGeneration uint64
+	failedReason     string
+	podStatuses      map[string]pod.PodStatus
 
 	Added        chan bool
 	Ready        chan bool
@@ -342,7 +344,7 @@ func (d *Tracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) bool {
+func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) (ready bool) {
 	if debug.Debug() {
 		fmt.Printf("%s\n", getStatefulSetStatus(object))
 		msg, ready, err := StatefulSetRolloutStatus(object)
@@ -356,19 +358,26 @@ func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) bool {
 		}
 	}
 
+	prevReady := false
+	if d.lastObject != nil {
+		prevReady = d.CurrentReady
+	}
 	d.lastObject = object
+
+	d.statusGeneration++
 
 	status := NewStatefulSetStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
 
-	d.statusGeneration++
+	d.CurrentReady = status.IsReady
+
 	d.StatusReport <- status
 
-	ready := StatefulSetComplete(object)
-	if ready {
+	if prevReady == false && d.CurrentReady == true {
 		d.FinalStatefulSetStatus = object.Status
+		ready = true
 	}
 
-	return ready
+	return
 }
 
 // runEventsInformer watch for StatefulSet events
