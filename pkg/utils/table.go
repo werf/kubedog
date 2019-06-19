@@ -13,7 +13,8 @@ import (
 )
 
 type Table struct {
-	width int
+	width      int
+	extraWidth int
 
 	serviceText     string
 	serviceRestText string
@@ -35,7 +36,8 @@ type Table struct {
 		lastExtraRowRest string
 	}
 
-	buf *bytes.Buffer
+	buf       *bytes.Buffer
+	commitBuf *bytes.Buffer
 }
 
 func NewTable(columnsRatio ...float64) Table {
@@ -49,9 +51,11 @@ func NewTable(columnsRatio ...float64) Table {
 
 func (t *Table) SubTable(columnsRatio ...float64) Table {
 	st := NewTable(columnsRatio...)
-	st.buf = t.buf
+	st.commitBuf = t.buf
 
-	st.SetWidth(t.getColumnsContentWidth(t.columnsCount)[0])
+	tFirstColumnWidth := t.getColumnsContentWidth(t.columnsCount)[0]
+	st.width = tFirstColumnWidth
+	st.extraWidth = t.width - tFirstColumnWidth
 
 	st.service.header = "│   "
 	st.service.headerRest = "│   "
@@ -140,17 +144,7 @@ func (t *Table) apply(columns ...interface{}) {
 	rowsCount := 0
 	columnsContent := make([][]string, len(columnsContentWidth))
 	for ind, field := range columns {
-		value := fmt.Sprintf("%v", field)
-
-		columnsContent[ind] = []string{}
-		columnWidthWithoutSpaces := columnsContentWidth[ind] - 1
-
-		result := logboek.FitText(value, logboek.FitTextOptions{Width: columnWidthWithoutSpaces})
-		lines := strings.Split(result, "\n")
-
-		for _, line := range lines {
-			columnsContent[ind] = append(columnsContent[ind], formatCellContent(line, columnsContentWidth[ind]))
-		}
+		columnsContent[ind] = fitValue(field, columnsContentWidth[ind])
 
 		if len(columnsContent[ind]) > rowsCount {
 			rowsCount = len(columnsContent[ind])
@@ -171,7 +165,7 @@ func (t *Table) apply(columns ...interface{}) {
 			if len(columnLines) > rowNumber {
 				columnRowValue = columnLines[rowNumber]
 			} else {
-				columnRowValue = strings.Repeat(" ", columnsContentWidth[ind])
+				columnRowValue = padValue("", columnsContentWidth[ind])
 			}
 
 			row = append(row, columnRowValue)
@@ -182,11 +176,27 @@ func (t *Table) apply(columns ...interface{}) {
 	}
 }
 
-func formatCellContent(s string, n int) string {
-	rest := n - len(stripansi.Strip(s))
-	rightDiv := rest
+func fitValue(field interface{}, columnWidth int) []string {
+	var lines []string
 
-	return s + strings.Repeat(" ", rightDiv)
+	columnWidthWithoutSpaces := columnWidth - 1
+	value := fmt.Sprintf("%v", field)
+	result := logboek.FitText(value, logboek.FitTextOptions{Width: columnWidthWithoutSpaces})
+
+	for _, line := range strings.Split(result, "\n") {
+		lines = append(lines, padValue(line, columnWidth))
+	}
+
+	return lines
+}
+
+func padValue(s string, n int) string {
+	rest := n - len([]rune(stripansi.Strip(s)))
+	if rest < 0 {
+		return s
+	}
+
+	return s + strings.Repeat(" ", rest)
 }
 
 func (t *Table) getColumnsContentWidth(count int) []int {
@@ -205,8 +215,8 @@ func (t *Table) getColumnsContentWidth(count int) []int {
 		sum += columnWidth
 	}
 
-	if sum-w > 0 {
-		result[len(result)-1] += sum - w
+	if w-sum > 0 {
+		result[len(result)-1] += w - sum
 	}
 
 	return result
@@ -241,6 +251,48 @@ func terminalWidth() int {
 	}
 
 	return 0
+}
+
+func (t *Table) Commit(extraColumns ...interface{}) {
+	lines := strings.Split(t.buf.String(), "\n")
+
+	var extraLines []string
+	for _, extraColumn := range extraColumns {
+		extraLines = append(extraLines, fitValue(extraColumn, t.extraWidth)...)
+	}
+
+	var baseLines []string
+	if len(lines) > len(extraLines) {
+		baseLines = lines
+	} else {
+		baseLines = extraLines
+	}
+
+	var resultLines []string
+	for ind := range baseLines {
+		var line, extraLine string
+
+		if ind < len(lines) {
+			line = lines[ind]
+		}
+
+		if ind < len(extraLines) {
+			extraLine = extraLines[ind]
+		}
+
+		var resultLine string
+		if line != "" && extraLine != "" {
+			resultLine += line + extraLine
+		} else if extraLine != "" {
+			resultLine += padValue("", t.width) + extraLine
+		} else {
+			resultLine += line + padValue("", t.width-len([]rune(line)))
+		}
+
+		resultLines = append(resultLines, resultLine)
+	}
+
+	t.commitBuf.WriteString(strings.Join(resultLines, "\n") + "\n")
 }
 
 func (t *Table) Render() string {

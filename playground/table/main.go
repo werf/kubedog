@@ -11,7 +11,7 @@ func main() {
 	_ = logboek.LogProcess("xxx", logboek.LogProcessOptions{}, func() error {
 		_ = logboek.LogProcess("1", logboek.LogProcessOptions{}, func() error {
 			t := utils.NewTable(.7, .1, .1, .1)
-			t.SetWidth(logboek.ContentWidth())
+			t.SetWidth(logboek.ContentWidth() - 1)
 			t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
 			t.Row("deploy/extended-monitoring", "1/1", 1, 1)
 			//t.Row("deploy/extended-monitoring", "1/1", 1, 1, color.RedString("Error: See the server log for details. BUILD FAILED (total time: 1 second)"), color.RedString("Error: An individual language user's deviations from standard language norms in grammar, pronunciation and orthography are sometimes referred to as errors"))
@@ -22,6 +22,7 @@ func main() {
 				{"654fc55df-hsm67", "3/3", color.GreenString("Running") + " -> " + color.RedString("Terminating"), "0", "49m"},
 				{"654fc55df-fffff", "3/3", "Ready", "0", "49m"},
 			}...)
+			st.Commit(color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found"), color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found"))
 			t.Row("deploy/grafana", "1/1", 1, 1)
 			t.Row("deploy/kube-state-metrics", "1/1", 1, 1)
 			t.Row("deploy/madison-proxy-0450d21f50d1e3f3b3131a07bcbcfe85ec02dd9758b7ee12968ee6eaee7057fc", "1/1", 1, 1)
