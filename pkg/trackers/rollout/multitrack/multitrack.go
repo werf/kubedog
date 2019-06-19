@@ -130,8 +130,10 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		StatefulSetsStatuses:     make(map[string]statefulset.StatefulSetStatus),
 		PrevStatefulSetsStatuses: make(map[string]statefulset.StatefulSetStatus),
 
-		TrackingDaemonSets: make(map[string]*multitrackerResourceState),
-		DaemonSetsStatuses: make(map[string]daemonset.DaemonSetStatus),
+		DaemonSetsSpecs:        make(map[string]MultitrackSpec),
+		TrackingDaemonSets:     make(map[string]*multitrackerResourceState),
+		DaemonSetsStatuses:     make(map[string]daemonset.DaemonSetStatus),
+		PrevDaemonSetsStatuses: make(map[string]daemonset.DaemonSetStatus),
 
 		TrackingJobs: make(map[string]*multitrackerResourceState),
 		JobsStatuses: make(map[string]job.JobStatus),
@@ -178,6 +180,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		}(spec)
 	}
 	for _, spec := range specs.DaemonSets {
+		mt.DaemonSetsSpecs[spec.ResourceName] = spec
 		mt.TrackingDaemonSets[spec.ResourceName] = &multitrackerResourceState{}
 
 		wg.Add(1)
@@ -262,8 +265,10 @@ type multitracker struct {
 	StatefulSetsStatuses     map[string]statefulset.StatefulSetStatus
 	PrevStatefulSetsStatuses map[string]statefulset.StatefulSetStatus
 
-	TrackingDaemonSets map[string]*multitrackerResourceState
-	DaemonSetsStatuses map[string]daemonset.DaemonSetStatus
+	DaemonSetsSpecs        map[string]MultitrackSpec
+	TrackingDaemonSets     map[string]*multitrackerResourceState
+	DaemonSetsStatuses     map[string]daemonset.DaemonSetStatus
+	PrevDaemonSetsStatuses map[string]daemonset.DaemonSetStatus
 
 	TrackingJobs map[string]*multitrackerResourceState
 	JobsStatuses map[string]job.JobStatus
@@ -404,7 +409,10 @@ func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods ma
 
 		resource := formatResourceCaption(strings.Join(strings.Split(podName, "-")[1:], "-"), failMode, podStatus.IsReady, podStatus.IsFailed)
 		ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
-		status := podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
+		status := "-"
+		if podStatus.StatusIndicator != nil {
+			status = podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, formatOpts)
+		}
 
 		podRow = append(podRow, resource, ready, status, podStatus.Restarts, podStatus.Age)
 		if podStatus.IsFailed {
@@ -417,7 +425,7 @@ func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods ma
 	st.Rows(podRows...)
 }
 
-func (mt *multitracker) printDeploymentsStatusProgress() {
+func (mt *multitracker) printDeploymentsAndDaemonSetsStatusProgress() {
 	t := utils.NewTable(.6, .1, .1, .1, .1)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("NAME", "RDY", "UPD", "AVAIL", "OLD")
@@ -472,6 +480,58 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 		}
 
 		mt.PrevDeploymentsStatuses[name] = status
+	}
+
+	resourcesNames = []string{}
+	for name := range mt.DaemonSetsStatuses {
+		resourcesNames = append(resourcesNames, name)
+	}
+	sort.Strings(resourcesNames)
+
+	for _, name := range resourcesNames {
+		prevStatus := mt.PrevDaemonSetsStatuses[name]
+		status := mt.DaemonSetsStatuses[name]
+
+		spec := mt.DaemonSetsSpecs[name]
+
+		formatOpts := indicators.FormatTableElemOptions{
+			ShowProgress:         (status.StatusGeneration > prevStatus.StatusGeneration),
+			DisableWarningColors: spec.FailMode == IgnoreAndContinueDeployProcess,
+		}
+
+		resource := formatResourceCaption(fmt.Sprintf("ds/%s", name), spec.FailMode, status.IsReady, status.IsFailed)
+
+		ready := "-"
+		if status.ReadyReplicasIndicator != nil {
+			ready = status.ReadyReplicasIndicator.FormatTableElem(prevStatus.ReadyReplicasIndicator, formatOpts)
+		}
+
+		updated := "-"
+		if status.UpdatedReplicasIndicator != nil {
+			updated = status.UpdatedReplicasIndicator.FormatTableElem(prevStatus.UpdatedReplicasIndicator, formatOpts)
+		}
+
+		available := "-"
+		if status.AvailableReplicasIndicator != nil {
+			available = status.AvailableReplicasIndicator.FormatTableElem(prevStatus.AvailableReplicasIndicator, formatOpts)
+		}
+
+		old := "-"
+		if status.OldReplicasIndicator != nil {
+			old = status.OldReplicasIndicator.FormatTableElem(prevStatus.OldReplicasIndicator, formatOpts)
+		}
+
+		if status.IsFailed {
+			t.Row(resource, ready, updated, available, old, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+		} else {
+			t.Row(resource, ready, updated, available, old)
+		}
+
+		if len(status.Pods) > 0 {
+			mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, formatOpts)
+		}
+
+		mt.PrevDaemonSetsStatuses[name] = status
 	}
 
 	_, _ = logboek.OutF(t.Render())
@@ -536,9 +596,12 @@ func (mt *multitracker) PrintStatusProgress() error {
 	caption := color.New(color.Bold).Sprint("Status progress")
 
 	_ = logboek.LogProcess(caption, logboek.LogProcessOptions{}, func() error {
-		mt.printDeploymentsStatusProgress()
+		mt.printDeploymentsAndDaemonSetsStatusProgress()
+
 		logboek.OutF("\n")
+
 		mt.printStatefulSetsStatusProgress()
+
 		return nil
 	})
 

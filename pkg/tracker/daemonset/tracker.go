@@ -23,22 +23,6 @@ import (
 	"github.com/flant/kubedog/pkg/utils"
 )
 
-type DaemonSetStatus struct {
-	extensions.DaemonSetStatus
-	Pods map[string]pod.PodStatus
-}
-
-func NewDaemonSetStatus(kubeStatus extensions.DaemonSetStatus, podsStatuses map[string]pod.PodStatus) DaemonSetStatus {
-	res := DaemonSetStatus{
-		DaemonSetStatus: kubeStatus,
-		Pods:            make(map[string]pod.PodStatus),
-	}
-	for k, v := range podsStatuses {
-		res.Pods[k] = v
-	}
-	return res
-}
-
 type Tracker struct {
 	tracker.Tracker
 	LogsFromTime time.Time
@@ -46,8 +30,12 @@ type Tracker struct {
 	State                string
 	Conditions           []string
 	FinalDaemonSetStatus extensions.DaemonSetStatus
-	lastObject           *extensions.DaemonSet
-	podStatuses          map[string]pod.PodStatus
+	CurrentReady         bool
+
+	lastObject       *extensions.DaemonSet
+	statusGeneration uint64
+	failedReason     string
+	podStatuses      map[string]pod.PodStatus
 
 	Added        chan bool
 	Ready        chan bool
@@ -125,9 +113,6 @@ func (d *Tracker) Track() error {
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			d.lastObject = object
-			d.StatusReport <- NewDaemonSetStatus(d.lastObject.Status, d.podStatuses)
-
 			ready, err := d.handleDaemonSetStatus(object)
 			if err != nil {
 				if debug.Debug() {
@@ -153,8 +138,6 @@ func (d *Tracker) Track() error {
 			if err != nil {
 				return err
 			}
-			d.lastObject = object
-			d.StatusReport <- NewDaemonSetStatus(d.lastObject.Status, d.podStatuses)
 			if ready {
 				d.Ready <- true
 			}
@@ -169,6 +152,12 @@ func (d *Tracker) Track() error {
 
 		case reason := <-d.resourceFailed:
 			d.State = "Failed"
+			d.failedReason = reason
+
+			if d.lastObject != nil {
+				d.statusGeneration++
+				d.StatusReport <- NewDaemonSetStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+			}
 			d.Failed <- reason
 
 		case pod := <-d.podAdded:
@@ -202,7 +191,8 @@ func (d *Tracker) Track() error {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				d.StatusReport <- NewDaemonSetStatus(d.lastObject.Status, d.podStatuses)
+				d.statusGeneration++
+				d.StatusReport <- NewDaemonSetStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
 			}
 
 		case <-d.Context.Done():
@@ -366,26 +356,24 @@ func (d *Tracker) handleDaemonSetStatus(object *extensions.DaemonSet) (ready boo
 		fmt.Printf("%s\n", getDaemonSetStatus(object))
 	}
 
-	msg := ""
-	msg, ready, err = DaemonSetRolloutStatus(object)
+	prevReady := false
+	if d.lastObject != nil {
+		prevReady = d.CurrentReady
+	}
+	d.lastObject = object
 
-	if debug.Debug() {
-		evList, err := utils.ListEventsForObject(d.Kube, object)
-		if err != nil {
-			return false, err
-		}
-		utils.DescribeEvents(evList)
+	status := NewDaemonSetStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+	d.CurrentReady = status.IsReady
+
+	d.statusGeneration++
+	d.StatusReport <- status
+
+	if prevReady == false && d.CurrentReady == true {
+		d.FinalDaemonSetStatus = object.Status
+		ready = true
 	}
 
-	if debug.Debug() {
-		if err == nil && ready {
-			fmt.Printf("DaemonSet READY. %s\n", msg)
-		} else {
-			fmt.Printf("DaemonSet NOT READY. %s\n", msg)
-		}
-	}
-
-	return ready, err
+	return
 }
 
 // runEventsInformer watch for DaemonSet events

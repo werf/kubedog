@@ -458,7 +458,6 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	}
 
 	prevReady := false
-
 	if d.lastObject != nil {
 		prevReady = d.CurrentReady
 	}
@@ -473,10 +472,6 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 	if prevReady == false && d.CurrentReady == true {
 		d.FinalDeploymentStatus = object.Status
 		ready = true
-	}
-
-	if ready && debug.Debug() {
-		fmt.Printf("Deployment READY.\n")
 	}
 
 	return
