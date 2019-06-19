@@ -3,7 +3,7 @@ module github.com/flant/kubedog
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/fatih/color v1.7.0
-	github.com/flant/logboek v0.2.1
+	github.com/flant/logboek v0.2.2
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/google/btree v1.0.0 // indirect
