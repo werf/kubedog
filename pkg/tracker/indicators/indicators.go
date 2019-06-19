@@ -51,6 +51,49 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 	return res
 }
 
+type Int32MultipleEqualConditialIndicator struct {
+	Value        int32
+	TargetValues []int32
+}
+
+func (indicator *Int32MultipleEqualConditialIndicator) IsReady() bool {
+	for _, val := range indicator.TargetValues {
+		if val == indicator.Value {
+			return true
+		}
+	}
+	return false
+}
+
+func (indicator *Int32MultipleEqualConditialIndicator) IsProgressing(prevIndicator *Int32MultipleEqualConditialIndicator) bool {
+	return (prevIndicator != nil) && (indicator.Value != prevIndicator.Value)
+}
+
+func (indicator *Int32MultipleEqualConditialIndicator) FormatTableElem(prevIndicator *Int32MultipleEqualConditialIndicator, opts FormatTableElemOptions) string {
+	res := ""
+
+	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
+		if opts.DisableWarningColors {
+			res += fmt.Sprintf("%d", prevIndicator.Value)
+		} else {
+			res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+		}
+		res += "=>"
+	}
+
+	if indicator.IsReady() {
+		res += color.New(color.FgGreen).Sprintf("%d", indicator.Value)
+	} else {
+		if opts.DisableWarningColors {
+			res += fmt.Sprintf("%d", indicator.Value)
+		} else {
+			res += color.New(color.FgYellow).Sprintf("%d", indicator.Value)
+		}
+	}
+
+	return res
+}
+
 type Int32EqualConditionIndicator struct {
 	Value       int32
 	TargetValue int32

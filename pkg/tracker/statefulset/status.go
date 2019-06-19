@@ -12,8 +12,9 @@ type StatefulSetStatus struct {
 
 	StatusGeneration uint64
 
-	OverallReplicasIndicator *indicators.Int32EqualConditionIndicator
 	ReadyReplicasIndicator   *indicators.Int32EqualConditionIndicator
+	CurrentReplicasIndicator *indicators.Int32EqualConditionIndicator
+	UpdatedReplicasIndicator *indicators.Int32MultipleEqualConditialIndicator
 
 	IsReady      bool
 	IsFailed     bool
@@ -41,10 +42,6 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 	}
 
 	if object.Spec.Replicas != nil {
-		res.OverallReplicasIndicator = &indicators.Int32EqualConditionIndicator{}
-		res.OverallReplicasIndicator.Value = object.Status.Replicas
-		res.OverallReplicasIndicator.TargetValue = *object.Spec.Replicas
-
 		res.ReadyReplicasIndicator = &indicators.Int32EqualConditionIndicator{}
 		res.ReadyReplicasIndicator.Value = object.Status.ReadyReplicas
 		res.ReadyReplicasIndicator.TargetValue = *object.Spec.Replicas
@@ -81,6 +78,16 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 				res.IsReady = false
 				return res
 			}
+
+			res.CurrentReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+				Value:       object.Status.CurrentReplicas,
+				TargetValue: object.Status.ReadyReplicas,
+			}
+			res.UpdatedReplicasIndicator = &indicators.Int32MultipleEqualConditialIndicator{
+				Value:        object.Status.UpdatedReplicas,
+				TargetValues: []int32{0, object.Status.CurrentReplicas},
+			}
+
 			//    current == ready, updated == 0
 			// or current == ready, updated == current (1.10 set updatedReplicas to 0, but 1.11 is not)
 			if object.Status.CurrentReplicas == object.Status.ReadyReplicas && (object.Status.UpdatedReplicas == 0 || object.Status.UpdatedReplicas == object.Status.CurrentReplicas) {
@@ -93,9 +100,20 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 
 			res.IsReady = false
 			return res
-		} else if object.Status.CurrentReplicas == partition && object.Status.UpdatedReplicas == (*object.Spec.Replicas-partition) {
-			res.IsReady = true
-			return res
+		} else {
+			res.CurrentReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+				Value:       object.Status.CurrentReplicas,
+				TargetValue: partition,
+			}
+			res.UpdatedReplicasIndicator = &indicators.Int32MultipleEqualConditialIndicator{
+				Value:        object.Status.UpdatedReplicas,
+				TargetValues: []int32{(*object.Spec.Replicas - partition)},
+			}
+
+			if object.Status.CurrentReplicas == partition && object.Status.UpdatedReplicas == (*object.Spec.Replicas-partition) {
+				res.IsReady = true
+				return res
+			}
 		}
 
 		res.IsReady = false

@@ -16,7 +16,7 @@ type DeploymentStatus struct {
 	StatusGeneration uint64
 
 	ReadyReplicasIndicator     *indicators.Int32EqualConditionIndicator
-	UpToDateReplicasIndicator  *indicators.Int32EqualConditionIndicator
+	UpdatedReplicasIndicator   *indicators.Int32EqualConditionIndicator
 	AvailableReplicasIndicator *indicators.Int32EqualConditionIndicator
 	OldReplicasIndicator       *indicators.Int32EqualConditionIndicator
 
@@ -52,7 +52,7 @@ func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64,
 			Value:       object.Status.ReadyReplicas,
 			TargetValue: *object.Spec.Replicas,
 		}
-		res.UpToDateReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+		res.UpdatedReplicasIndicator = &indicators.Int32EqualConditionIndicator{
 			Value:       object.Status.UpdatedReplicas,
 			TargetValue: *object.Spec.Replicas,
 		}
