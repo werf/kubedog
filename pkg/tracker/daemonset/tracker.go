@@ -362,10 +362,12 @@ func (d *Tracker) handleDaemonSetStatus(object *extensions.DaemonSet) (ready boo
 	}
 	d.lastObject = object
 
+	d.statusGeneration++
+
 	status := NewDaemonSetStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+
 	d.CurrentReady = status.IsReady
 
-	d.statusGeneration++
 	d.StatusReport <- status
 
 	if prevReady == false && d.CurrentReady == true {

@@ -15,10 +15,9 @@ type DeploymentStatus struct {
 
 	StatusGeneration uint64
 
-	ReadyReplicasIndicator     *indicators.Int32EqualConditionIndicator
-	UpdatedReplicasIndicator   *indicators.Int32EqualConditionIndicator
-	AvailableReplicasIndicator *indicators.Int32EqualConditionIndicator
-	OldReplicasIndicator       *indicators.Int32EqualConditionIndicator
+	ReplicasIndicator  *indicators.Int32EqualConditionIndicator
+	UpToDateIndicator  *indicators.Int32EqualConditionIndicator
+	AvailableIndicator *indicators.Int32EqualConditionIndicator
 
 	IsReady      bool
 	IsFailed     bool
@@ -32,7 +31,6 @@ func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64,
 		StatusGeneration: statusGeneration,
 		DeploymentStatus: object.Status,
 		Pods:             make(map[string]pod.PodStatus),
-		IsReady:          true,
 		IsFailed:         isFailed,
 		FailedReason:     failedReason,
 	}
@@ -48,21 +46,17 @@ func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64,
 			return res
 		}
 
-		res.ReadyReplicasIndicator = &indicators.Int32EqualConditionIndicator{
-			Value:       object.Status.ReadyReplicas,
+		res.ReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+			Value:       object.Status.Replicas,
 			TargetValue: *object.Spec.Replicas,
 		}
-		res.UpdatedReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+		res.UpToDateIndicator = &indicators.Int32EqualConditionIndicator{
 			Value:       object.Status.UpdatedReplicas,
 			TargetValue: *object.Spec.Replicas,
 		}
-		res.AvailableReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+		res.AvailableIndicator = &indicators.Int32EqualConditionIndicator{
 			Value:       object.Status.AvailableReplicas,
 			TargetValue: *object.Spec.Replicas,
-		}
-		res.OldReplicasIndicator = &indicators.Int32EqualConditionIndicator{
-			Value:       object.Status.Replicas - object.Status.UpdatedReplicas,
-			TargetValue: 0,
 		}
 
 		if object.Status.UpdatedReplicas == *(object.Spec.Replicas) &&

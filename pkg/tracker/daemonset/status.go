@@ -13,10 +13,9 @@ type DaemonSetStatus struct {
 
 	StatusGeneration uint64
 
-	ReadyReplicasIndicator     *indicators.Int32EqualConditionIndicator
-	UpdatedReplicasIndicator   *indicators.Int32EqualConditionIndicator
-	AvailableReplicasIndicator *indicators.Int32EqualConditionIndicator
-	OldReplicasIndicator       *indicators.Int32EqualConditionIndicator
+	ReplicasIndicator  *indicators.Int32EqualConditionIndicator
+	UpToDateIndicator  *indicators.Int32EqualConditionIndicator
+	AvailableIndicator *indicators.Int32EqualConditionIndicator
 
 	IsReady      bool
 	IsFailed     bool
@@ -27,8 +26,11 @@ type DaemonSetStatus struct {
 
 func NewDaemonSetStatus(object *extensions.DaemonSet, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus) DaemonSetStatus {
 	res := DaemonSetStatus{
-		DaemonSetStatus: object.Status,
-		Pods:            make(map[string]pod.PodStatus),
+		StatusGeneration: statusGeneration,
+		DaemonSetStatus:  object.Status,
+		Pods:             make(map[string]pod.PodStatus),
+		IsFailed:         isFailed,
+		FailedReason:     failedReason,
 	}
 	for k, v := range podsStatuses {
 		res.Pods[k] = v
@@ -43,22 +45,18 @@ func NewDaemonSetStatus(object *extensions.DaemonSet, statusGeneration uint64, i
 	}
 
 	if object.Generation <= object.Status.ObservedGeneration {
-		res.ReadyReplicasIndicator = &indicators.Int32EqualConditionIndicator{
-			Value:       object.Status.NumberReady,
+		res.ReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+			Value:       object.Status.CurrentNumberScheduled + object.Status.NumberMisscheduled,
 			TargetValue: object.Status.DesiredNumberScheduled,
 		}
-		res.UpdatedReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+		res.UpToDateIndicator = &indicators.Int32EqualConditionIndicator{
 			Value:       object.Status.UpdatedNumberScheduled,
 			TargetValue: object.Status.DesiredNumberScheduled,
 		}
-		res.AvailableReplicasIndicator = &indicators.Int32EqualConditionIndicator{
+		res.AvailableIndicator = &indicators.Int32EqualConditionIndicator{
 			Value:       object.Status.NumberAvailable,
 			TargetValue: object.Status.DesiredNumberScheduled,
 		}
-		//res.OldReplicasIndicator = &indicators.Int32EqualConditionIndicator{
-		//	Value:       object.Status.DesiredNumberScheduled - object.Status.UpdatedNumberScheduled,
-		//	TargetValue: 0,
-		//}
 
 		if object.Status.UpdatedNumberScheduled == object.Status.DesiredNumberScheduled && object.Status.NumberAvailable == object.Status.DesiredNumberScheduled {
 			res.IsReady = true
