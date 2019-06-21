@@ -109,7 +109,7 @@ processingPodsStatuses:
 
 				if object.Status.UpdateRevision != object.Status.CurrentRevision {
 					res.IsReady = false
-					res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("update revision %s->%s", object.Status.UpdateRevision, object.Status.CurrentRevision))
+					res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("up-to-date %d->%d", object.Status.UpdatedReplicas, *object.Spec.Replicas))
 				}
 			}
 		}
