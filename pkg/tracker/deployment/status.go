@@ -24,19 +24,39 @@ type DeploymentStatus struct {
 	FailedReason string
 
 	Pods map[string]pod.PodStatus
+	// New Pod belongs to the new ReplicaSet of the Deployment,
+	// i.e. actual up-to-date Pod of the Deployment
+	NewPodsNames []string
 }
 
-func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus) DeploymentStatus {
+func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) DeploymentStatus {
 	res := DeploymentStatus{
 		StatusGeneration: statusGeneration,
 		DeploymentStatus: object.Status,
 		Pods:             make(map[string]pod.PodStatus),
+		NewPodsNames:     newPodsNames,
 		IsFailed:         isFailed,
 		FailedReason:     failedReason,
 	}
 
+processingPodsStatuses:
 	for k, v := range podsStatuses {
 		res.Pods[k] = v
+
+		for _, newPodName := range newPodsNames {
+			if newPodName == k {
+				if v.StatusIndicator != nil {
+					// New Pod should be Running
+					v.StatusIndicator.TargetValue = "Running"
+				}
+				continue processingPodsStatuses
+			}
+		}
+
+		if v.StatusIndicator != nil {
+			// Old Pod should gone
+			v.StatusIndicator.TargetValue = ""
+		}
 	}
 
 	res.IsReady = false

@@ -15,6 +15,10 @@ type FormatTableElemOptions struct {
 
 	// Show target value in format VALUE/TARGET, show only VALUE by default
 	WithTargetValue bool
+
+	// Do not use colors for old resources. Old resource is the resource
+	// related to old ReplicaSets of Deployment for example
+	IsResourceNew bool
 }
 
 type StringEqualConditionIndicator struct {
@@ -34,7 +38,7 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 	res := ""
 
 	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
-		if opts.DisableWarningColors {
+		if !opts.IsResourceNew || opts.DisableWarningColors {
 			res += prevIndicator.Value
 		} else {
 			res += color.New(color.FgYellow).Sprintf("%s", prevIndicator.Value)
@@ -42,7 +46,9 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		res += "->"
 	}
 
-	if indicator.IsReady() {
+	if !opts.IsResourceNew {
+		res += indicator.Value
+	} else if indicator.IsReady() {
 		res += color.New(color.FgGreen).Sprintf("%s", indicator.Value)
 	} else {
 		if opts.DisableWarningColors {

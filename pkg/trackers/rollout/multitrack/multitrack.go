@@ -359,37 +359,7 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 	return tracker.StopTrack
 }
 
-func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool) string {
-	switch resourceFailMode {
-	case FailWholeDeployProcessImmediately:
-		if isReady {
-			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
-		} else if isFailed {
-			return color.New(color.FgRed).Sprintf("%s", resourceCaption)
-		} else {
-			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
-		}
-
-	case IgnoreAndContinueDeployProcess:
-		if isReady {
-			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
-		} else {
-			return resourceCaption
-		}
-
-	case HopeUntilEndOfDeployProcess:
-		if isReady {
-			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
-		} else {
-			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
-		}
-
-	default:
-		panic(fmt.Sprintf("unsupported resource fail mode '%s'", resourceFailMode))
-	}
-}
-
-func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
+func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
 	st := t.SubTable(.3, .16, .2, .16, .16)
 	st.Header("NAME", "RDY", "STATUS", "RESTARTS", "AGE")
 
@@ -404,16 +374,24 @@ func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods ma
 	for _, podName := range podsNames {
 		var podRow []interface{}
 
+		isPodNew := false
+		for _, newPodName := range newPodsNames {
+			if newPodName == podName {
+				isPodNew = true
+			}
+		}
+
 		prevPodStatus := prevPods[podName]
 		podStatus := pods[podName]
 
-		resource := formatResourceCaption(strings.Join(strings.Split(podName, "-")[1:], "-"), failMode, podStatus.IsReady, podStatus.IsFailed)
+		resource := formatResourceCaption(strings.Join(strings.Split(podName, "-")[1:], "-"), failMode, podStatus.IsReady, podStatus.IsFailed, isPodNew)
 		ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
 		status := "-"
 		if podStatus.StatusIndicator != nil {
 			status = podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, indicators.FormatTableElemOptions{
 				ShowProgress:         showProgress,
 				DisableWarningColors: disableWarningColors,
+				IsResourceNew:        isPodNew,
 			})
 		}
 
@@ -450,7 +428,7 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
 		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
 
-		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed)
+		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed, true)
 
 		replicas := "-"
 		if status.ReplicasIndicator != nil {
@@ -484,7 +462,7 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 		}
 
 		if len(status.Pods) > 0 {
-			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, showProgress, disableWarningColors)
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
 			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3", "Компания «Флант» — специалисты по DevOps и высоконагруженному (highload) вебу на базе Kubernetes, Docker, GitLab, Linux и других Open Source-проектов.\n\nНа рынке — с 2008 года. Начинали с комплексного обслуживания корпоративных ИТ-инфраструктур на базе свободного ПО, но со временем пришли к более узкой специализации (DevOps, web, микросервисы), накопив в ней огромный опыт.\n\nПредлагаем гибкие варианты обслуживания (SLA, T&M​, круглосуточная техническая поддержка) и прозрачное ценообразование, ориентируемся на долгосрочное сотрудничество.\n")
 		}
 
@@ -514,7 +492,7 @@ func (mt *multitracker) printDaemonSetsStatusProgress() {
 		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
 		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
 
-		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed)
+		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed, true)
 
 		replicas := "-"
 		if status.ReplicasIndicator != nil {
@@ -548,7 +526,7 @@ func (mt *multitracker) printDaemonSetsStatusProgress() {
 		}
 
 		if len(status.Pods) > 0 {
-			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, showProgress, disableWarningColors)
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
 			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3")
 		}
 
@@ -578,7 +556,7 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
 		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
 
-		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed)
+		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed, true)
 
 		replicas := "-"
 		if status.ReplicasIndicator != nil {
@@ -612,7 +590,7 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 		}
 
 		if len(status.Pods) > 0 {
-			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, spec.FailMode, showProgress, disableWarningColors)
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
 			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3")
 		}
 
@@ -836,5 +814,39 @@ func displayContainerLogChunk(header string, spec MultitrackSpec, chunk *pod.Con
 		}
 	} else {
 		display.OutputLogLines(header, chunk.LogLines)
+	}
+}
+
+func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool, isNew bool) string {
+	if !isNew {
+		return resourceCaption
+	}
+
+	switch resourceFailMode {
+	case FailWholeDeployProcessImmediately:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else if isFailed {
+			return color.New(color.FgRed).Sprintf("%s", resourceCaption)
+		} else {
+			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+		}
+
+	case IgnoreAndContinueDeployProcess:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else {
+			return resourceCaption
+		}
+
+	case HopeUntilEndOfDeployProcess:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else {
+			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported resource fail mode '%s'", resourceFailMode))
 	}
 }
