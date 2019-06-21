@@ -22,7 +22,6 @@ func getDeploymentStatus(client kubernetes.Interface, prevObj *extensions.Deploy
 		msgs = append(msgs, fmt.Sprintf("        - %s - %s - %s: \"%s\"", c.Type, c.Status, c.Reason, c.Message))
 	}
 	msgs = append(msgs, fmt.Sprintf("        cpl: %v, prg: %v, tim: %v,    gn: %d, ogn: %d, des: %d, rdy: %d, upd: %d, avl: %d, uav: %d",
-		debug.YesNo(utils.DeploymentReadyStatus(prevObj, &newObj.Status).IsReady),
 		debug.YesNo(utils.DeploymentProgressing(prevObj, &newObj.Status)),
 		debug.YesNo(utils.DeploymentTimedOut(prevObj, &newObj.Status)),
 		newObj.Generation,

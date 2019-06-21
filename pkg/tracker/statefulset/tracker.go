@@ -23,11 +23,6 @@ import (
 	"github.com/flant/kubedog/pkg/utils"
 )
 
-type StatefulSetStatus struct {
-	appsv1.StatefulSetStatus
-	Pods map[string]pod.PodStatus
-}
-
 type Tracker struct {
 	tracker.Tracker
 	LogsFromTime time.Time
@@ -35,8 +30,13 @@ type Tracker struct {
 	State                  string
 	Conditions             []string
 	FinalStatefulSetStatus appsv1.StatefulSetStatus
-	lastObject             *appsv1.StatefulSet
-	podStatuses            map[string]pod.PodStatus
+	CurrentReady           bool
+
+	lastObject       *appsv1.StatefulSet
+	statusGeneration uint64
+	failedReason     string
+	podStatuses      map[string]pod.PodStatus
+	podRevisions     map[string]string
 
 	Added        chan bool
 	Ready        chan bool
@@ -82,9 +82,10 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		PodLogChunk:  make(chan *replicaset.ReplicaSetPodLogChunk, 1000),
 		PodError:     make(chan replicaset.ReplicaSetPodError, 0),
 		StatusReport: make(chan StatefulSetStatus, 100),
+		TrackedPods:  make([]string, 0),
 
-		podStatuses: make(map[string]pod.PodStatus),
-		TrackedPods: make([]string, 0),
+		podStatuses:  make(map[string]pod.PodStatus),
+		podRevisions: make(map[string]string),
 
 		resourceAdded:     make(chan *appsv1.StatefulSet, 1),
 		resourceModified:  make(chan *appsv1.StatefulSet, 1),
@@ -95,17 +96,6 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		errors:            make(chan error, 0),
 		podStatusesReport: make(chan map[string]pod.PodStatus),
 	}
-}
-
-func NewStatefulSetStatus(kubeStatus appsv1.StatefulSetStatus, podsStatuses map[string]pod.PodStatus) StatefulSetStatus {
-	res := StatefulSetStatus{
-		StatefulSetStatus: kubeStatus,
-		Pods:              make(map[string]pod.PodStatus),
-	}
-	for k, v := range podsStatuses {
-		res.Pods[k] = v
-	}
-	return res
 }
 
 // Track starts tracking of StatefulSet rollout process.
@@ -125,9 +115,6 @@ func (d *Tracker) Track() (err error) {
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			d.lastObject = object
-			d.StatusReport <- NewStatefulSetStatus(d.lastObject.Status, d.podStatuses)
-
 			ready := d.handleStatefulSetState(object)
 			if debug.Debug() {
 				fmt.Printf("StatefulSet `%s` initial ready state: %v\n", d.ResourceName, ready)
@@ -136,6 +123,7 @@ func (d *Tracker) Track() (err error) {
 			switch d.State {
 			case "":
 				d.State = "Started"
+
 				d.Added <- ready
 			}
 
@@ -143,30 +131,34 @@ func (d *Tracker) Track() (err error) {
 			d.runEventsInformer()
 
 		case object := <-d.resourceModified:
-			d.lastObject = object
-			d.StatusReport <- NewStatefulSetStatus(d.lastObject.Status, d.podStatuses)
-
 			ready := d.handleStatefulSetState(object)
 			if ready {
-				d.FinalStatefulSetStatus = object.Status
 				d.Ready <- true
 			}
 		case <-d.resourceDeleted:
 			d.lastObject = nil
-			d.StatusReport <- StatefulSetStatus{}
-
 			d.State = "Deleted"
-			d.Failed <- "resource deleted"
+			d.failedReason = "resource deleted"
+			d.StatusReport <- StatefulSetStatus{}
+			d.Failed <- d.failedReason
 			// TODO: This is not fail on tracker level
 
 		case reason := <-d.resourceFailed:
 			d.State = "Failed"
+			d.failedReason = reason
+
+			if d.lastObject != nil {
+				d.statusGeneration++
+				d.StatusReport <- NewStatefulSetStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses, d.getNewPodsNames())
+			}
 			d.Failed <- reason
 
 		case pod := <-d.podAdded:
 			if debug.Debug() {
 				fmt.Printf("po/%s added\n", pod.Name)
 			}
+
+			d.podRevisions[pod.Name] = pod.Labels["controller-revision-hash"]
 
 			rsPod := replicaset.ReplicaSetPod{
 				Name:       pod.Name,
@@ -194,7 +186,8 @@ func (d *Tracker) Track() (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				d.StatusReport <- NewStatefulSetStatus(d.lastObject.Status, d.podStatuses)
+				d.statusGeneration++
+				d.StatusReport <- NewStatefulSetStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses, d.getNewPodsNames())
 			}
 
 		case <-d.Context.Done():
@@ -355,7 +348,7 @@ func (d *Tracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) bool {
+func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) (ready bool) {
 	if debug.Debug() {
 		fmt.Printf("%s\n", getStatefulSetStatus(object))
 		msg, ready, err := StatefulSetRolloutStatus(object)
@@ -369,7 +362,26 @@ func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) bool {
 		}
 	}
 
-	return StatefulSetComplete(object)
+	prevReady := false
+	if d.lastObject != nil {
+		prevReady = d.CurrentReady
+	}
+	d.lastObject = object
+
+	d.statusGeneration++
+
+	status := NewStatefulSetStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses, d.getNewPodsNames())
+
+	d.CurrentReady = status.IsReady
+
+	d.StatusReport <- status
+
+	if prevReady == false && d.CurrentReady == true {
+		d.FinalStatefulSetStatus = object.Status
+		ready = true
+	}
+
+	return
 }
 
 // runEventsInformer watch for StatefulSet events
@@ -383,4 +395,20 @@ func (d *Tracker) runEventsInformer() {
 	eventInformer.Run()
 
 	return
+}
+
+func (d *Tracker) getNewPodsNames() []string {
+	res := []string{}
+
+	for podName, _ := range d.podStatuses {
+		if podRevision, hasKey := d.podRevisions[podName]; hasKey {
+			if d.lastObject != nil {
+				if d.lastObject.Status.UpdateRevision == podRevision {
+					res = append(res, podName)
+				}
+			}
+		}
+	}
+
+	return res
 }

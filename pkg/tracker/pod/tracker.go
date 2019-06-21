@@ -23,21 +23,6 @@ import (
 	"github.com/flant/kubedog/pkg/tracker/event"
 )
 
-type PodStatus struct {
-	corev1.PodStatus
-
-	IsFailed     bool
-	FailedReason string
-}
-
-func NewPodStatus(isFailed bool, failedReason string, kubeStatus corev1.PodStatus) PodStatus {
-	return PodStatus{
-		PodStatus:    kubeStatus,
-		IsFailed:     isFailed,
-		FailedReason: failedReason,
-	}
-}
-
 type ContainerError struct {
 	Message       string
 	ContainerName string
@@ -148,8 +133,13 @@ func (pod *Tracker) Start() error {
 			}
 
 		case object := <-pod.objectAdded:
-			pod.lastObject = object
-			pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
+			done, err := pod.handlePodState(object)
+			if err != nil {
+				return err
+			}
+			if done {
+				return nil
+			}
 
 			pod.runEventsInformer()
 
@@ -164,18 +154,7 @@ func (pod *Tracker) Start() error {
 				}
 			}
 
-			done, err := pod.handlePodState(object)
-			if err != nil {
-				return err
-			}
-			if done {
-				return nil
-			}
-
 		case object := <-pod.objectModified:
-			pod.lastObject = object
-			pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
-
 			done, err := pod.handlePodState(object)
 			if err != nil {
 				return err
@@ -207,7 +186,7 @@ func (pod *Tracker) Start() error {
 			pod.failedReason = reason
 
 			if pod.lastObject != nil {
-				pod.StatusReport <- NewPodStatus(pod.State == "Failed", pod.failedReason, pod.lastObject.Status)
+				pod.StatusReport <- NewPodStatus(pod.lastObject, pod.State == "Failed", pod.failedReason)
 			}
 			pod.Failed <- reason
 
@@ -221,15 +200,19 @@ func (pod *Tracker) Start() error {
 }
 
 func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
+	pod.lastObject = object
+
+	podStatus := NewPodStatus(object, pod.State == "Failed", pod.failedReason)
+
+	pod.StatusReport <- podStatus
+
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
 	}
 
-	for _, cond := range object.Status.Conditions {
-		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-			pod.Ready <- struct{}{}
-		}
+	if podStatus.IsReady {
+		pod.Ready <- struct{}{}
 	}
 
 	if len(pod.TrackedContainers) == 0 {

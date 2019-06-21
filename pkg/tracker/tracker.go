@@ -53,21 +53,3 @@ func ResourceErrorf(format string, a ...interface{}) error {
 		msg: fmt.Sprintf(format, a...),
 	}
 }
-
-type ReadyStatus struct {
-	IsReady         bool
-	ReadyConditions []ReadyCondition
-
-	IsProgressing         bool
-	ProgressingConditions []ProgressingCondition
-}
-
-type ProgressingCondition struct {
-	Message     string
-	IsSatisfied bool
-}
-
-type ReadyCondition struct {
-	Message     string
-	IsSatisfied bool
-}
