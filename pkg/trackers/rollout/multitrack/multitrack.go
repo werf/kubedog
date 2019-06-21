@@ -463,7 +463,12 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 
 		if len(status.Pods) > 0 {
 			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3", "Компания «Флант» — специалисты по DevOps и высоконагруженному (highload) вебу на базе Kubernetes, Docker, GitLab, Linux и других Open Source-проектов.\n\nНа рынке — с 2008 года. Начинали с комплексного обслуживания корпоративных ИТ-инфраструктур на базе свободного ПО, но со временем пришли к более узкой специализации (DevOps, web, микросервисы), накопив в ней огромный опыт.\n\nПредлагаем гибкие варианты обслуживания (SLA, T&M​, круглосуточная техническая поддержка) и прозрачное ценообразование, ориентируемся на долгосрочное сотрудничество.\n")
+			extraMsg := ""
+			if len(status.WaitingForMessages) > 0 {
+				extraMsg += "---\n"
+				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+			}
+			st.Commit(extraMsg)
 		}
 
 		mt.PrevDeploymentsStatuses[name] = status
@@ -527,7 +532,12 @@ func (mt *multitracker) printDaemonSetsStatusProgress() {
 
 		if len(status.Pods) > 0 {
 			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3")
+			extraMsg := ""
+			if len(status.WaitingForMessages) > 0 {
+				extraMsg += "---\n"
+				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+			}
+			st.Commit(extraMsg)
 		}
 
 		mt.PrevDaemonSetsStatuses[name] = status
@@ -591,7 +601,12 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 
 		if len(status.Pods) > 0 {
 			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			st.Commit("Waiting for: Current 0 -> 3, Ready 2 -> 3", "ALOALO", "REKLAMA", "LINE1\nLINE2\nLINE3")
+			extraMsg := ""
+			if len(status.WaitingForMessages) > 0 {
+				extraMsg += "---\n"
+				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+			}
+			st.Commit(extraMsg)
 		}
 
 		mt.PrevStatefulSetsStatuses[name] = status

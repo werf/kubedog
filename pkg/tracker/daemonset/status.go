@@ -17,6 +17,8 @@ type DaemonSetStatus struct {
 	UpToDateIndicator  *indicators.Int32EqualConditionIndicator
 	AvailableIndicator *indicators.Int32EqualConditionIndicator
 
+	WaitingForMessages []string
+
 	IsReady      bool
 	IsFailed     bool
 	FailedReason string
@@ -63,7 +65,7 @@ processingPodsStatuses:
 		return res
 	}
 
-	if object.Generation <= object.Status.ObservedGeneration {
+	if object.Status.ObservedGeneration >= object.Generation {
 		res.ReplicasIndicator = &indicators.Int32EqualConditionIndicator{
 			Value:       object.Status.CurrentNumberScheduled + object.Status.NumberMisscheduled,
 			TargetValue: object.Status.DesiredNumberScheduled,
@@ -77,10 +79,18 @@ processingPodsStatuses:
 			TargetValue: object.Status.DesiredNumberScheduled,
 		}
 
-		if object.Status.UpdatedNumberScheduled == object.Status.DesiredNumberScheduled && object.Status.NumberAvailable == object.Status.DesiredNumberScheduled {
-			res.IsReady = true
-			return res
+		res.IsReady = true
+
+		if object.Status.UpdatedNumberScheduled != object.Status.DesiredNumberScheduled {
+			res.IsReady = false
+			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("up-to-date %d->%d", object.Status.UpdatedNumberScheduled, object.Status.DesiredNumberScheduled))
 		}
+		if object.Status.NumberAvailable != object.Status.DesiredNumberScheduled {
+			res.IsReady = false
+			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("available %d->%d", object.Status.NumberAvailable, object.Status.DesiredNumberScheduled))
+		}
+	} else {
+		res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("observed generation %d should be >= %d", object.Status.ObservedGeneration, object.Generation))
 	}
 
 	return res

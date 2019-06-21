@@ -19,6 +19,8 @@ type DeploymentStatus struct {
 	UpToDateIndicator  *indicators.Int32EqualConditionIndicator
 	AvailableIndicator *indicators.Int32EqualConditionIndicator
 
+	WaitingForMessages []string
+
 	IsReady      bool
 	IsFailed     bool
 	FailedReason string
@@ -61,7 +63,7 @@ processingPodsStatuses:
 
 	res.IsReady = false
 
-	if object.Generation <= object.Status.ObservedGeneration {
+	if object.Status.ObservedGeneration >= object.Generation {
 		if object.Spec.Replicas == nil {
 			return res
 		}
@@ -79,13 +81,21 @@ processingPodsStatuses:
 			TargetValue: *object.Spec.Replicas,
 		}
 
-		if object.Status.UpdatedReplicas == *(object.Spec.Replicas) &&
-			object.Status.Replicas == *(object.Spec.Replicas) &&
-			object.Status.AvailableReplicas == *(object.Spec.Replicas) &&
-			object.Status.ObservedGeneration >= object.Generation {
-			res.IsReady = true
-			return res
+		res.IsReady = true
+		if object.Status.UpdatedReplicas != *object.Spec.Replicas {
+			res.IsReady = false
+			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("up-to-date %d->%d", object.Status.UpdatedReplicas, *object.Spec.Replicas))
 		}
+		if object.Status.Replicas != *object.Spec.Replicas {
+			res.IsReady = false
+			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("replicas %d->%d", object.Status.Replicas, *object.Spec.Replicas))
+		}
+		if object.Status.AvailableReplicas != *object.Spec.Replicas {
+			res.IsReady = false
+			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("available %d->%d", object.Status.AvailableReplicas, *object.Spec.Replicas))
+		}
+	} else {
+		res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("observed generation %d should be >= %d", object.Status.ObservedGeneration, object.Generation))
 	}
 
 	return res
