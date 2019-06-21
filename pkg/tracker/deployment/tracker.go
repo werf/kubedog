@@ -38,6 +38,7 @@ type Tracker struct {
 	statusGeneration uint64
 	failedReason     string
 	podStatuses      map[string]pod.PodStatus
+	rsNameByPod      map[string]string
 
 	Added           chan bool
 	Ready           chan bool
@@ -94,7 +95,9 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 
 		knownReplicaSets: make(map[string]*extensions.ReplicaSet),
 		podStatuses:      make(map[string]pod.PodStatus),
-		TrackedPods:      make([]string, 0),
+		rsNameByPod:      make(map[string]string),
+
+		TrackedPods: make([]string, 0),
 
 		//PodError: make(chan PodError, 0),
 		resourceAdded:         make(chan *extensions.Deployment, 1),
@@ -174,7 +177,11 @@ func (d *Tracker) Track() (err error) {
 
 			if d.lastObject != nil {
 				d.statusGeneration++
-				d.StatusReport <- NewDeploymentStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+				newPodsNames, err := d.getNewPodsNames()
+				if err != nil {
+					return err
+				}
+				d.StatusReport <- NewDeploymentStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses, newPodsNames)
 			}
 			d.Failed <- reason
 
@@ -211,6 +218,8 @@ func (d *Tracker) Track() (err error) {
 			}
 
 			rsName := utils.GetPodReplicaSetName(pod)
+			d.rsNameByPod[pod.Name] = rsName
+
 			rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
 			if err != nil {
 				return err
@@ -246,7 +255,11 @@ func (d *Tracker) Track() (err error) {
 			}
 			if d.lastObject != nil {
 				d.statusGeneration++
-				d.StatusReport <- NewDeploymentStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+				newPodsNames, err := d.getNewPodsNames()
+				if err != nil {
+					return err
+				}
+				d.StatusReport <- NewDeploymentStatus(d.lastObject, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses, newPodsNames)
 			}
 
 		case rsChunk := <-d.replicaSetPodLogChunk:
@@ -274,6 +287,24 @@ func (d *Tracker) Track() (err error) {
 	}
 
 	return err
+}
+
+func (d *Tracker) getNewPodsNames() ([]string, error) {
+	res := []string{}
+
+	for podName, _ := range d.podStatuses {
+		if rsName, hasKey := d.rsNameByPod[podName]; hasKey {
+			rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
+			if err != nil {
+				return nil, err
+			}
+			if rsNew {
+				res = append(res, podName)
+			}
+		}
+	}
+
+	return res, nil
 }
 
 // runDeploymentInformer watch for deployment events
@@ -465,7 +496,11 @@ func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bo
 
 	d.statusGeneration++
 
-	status := NewDeploymentStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses)
+	newPodsNames, err := d.getNewPodsNames()
+	if err != nil {
+		return false, err
+	}
+	status := NewDeploymentStatus(object, d.statusGeneration, (d.State == "Failed"), d.failedReason, d.podStatuses, newPodsNames)
 
 	d.CurrentReady = status.IsReady
 

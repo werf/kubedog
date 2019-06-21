@@ -21,19 +21,38 @@ type DaemonSetStatus struct {
 	IsFailed     bool
 	FailedReason string
 
-	Pods map[string]pod.PodStatus
+	Pods         map[string]pod.PodStatus
+	NewPodsNames []string
 }
 
-func NewDaemonSetStatus(object *extensions.DaemonSet, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus) DaemonSetStatus {
+func NewDaemonSetStatus(object *extensions.DaemonSet, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) DaemonSetStatus {
 	res := DaemonSetStatus{
 		StatusGeneration: statusGeneration,
 		DaemonSetStatus:  object.Status,
 		Pods:             make(map[string]pod.PodStatus),
+		NewPodsNames:     newPodsNames,
 		IsFailed:         isFailed,
 		FailedReason:     failedReason,
 	}
+
+processingPodsStatuses:
 	for k, v := range podsStatuses {
 		res.Pods[k] = v
+
+		for _, newPodName := range newPodsNames {
+			if newPodName == k {
+				if v.StatusIndicator != nil {
+					// New Pod should be Running
+					v.StatusIndicator.TargetValue = "Running"
+				}
+				continue processingPodsStatuses
+			}
+		}
+
+		if v.StatusIndicator != nil {
+			// Old Pod should gone
+			v.StatusIndicator.TargetValue = ""
+		}
 	}
 
 	res.IsReady = false
