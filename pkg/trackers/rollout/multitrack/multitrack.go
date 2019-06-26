@@ -42,7 +42,7 @@ const (
 )
 
 type MultitrackSpecs struct {
-	Pods         []MultitrackSpec
+	//Pods         []MultitrackSpec
 	Deployments  []MultitrackSpec
 	StatefulSets []MultitrackSpec
 	DaemonSets   []MultitrackSpec
@@ -93,13 +93,14 @@ func setDefaultSpecValues(spec *MultitrackSpec) {
 }
 
 func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts MultitrackOptions) error {
-	if len(specs.Pods)+len(specs.Deployments)+len(specs.StatefulSets)+len(specs.DaemonSets)+len(specs.Jobs) == 0 {
+	if len(specs.Deployments)+len(specs.StatefulSets)+len(specs.DaemonSets)+len(specs.Jobs) == 0 {
 		return nil
 	}
 
-	for i := range specs.Pods {
-		setDefaultSpecValues(&specs.Pods[i])
-	}
+	// TODO
+	//for i := range specs.Pods {
+	//	setDefaultSpecValues(&specs.Pods[i])
+	//}
 	for i := range specs.Deployments {
 		setDefaultSpecValues(&specs.Deployments[i])
 	}
@@ -117,9 +118,6 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 	doneChan := make(chan struct{}, 0)
 
 	mt := multitracker{
-		TrackingPods: make(map[string]*multitrackerResourceState),
-		PodsStatuses: make(map[string]pod.PodStatus),
-
 		DeploymentsSpecs:        make(map[string]MultitrackSpec),
 		TrackingDeployments:     make(map[string]*multitrackerResourceState),
 		DeploymentsStatuses:     make(map[string]deployment.DeploymentStatus),
@@ -135,8 +133,10 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		DaemonSetsStatuses:     make(map[string]daemonset.DaemonSetStatus),
 		PrevDaemonSetsStatuses: make(map[string]daemonset.DaemonSetStatus),
 
-		TrackingJobs: make(map[string]*multitrackerResourceState),
-		JobsStatuses: make(map[string]job.JobStatus),
+		JobsSpecs:        make(map[string]MultitrackSpec),
+		TrackingJobs:     make(map[string]*multitrackerResourceState),
+		JobsStatuses:     make(map[string]job.JobStatus),
+		PrevJobsStatuses: make(map[string]job.JobStatus),
 	}
 
 	statusReportTicker := time.NewTicker(5 * time.Second)
@@ -144,17 +144,6 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 	var wg sync.WaitGroup
 
-	for _, spec := range specs.Pods {
-		mt.TrackingPods[spec.ResourceName] = &multitrackerResourceState{}
-
-		wg.Add(1)
-		go func(spec MultitrackSpec) {
-			if err := mt.TrackPod(kube, spec, opts); err != nil {
-				errorChan <- fmt.Errorf("po/%s track failed: %s", spec.ResourceName, err)
-			}
-			wg.Done()
-		}(spec)
-	}
 	for _, spec := range specs.Deployments {
 		mt.DeploymentsSpecs[spec.ResourceName] = spec
 		mt.TrackingDeployments[spec.ResourceName] = &multitrackerResourceState{}
@@ -192,6 +181,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		}(spec)
 	}
 	for _, spec := range specs.Jobs {
+		mt.JobsSpecs[spec.ResourceName] = spec
 		mt.TrackingJobs[spec.ResourceName] = &multitrackerResourceState{}
 
 		wg.Add(1)
@@ -252,9 +242,6 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 }
 
 type multitracker struct {
-	TrackingPods map[string]*multitrackerResourceState
-	PodsStatuses map[string]pod.PodStatus
-
 	DeploymentsSpecs        map[string]MultitrackSpec
 	TrackingDeployments     map[string]*multitrackerResourceState
 	DeploymentsStatuses     map[string]deployment.DeploymentStatus
@@ -270,8 +257,10 @@ type multitracker struct {
 	DaemonSetsStatuses     map[string]daemonset.DaemonSetStatus
 	PrevDaemonSetsStatuses map[string]daemonset.DaemonSetStatus
 
-	TrackingJobs map[string]*multitrackerResourceState
-	JobsStatuses map[string]job.JobStatus
+	JobsSpecs        map[string]MultitrackSpec
+	TrackingJobs     map[string]*multitrackerResourceState
+	JobsStatuses     map[string]job.JobStatus
+	PrevJobsStatuses map[string]job.JobStatus
 
 	handlerMux sync.Mutex
 }
@@ -284,7 +273,6 @@ type multitrackerResourceState struct {
 
 func (mt *multitracker) isTrackingAnyNonFailedResource() bool {
 	for _, states := range []map[string]*multitrackerResourceState{
-		mt.TrackingPods,
 		mt.TrackingDeployments,
 		mt.TrackingStatefulSets,
 		mt.TrackingDaemonSets,
@@ -302,7 +290,6 @@ func (mt *multitracker) isTrackingAnyNonFailedResource() bool {
 
 func (mt *multitracker) hasFailedTrackingResources() bool {
 	for _, states := range []map[string]*multitrackerResourceState{
-		mt.TrackingPods,
 		mt.TrackingDeployments,
 		mt.TrackingStatefulSets,
 		mt.TrackingDaemonSets,
@@ -320,12 +307,6 @@ func (mt *multitracker) hasFailedTrackingResources() bool {
 func (mt *multitracker) formatFailedTrackingResourcesError() error {
 	msgParts := []string{}
 
-	for name, state := range mt.TrackingPods {
-		if !state.IsFailed {
-			continue
-		}
-		msgParts = append(msgParts, fmt.Sprintf("po/%s failed: %s", name, state.LastFailureReason))
-	}
 	for name, state := range mt.TrackingDeployments {
 		if !state.IsFailed {
 			continue
@@ -361,7 +342,7 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 
 func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
 	st := t.SubTable(.3, .16, .2, .16, .16)
-	st.Header("NAME", "RDY", "STATUS", "RESTARTS", "AGE")
+	st.Header("POD", "RDY", "STATUS", "RESTARTS", "AGE")
 
 	podsNames := []string{}
 	for podName := range pods {
@@ -384,8 +365,15 @@ func (mt *multitracker) printChildPodsStatusProgress(t *utils.Table, prevPods ma
 		prevPodStatus := prevPods[podName]
 		podStatus := pods[podName]
 
-		resource := formatResourceCaption(strings.Join(strings.Split(podName, "-")[1:], "-"), failMode, podStatus.IsReady, podStatus.IsFailed, isPodNew)
+		isReady := false
+		if podStatus.StatusIndicator != nil {
+			isReady = podStatus.StatusIndicator.IsReady()
+		}
+
+		resource := formatResourceCaption(strings.Join(strings.Split(podName, "-")[1:], "-"), failMode, isReady, podStatus.IsFailed, isPodNew)
+
 		ready := fmt.Sprintf("%d/%d", podStatus.ReadyContainers, podStatus.TotalContainers)
+
 		status := "-"
 		if podStatus.StatusIndicator != nil {
 			status = podStatus.StatusIndicator.FormatTableElem(prevPodStatus.StatusIndicator, indicators.FormatTableElemOptions{
@@ -414,7 +402,7 @@ func (mt *multitracker) printDeploymentsStatusProgress() {
 	t.Header("DEPLOYMENT", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
-	for name := range mt.DeploymentsStatuses {
+	for name := range mt.DeploymentsSpecs {
 		resourcesNames = append(resourcesNames, name)
 	}
 	sort.Strings(resourcesNames)
@@ -483,7 +471,7 @@ func (mt *multitracker) printDaemonSetsStatusProgress() {
 	t.Header("DAEMONSET", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
-	for name := range mt.DaemonSetsStatuses {
+	for name := range mt.DaemonSetsSpecs {
 		resourcesNames = append(resourcesNames, name)
 	}
 	sort.Strings(resourcesNames)
@@ -552,7 +540,7 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 	t.Header("STATEFULSET", "REPLICAS", "READY", "UP-TO-DATE")
 
 	resourcesNames := []string{}
-	for name := range mt.StatefulSetsStatuses {
+	for name := range mt.StatefulSetsSpecs {
 		resourcesNames = append(resourcesNames, name)
 	}
 	sort.Strings(resourcesNames)
@@ -615,11 +603,71 @@ func (mt *multitracker) printStatefulSetsStatusProgress() {
 	_, _ = logboek.OutF(t.Render())
 }
 
+func (mt *multitracker) printJobsProgress() {
+	t := utils.NewTable(.4, .1, .1, .1, .15, .15)
+	t.SetWidth(logboek.ContentWidth() - 1)
+	t.Header("JOB", "ACTIVE", "SUCCEEDED", "FAILED", "DURATION", "AGE")
+
+	resourcesNames := []string{}
+	for name := range mt.JobsSpecs {
+		resourcesNames = append(resourcesNames, name)
+	}
+	sort.Strings(resourcesNames)
+
+	for _, name := range resourcesNames {
+		prevStatus := mt.PrevJobsStatuses[name]
+		status := mt.JobsStatuses[name]
+
+		spec := mt.JobsSpecs[name]
+
+		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
+		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
+
+		resource := formatResourceCaption(name, spec.FailMode, status.IsComplete, status.IsFailed, true)
+
+		succeeded := "-"
+		if status.SucceededIndicator != nil {
+			succeeded = status.SucceededIndicator.FormatTableElem(prevStatus.SucceededIndicator, indicators.FormatTableElemOptions{
+				ShowProgress:         showProgress,
+				DisableWarningColors: disableWarningColors,
+			})
+		}
+
+		if status.IsFailed {
+			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+		} else {
+			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age)
+		}
+
+		if len(status.Pods) > 0 {
+			newPodsNames := []string{}
+			for podName := range status.Pods {
+				newPodsNames = append(newPodsNames, podName)
+			}
+
+			st := mt.printChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, newPodsNames, spec.FailMode, showProgress, disableWarningColors)
+
+			extraMsg := ""
+			if len(status.WaitingForMessages) > 0 {
+				extraMsg += "---\n"
+				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+			}
+			st.Commit(extraMsg)
+		}
+
+		mt.PrevJobsStatuses[name] = status
+	}
+
+	_, _ = logboek.OutF(t.Render())
+}
+
 func (mt *multitracker) PrintStatusProgress() error {
 	caption := color.New(color.Bold).Sprint("Status progress")
 
 	_ = logboek.LogProcess(caption, logboek.LogProcessOptions{}, func() error {
 		mt.printDeploymentsStatusProgress()
+
+		// FIXME: optional \n
 
 		logboek.OutF("\n")
 
@@ -629,145 +677,12 @@ func (mt *multitracker) PrintStatusProgress() error {
 
 		mt.printStatefulSetsStatusProgress()
 
+		logboek.OutF("\n")
+
+		mt.printJobsProgress()
+
 		return nil
 	})
-
-	// mt.printStatefulSetsStatusProgress()
-
-	// for name, status := range mt.PodsStatuses {
-	// 	display.OutF("├ po/%s\n", name)
-
-	// 	if status.Phase != "" {
-	// 		display.OutF("│   Phase:%s\n", status.Phase)
-	// 	}
-
-	// 	if len(status.Conditions) > 0 {
-	// 		display.OutF("│   Conditions:\n")
-	// 	}
-	// 	for _, cond := range status.Conditions {
-	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-	// 		if cond.Reason != "" {
-	// 			display.OutF(" %s", cond.Reason)
-	// 		}
-	// 		if cond.Message != "" {
-	// 			display.OutF(" %s", cond.Message)
-	// 		}
-	// 		display.OutF("\n")
-	// 	}
-	// 			display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))// }
-
-	// unreadyMsgs := []string{}
-	// for _, cond := range status.ReadyStatus.ReadyConditions {
-	// 	if !cond.IsSatisfied {
-	// 		unreadyMsgs = append(unreadyMsgs, cond.Message)
-	// 	}
-	// }
-	// if len(unreadyMsgs) > 0 {
-	// 	display.OutF("│   %s\n", color.New(color.FgYellow).Sprintf("⌚ %s", strings.Join(unreadyMsgs, ", ")))
-	// }
-
-	// for _, cond := range status.ReadyStatus.ReadyConditions {
-	// 	if cond.IsSatisfied {
-	// 		if _, hasKey := mt.ShownDeploymentMessages[name][cond.Message]; !hasKey {
-	// 			display.OutF("│   %s\n", color.New(color.FgGreen).Sprintf("✅ %s", cond.Message))
-	// 			mt.ShownDeploymentMessages[name][cond.Message] = struct{}{}
-	// 		}
-	// 	}
-	// }
-
-	// 		for podName, podStatus := range status.Pods {
-	// 			if podStatus.IsFailed {
-	// 				display.OutF("│   %s\n", color.New(color.FgRed).Sprintf("❌ pod/%s %s", podName, podStatus.FailedReason))
-	// 			}
-	// 		}
-	// 	}
-	// }
-
-	// for name, status := range mt.StatefulSetsStatuses {
-	// 	display.OutF("├ sts/%s\n", name)
-	// 	display.OutF("│   Replicas:%d ReadyReplicas:%d CurrentReplicas:%d UpdatedReplicas:%d\n", status.Replicas, status.ReadyReplicas, status.CurrentReplicas, status.UpdatedReplicas)
-	// 	if len(status.Conditions) > 0 {
-	// 		display.OutF("│   Conditions:\n")
-	// 	}
-	// 	for _, cond := range status.Conditions {
-	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-	// 		if cond.Reason != "" {
-	// 			display.OutF(" %s", cond.Reason)
-	// 		}
-	// 		if cond.Message != "" {
-	// 			display.OutF(" %s", cond.Message)
-	// 		}
-	// 		display.OutF("\n")
-	// 	}
-	// }
-
-	// for name, status := range mt.DaemonSetsStatuses {
-	// 	display.OutF("├ ds/%s\n", name)
-	// 	display.OutF("│   CurrentNumberScheduled:%d NumberReady:%d NumberAvailable:%d NumberUnavailable:%d\n", status.CurrentNumberScheduled, status.NumberReady, status.NumberAvailable, status.NumberUnavailable)
-	// 	if len(status.Conditions) > 0 {
-	// 		display.OutF("│   Conditions:\n")
-	// 	}
-	// 	for _, cond := range status.Conditions {
-	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-	// 		if cond.Reason != "" {
-	// 			display.OutF(" %s", cond.Reason)
-	// 		}
-	// 		if cond.Message != "" {
-	// 			display.OutF(" %s", cond.Message)
-	// 		}
-	// 		display.OutF("\n")
-	// 	}
-	// }
-
-	// for name, status := range mt.JobsStatuses {
-	// 	display.OutF("├ job/%s\n", name)
-	// 	display.OutF("│   Active:%d Succeeded:%d Failed:%d\n", status.Active, status.Succeeded, status.Failed)
-	// 	display.OutF("│   StartTime:%s CompletionTime:%s\n", status.StartTime, status.CompletionTime)
-	// 	if len(status.Conditions) > 0 {
-	// 		display.OutF("│   Conditions:\n")
-	// 	}
-	// 	for _, cond := range status.Conditions {
-	// 		display.OutF("│   - %s %s:%s", cond.LastTransitionTime, cond.Type, cond.Status)
-	// 		if cond.Reason != "" {
-	// 			display.OutF(" %s", cond.Reason)
-	// 		}
-	// 		if cond.Message != "" {
-	// 			display.OutF(" %s", cond.Message)
-	// 		}
-	// 		display.OutF("\n")
-	// 	}
-	// }
-
-	// for name := range mt.TrackingPods {
-	// 	if _, hasKey := mt.PodsStatuses[name]; hasKey {
-	// 		continue
-	// 	}
-	// 	display.OutF("├ po/%s status unavailable\n", name)
-	// }
-	// for name := range mt.TrackingDeployments {
-	// 	if _, hasKey := mt.DeploymentsStatuses[name]; hasKey {
-	// 		continue
-	// 	}
-	// 	display.OutF("├ deploy/%s status unavailable\n", name)
-	// }
-	// for name := range mt.TrackingStatefulSets {
-	// 	if _, hasKey := mt.StatefulSetsStatuses[name]; hasKey {
-	// 		continue
-	// 	}
-	// 	display.OutF("├ sts/%s status unavailable\n", name)
-	// }
-	// for name := range mt.TrackingDaemonSets {
-	// 	if _, hasKey := mt.DaemonSetsStatuses[name]; hasKey {
-	// 		continue
-	// 	}
-	// 	display.OutF("├ ds/%s status unavailable\n", name)
-	// }
-	// for name := range mt.TrackingJobs {
-	// 	if _, hasKey := mt.JobsStatuses[name]; hasKey {
-	// 		continue
-	// 	}
-	// 	display.OutF("├ job/%s status unavailable\n", name)
-	// }
 
 	return nil
 }
@@ -864,4 +779,8 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 	default:
 		panic(fmt.Sprintf("unsupported resource fail mode '%s'", resourceFailMode))
 	}
+}
+
+func podContainerLogChunkHeader(podName string, chunk *pod.ContainerLogChunk) string {
+	return fmt.Sprintf("po/%s %s", podName, chunk.ContainerName)
 }

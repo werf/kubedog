@@ -3,14 +3,13 @@ package utils
 import (
 	"fmt"
 	"strings"
-	"time"
+
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/client-go/kubernetes"
-	"sort"
 )
 
 // SortableEvents implements sort.Interface for []api.Event based on the Timestamp field
@@ -35,16 +34,6 @@ func FormatEventSource(es corev1.EventSource) string {
 		EventSourceString = append(EventSourceString, es.Host)
 	}
 	return strings.Join(EventSourceString, ", ")
-}
-
-// translateTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
-func TranslateTimestampSince(timestamp metav1.Time) string {
-	if timestamp.IsZero() {
-		return "<unknown>"
-	}
-
-	return duration.HumanDuration(time.Since(timestamp.Time))
 }
 
 func DescribeEvents(el *corev1.EventList) {

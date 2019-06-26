@@ -109,10 +109,8 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case <-job.Succeeded:
-			if debug.Debug() {
-				fmt.Printf("Job `%s` succeeded: pods failed: %d, pods succeeded: %d\n", job.ResourceName, job.FinalJobStatus.Failed, job.FinalJobStatus.Succeeded)
-			}
+		case status := <-job.Succeeded:
+			f.setStatus(status)
 
 			if f.OnSucceededFunc != nil {
 				err := f.OnSucceededFunc()
@@ -226,7 +224,10 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 func (f *feed) setStatus(status JobStatus) {
 	f.statusMux.Lock()
 	defer f.statusMux.Unlock()
-	f.status = status
+
+	if status.StatusGeneration > f.status.StatusGeneration {
+		f.status = status
+	}
 }
 
 func (f *feed) GetStatus() JobStatus {

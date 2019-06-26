@@ -54,6 +54,7 @@ type Tracker struct {
 	ContainerLogChunk chan *ContainerLogChunk
 	ContainerError    chan ContainerError
 	StatusReport      chan PodStatus
+	LastStatus        PodStatus
 
 	State                           tracker.TrackerState
 	ContainerTrackerStates          map[string]tracker.TrackerState
@@ -165,7 +166,8 @@ func (pod *Tracker) Start() error {
 
 		case <-pod.objectDeleted:
 			pod.lastObject = nil
-			pod.StatusReport <- PodStatus{}
+			pod.LastStatus = PodStatus{}
+			pod.StatusReport <- pod.LastStatus
 
 			keys := []string{}
 			for k := range pod.ContainerTrackerStates {
@@ -186,7 +188,8 @@ func (pod *Tracker) Start() error {
 			pod.failedReason = reason
 
 			if pod.lastObject != nil {
-				pod.StatusReport <- NewPodStatus(pod.lastObject, pod.State == "Failed", pod.failedReason)
+				pod.LastStatus = NewPodStatus(pod.lastObject, pod.State == "Failed", pod.failedReason)
+				pod.StatusReport <- pod.LastStatus
 			}
 			pod.Failed <- reason
 
@@ -202,16 +205,16 @@ func (pod *Tracker) Start() error {
 func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
 	pod.lastObject = object
 
-	podStatus := NewPodStatus(object, pod.State == "Failed", pod.failedReason)
+	pod.LastStatus = NewPodStatus(object, pod.State == "Failed", pod.failedReason)
 
-	pod.StatusReport <- podStatus
+	pod.StatusReport <- pod.LastStatus
 
 	err = pod.handleContainersState(object)
 	if err != nil {
 		return false, err
 	}
 
-	if podStatus.IsReady {
+	if pod.LastStatus.IsReady {
 		pod.Ready <- struct{}{}
 	}
 
