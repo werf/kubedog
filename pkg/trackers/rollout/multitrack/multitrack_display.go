@@ -147,6 +147,11 @@ func (mt *multitracker) displayMultitrackServiceMessageF(format string, a ...int
 	logboek.LogHighlightF(format, a...)
 }
 
+func (mt *multitracker) displayMultitrackErrorMessageF(format string, a ...interface{}) {
+	mt.resetLogProcess()
+	logboek.LogErrorF(format, a...)
+}
+
 func (mt *multitracker) displayStatusProgress() error {
 	mt.resetLogProcess()
 

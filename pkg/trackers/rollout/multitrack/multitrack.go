@@ -1,6 +1,7 @@
 package multitrack
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -33,6 +34,10 @@ const (
 	ControllerIsReady DeployCondition = "ControllerIsReady"
 	PodIsReady        DeployCondition = "PodIsReady"
 	EndOfDeploy       DeployCondition = "EndOfDeploy"
+)
+
+var (
+	ErrFailWholeDeployProcessImmediately = errors.New("fail whole deploy process immediately")
 )
 
 type MultitrackSpecs struct {
@@ -142,52 +147,97 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 	for _, spec := range specs.Deployments {
 		mt.DeploymentsSpecs[spec.ResourceName] = spec
-		mt.TrackingDeployments[spec.ResourceName] = &multitrackerResourceState{}
+		mt.TrackingDeployments[spec.ResourceName] = &multitrackerResourceState{IsStatusIgnored: spec.FailMode == IgnoreAndContinueDeployProcess}
 
 		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackDeployment(kube, spec, opts); err != nil {
-				mt.displayResourceDebugMessages("deploy", spec.ResourceName)
-				errorChan <- fmt.Errorf("deploy/%s track failed: %s", spec.ResourceName, err)
+				if err == ErrFailWholeDeployProcessImmediately {
+					mt.displayFailedTrackingResourcesDebugMessages()
+					errorChan <- mt.formatFailedTrackingResourcesError()
+				} else {
+					// unknown error
+					errorChan <- fmt.Errorf("deploy/%s track failed: %s", spec.ResourceName, err)
+				}
+
+				func() {
+					mt.handlerMux.Lock()
+					defer mt.handlerMux.Unlock()
+					mt.isFailed = true
+				}()
 			}
+
 			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.StatefulSets {
 		mt.StatefulSetsSpecs[spec.ResourceName] = spec
-		mt.TrackingStatefulSets[spec.ResourceName] = &multitrackerResourceState{}
+		mt.TrackingStatefulSets[spec.ResourceName] = &multitrackerResourceState{IsStatusIgnored: spec.FailMode == IgnoreAndContinueDeployProcess}
 
 		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackStatefulSet(kube, spec, opts); err != nil {
-				mt.displayResourceDebugMessages("sts", spec.ResourceName)
-				errorChan <- fmt.Errorf("sts/%s track failed: %s", spec.ResourceName, err)
+				if err == ErrFailWholeDeployProcessImmediately {
+					mt.displayFailedTrackingResourcesDebugMessages()
+					errorChan <- mt.formatFailedTrackingResourcesError()
+				} else {
+					// unknown error
+					errorChan <- fmt.Errorf("sts/%s track failed: %s", spec.ResourceName, err)
+				}
+
+				func() {
+					mt.handlerMux.Lock()
+					defer mt.handlerMux.Unlock()
+					mt.isFailed = true
+				}()
 			}
 			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.DaemonSets {
 		mt.DaemonSetsSpecs[spec.ResourceName] = spec
-		mt.TrackingDaemonSets[spec.ResourceName] = &multitrackerResourceState{}
+		mt.TrackingDaemonSets[spec.ResourceName] = &multitrackerResourceState{IsStatusIgnored: spec.FailMode == IgnoreAndContinueDeployProcess}
 
 		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackDaemonSet(kube, spec, opts); err != nil {
-				mt.displayResourceDebugMessages("ds", spec.ResourceName)
-				errorChan <- fmt.Errorf("ds/%s track failed: %s", spec.ResourceName, err)
+				if err == ErrFailWholeDeployProcessImmediately {
+					mt.displayFailedTrackingResourcesDebugMessages()
+					errorChan <- mt.formatFailedTrackingResourcesError()
+				} else {
+					// unknown error
+					errorChan <- fmt.Errorf("ds/%s track failed: %s", spec.ResourceName, err)
+				}
+
+				func() {
+					mt.handlerMux.Lock()
+					defer mt.handlerMux.Unlock()
+					mt.isFailed = true
+				}()
 			}
 			wg.Done()
 		}(spec)
 	}
 	for _, spec := range specs.Jobs {
 		mt.JobsSpecs[spec.ResourceName] = spec
-		mt.TrackingJobs[spec.ResourceName] = &multitrackerResourceState{}
+		mt.TrackingJobs[spec.ResourceName] = &multitrackerResourceState{IsStatusIgnored: spec.FailMode == IgnoreAndContinueDeployProcess}
 
 		wg.Add(1)
 		go func(spec MultitrackSpec) {
 			if err := mt.TrackJob(kube, spec, opts); err != nil {
-				mt.displayResourceDebugMessages("job", spec.ResourceName)
-				errorChan <- fmt.Errorf("job/%s track failed: %s", spec.ResourceName, err)
+				if err == ErrFailWholeDeployProcessImmediately {
+					mt.displayFailedTrackingResourcesDebugMessages()
+					errorChan <- mt.formatFailedTrackingResourcesError()
+				} else {
+					// unknown error
+					errorChan <- fmt.Errorf("job/%s track failed: %s", spec.ResourceName, err)
+				}
+
+				func() {
+					mt.handlerMux.Lock()
+					defer mt.handlerMux.Unlock()
+					mt.isFailed = true
+				}()
 			}
 			wg.Done()
 		}(spec)
@@ -195,6 +245,15 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 	go func() {
 		wg.Wait()
+
+		isAlreadyFailed := func() bool {
+			mt.handlerMux.Lock()
+			defer mt.handlerMux.Unlock()
+			return mt.isFailed
+		}()
+		if isAlreadyFailed {
+			return
+		}
 
 		err := func() error {
 			mt.handlerMux.Lock()
@@ -264,12 +323,14 @@ type multitracker struct {
 	PrevJobsStatuses map[string]job.JobStatus
 
 	handlerMux sync.Mutex
+	isFailed   bool
 
 	currentLogProcessHeader        string
 	debugDisplayMessagesByResource map[string][]string
 }
 
 type multitrackerResourceState struct {
+	IsStatusIgnored   bool
 	IsFailed          bool
 	LastFailureReason string
 	FailuresCount     int
@@ -345,26 +406,41 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 }
 
 func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multitrackerResourceState, kind string, spec MultitrackSpec, reason string) error {
-	resourcesStates[spec.ResourceName].FailuresCount++
-	if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
-		mt.displayMultitrackServiceMessageF("%d out of %d allowed errors occured for %s/%s!\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
-		return nil
-	}
+	switch spec.FailMode {
+	case FailWholeDeployProcessImmediately:
+		resourcesStates[spec.ResourceName].FailuresCount++
+		if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
+			mt.displayMultitrackServiceMessageF("%d out of %d allowed errors occurred for %s/%s\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
+			return nil
+		}
 
-	if spec.FailMode == FailWholeDeployProcessImmediately {
+		mt.displayMultitrackServiceMessageF("Allowed failures count for %s/%s exceeded %d errors: stop tracking immediately!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+
 		resourcesStates[spec.ResourceName].IsFailed = true
 		resourcesStates[spec.ResourceName].LastFailureReason = reason
-		return tracker.StopTrack
-	} else if spec.FailMode == HopeUntilEndOfDeployProcess {
+
+		return ErrFailWholeDeployProcessImmediately
+
+	case HopeUntilEndOfDeployProcess:
+		resourcesStates[spec.ResourceName].FailuresCount++
+
 		resourcesStates[spec.ResourceName].IsFailed = true
 		resourcesStates[spec.ResourceName].LastFailureReason = reason
+		mt.displayMultitrackServiceMessageF("%s/%s will be checked\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+
 		// TODO: goroutine for this resource should be stopped somehow at the end of deploy process
+
 		return nil
-	} else if spec.FailMode == IgnoreAndContinueDeployProcess {
+
+	case IgnoreAndContinueDeployProcess:
+		mt.displayMultitrackServiceMessageF("Ignoring %s/%s errors and continue deploy process failures count for %s/%s exceeded %d errors!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+
 		delete(resourcesStates, spec.ResourceName)
+
 		return tracker.StopTrack
-	} else {
-		panic(fmt.Sprintf("bad fail mode: %s", spec.FailMode))
+
+	default:
+		panic(fmt.Sprintf("bad fail mode %#v for resource %s/%s", spec.FailMode, kind, spec.ResourceName))
 	}
 }
 
