@@ -3,7 +3,6 @@ package multitrack
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/display"
 	"github.com/flant/kubedog/pkg/tracker/job"
 	"github.com/flant/kubedog/pkg/tracker/pod"
 	"k8s.io/client-go/kubernetes"
@@ -57,86 +56,50 @@ func (mt *multitracker) TrackJob(kube kubernetes.Interface, spec MultitrackSpec,
 }
 
 func (mt *multitracker) jobAdded(spec MultitrackSpec, feed job.Feed) error {
-	if debug() {
-		fmt.Printf("-- jobAdded %#v\n", spec)
-	}
-
-	display.OutF("# job/%s added\n", spec.ResourceName)
+	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "added\n")
 
 	return nil
 }
 
 func (mt *multitracker) jobSucceeded(spec MultitrackSpec, feed job.Feed) error {
-	if debug() {
-		fmt.Printf("-- jobSucceeded %#v\n", spec)
-	}
-
 	mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
 
-	display.OutF("# job/%s succeeded\n", spec.ResourceName)
+	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "succeeded\n")
 
 	return mt.handleResourceReadyCondition(mt.TrackingJobs, spec)
 }
 
 func (mt *multitracker) jobFailed(spec MultitrackSpec, feed job.Feed, reason string) error {
-	if debug() {
-		fmt.Printf("-- jobFailed %#v %#v\n", spec, reason)
-	}
+	mt.displayResourceErrorF("job", spec.ResourceName, "%s\n", reason)
 
-	fmt.Fprintf(display.Out, "# job/%s failed: %s\n", spec.ResourceName, reason)
-
-	return mt.handleResourceFailure(mt.TrackingJobs, spec, reason)
+	return mt.handleResourceFailure(mt.TrackingJobs, "job", spec, reason)
 }
 
 func (mt *multitracker) jobEventMsg(spec MultitrackSpec, feed job.Feed, msg string) error {
-	if debug() {
-		fmt.Printf("-- jobEventMsg %#v %#v\n", spec, msg)
-	}
-
-	display.OutF("# job/%s event: %s\n", spec.ResourceName, msg)
-
+	mt.displayResourceEventF("job", spec.ResourceName, "%s\n", msg)
 	return nil
 }
 
 func (mt *multitracker) jobAddedPod(spec MultitrackSpec, feed job.Feed, podName string) error {
-	if debug() {
-		fmt.Printf("-- jobAddedPod %#v %#v\n", spec, podName)
-	}
-
-	display.OutF("# job/%s po/%s added\n", spec.ResourceName, podName)
+	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "po/%s added\n", podName)
 
 	return nil
 }
 
 func (mt *multitracker) jobPodLogChunk(spec MultitrackSpec, feed job.Feed, chunk *pod.PodLogChunk) error {
-	if debug() {
-		fmt.Printf("-- jobPodLogChunk %#v %#v\n", spec, chunk)
-	}
-
-	header := fmt.Sprintf("jobs/%s %s", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk))
-	displayContainerLogChunk(header, spec, chunk.ContainerLogChunk)
-
+	mt.displayResourceLogChunk("job", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
 	return nil
 }
 
 func (mt *multitracker) jobPodError(spec MultitrackSpec, feed job.Feed, podError pod.PodError) error {
-	if debug() {
-		fmt.Printf("-- jobPodError %#v %#v\n", spec, podError)
-	}
+	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
-	reason := fmt.Sprintf("po/%s container/%s error: %s", podError.PodName, podError.ContainerName, podError.Message)
+	mt.displayResourceErrorF("job", spec.ResourceName, "%s\n", reason)
 
-	fmt.Fprintf(display.Out, "# job/%s %s\n", spec.ResourceName, reason)
-
-	return mt.handleResourceFailure(mt.TrackingJobs, spec, reason)
+	return mt.handleResourceFailure(mt.TrackingJobs, "job", spec, reason)
 }
 
 func (mt *multitracker) jobStatusReport(spec MultitrackSpec, feed job.Feed, status job.JobStatus) error {
-	if debug() {
-		fmt.Printf("-- jobStatusReport %#v %#v\n", spec, status)
-	}
-
 	mt.JobsStatuses[spec.ResourceName] = status
-
 	return nil
 }
