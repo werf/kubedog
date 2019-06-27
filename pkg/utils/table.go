@@ -254,7 +254,7 @@ func terminalWidth() int {
 }
 
 func (t *Table) Commit(extraColumns ...interface{}) {
-	lines := strings.Split(t.buf.String(), "\n")
+	lines := strings.Split(strings.TrimSuffix(t.buf.String(), "\n"), "\n")
 
 	var extraLines []string
 	for _, extraColumn := range extraColumns {
