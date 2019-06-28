@@ -340,36 +340,26 @@ func newMultitrackerContext(parentContext context.Context) *multitrackerContext 
 	return &multitrackerContext{Context: ctx, CancelFunc: cancel}
 }
 
+type multitrackerResourceStatus string
+
+const (
+	resourceActive            multitrackerResourceStatus = "resourceActive"
+	resourceSucceeded         multitrackerResourceStatus = "resourceSucceeded"
+	resourceFailed            multitrackerResourceStatus = "resourceFailed"
+	resourceHoping            multitrackerResourceStatus = "resourceHoping"
+	resourceActiveAfterHoping multitrackerResourceStatus = "resourceActiveAfterHoping"
+)
+
 type multitrackerResourceState struct {
-	//IsStatusIgnored   bool
-	IsDone            bool
-	IsFailed          bool
-	LastFailureReason string
-	FailuresCount     int
+	Status                   multitrackerResourceStatus
+	FailedReason             string
+	FailuresCount            int
+	FailuresCountAfterHoping int
 }
 
 func newMultitrackerResourceState(spec MultitrackSpec) *multitrackerResourceState {
-	return &multitrackerResourceState{}
+	return &multitrackerResourceState{Status: resourceActive}
 }
-
-//func (mt *multitracker) hasActiveTrackers() bool {
-//	for _, states := range []map[string]*multitrackerResourceState{
-//		mt.TrackingDeployments,
-//		mt.TrackingStatefulSets,
-//		mt.TrackingDaemonSets,
-//		mt.TrackingJobs,
-//	} {
-//	scanStates:
-//		for _, state := range states {
-//			if state.IsDone {
-//				continue scanStates
-//			}
-//			return true
-//		}
-//	}
-//
-//	return false
-//}
 
 func (mt *multitracker) hasFailedTrackingResources() bool {
 	for _, states := range []map[string]*multitrackerResourceState{
@@ -379,7 +369,7 @@ func (mt *multitracker) hasFailedTrackingResources() bool {
 		mt.TrackingJobs,
 	} {
 		for _, state := range states {
-			if state.IsFailed {
+			if state.Status == resourceFailed {
 				return true
 			}
 		}
@@ -391,43 +381,43 @@ func (mt *multitracker) formatFailedTrackingResourcesError() error {
 	msgParts := []string{}
 
 	for name, state := range mt.TrackingDeployments {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
-		msgParts = append(msgParts, fmt.Sprintf("deploy/%s failed: %s", name, state.LastFailureReason))
+		msgParts = append(msgParts, fmt.Sprintf("deploy/%s failed: %s", name, state.FailedReason))
 	}
 	for name, state := range mt.TrackingStatefulSets {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
-		msgParts = append(msgParts, fmt.Sprintf("sts/%s failed: %s", name, state.LastFailureReason))
+		msgParts = append(msgParts, fmt.Sprintf("sts/%s failed: %s", name, state.FailedReason))
 	}
 	for name, state := range mt.TrackingDaemonSets {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
-		msgParts = append(msgParts, fmt.Sprintf("ds/%s failed: %s", name, state.LastFailureReason))
+		msgParts = append(msgParts, fmt.Sprintf("ds/%s failed: %s", name, state.FailedReason))
 	}
 	for name, state := range mt.TrackingJobs {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
-		msgParts = append(msgParts, fmt.Sprintf("job/%s failed: %s", name, state.LastFailureReason))
+		msgParts = append(msgParts, fmt.Sprintf("job/%s failed: %s", name, state.FailedReason))
 	}
 
 	return fmt.Errorf("%s", strings.Join(msgParts, "\n"))
 }
 
 func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]*multitrackerResourceState, spec MultitrackSpec) error {
-	resourcesStates[spec.ResourceName].IsDone = true
+	resourcesStates[spec.ResourceName].Status = resourceSucceeded
 	return tracker.StopTrack
 }
 
 func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multitrackerResourceState, kind string, spec MultitrackSpec, reason string) error {
-	resourcesStates[spec.ResourceName].FailuresCount++
-
 	switch spec.FailMode {
 	case FailWholeDeployProcessImmediately:
+		resourcesStates[spec.ResourceName].FailuresCount++
+
 		if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
 			mt.displayMultitrackServiceMessageF("%d out of %d allowed errors occurred for %s/%s\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
 			return nil
@@ -435,25 +425,83 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 
 		mt.displayMultitrackServiceMessageF("Allowed failures count for %s/%s exceeded %d errors: stop tracking immediately!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
 
-		resourcesStates[spec.ResourceName].IsFailed = true
-		resourcesStates[spec.ResourceName].LastFailureReason = reason
+		resourcesStates[spec.ResourceName].Status = resourceFailed
+		resourcesStates[spec.ResourceName].FailedReason = reason
 
 		return ErrFailWholeDeployProcessImmediately
 
-	case HopeUntilEndOfDeployProcess: // FIXME
-		resourcesStates[spec.ResourceName].IsFailed = true
-		resourcesStates[spec.ResourceName].LastFailureReason = reason
-		mt.displayMultitrackServiceMessageF("%s/%s will be checked\n", kind, spec.ResourceName)
+	case HopeUntilEndOfDeployProcess:
 
-		// TODO: goroutine for this resource should be stopped somehow at the end of deploy process
+	handleResourceState:
+		switch resourcesStates[spec.ResourceName].Status {
+		case resourceActive:
+			resourcesStates[spec.ResourceName].Status = resourceHoping
+			goto handleResourceState
 
-		return nil
+		case resourceHoping:
+			activeResourcesNames := mt.getActiveResourcesNames()
+			if len(activeResourcesNames) > 0 {
+				mt.displayMultitrackServiceMessageF("Error occurred for %s/%s, waiting until following resources are ready before counting errors (HopeUntilEndOfDeployProcess fail mode is active): %s\n", kind, spec.ResourceName, strings.Join(activeResourcesNames, ", "))
+				return nil
+			}
+
+			resourcesStates[spec.ResourceName].Status = resourceActiveAfterHoping
+			goto handleResourceState
+
+		case resourceActiveAfterHoping:
+			resourcesStates[spec.ResourceName].FailuresCount++
+
+			if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
+				mt.displayMultitrackServiceMessageF("%d out of %d allowed errors occurred for %s/%s\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
+				return nil
+			}
+
+			mt.displayMultitrackServiceMessageF("Allowed failures count for %s/%s exceeded %d errors: stop tracking immediately!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+
+			resourcesStates[spec.ResourceName].Status = resourceFailed
+			resourcesStates[spec.ResourceName].FailedReason = reason
+
+			return ErrFailWholeDeployProcessImmediately
+
+		default:
+			panic(fmt.Sprintf("%s/%s tracker is in unexpected state %#v", kind, spec.ResourceName, resourcesStates[spec.ResourceName].Status))
+		}
 
 	case IgnoreAndContinueDeployProcess:
+		resourcesStates[spec.ResourceName].FailuresCount++
 		mt.displayMultitrackServiceMessageF("%d errors occurred for %s/%s\n", resourcesStates[spec.ResourceName].FailuresCount, kind, spec.ResourceName)
 		return nil
 
 	default:
 		panic(fmt.Sprintf("bad fail mode %#v for resource %s/%s", spec.FailMode, kind, spec.ResourceName))
 	}
+
+	return nil
+}
+
+func (mt *multitracker) getActiveResourcesNames() []string {
+	activeResources := []string{}
+
+	for name, state := range mt.TrackingDeployments {
+		if state.Status == resourceActive {
+			activeResources = append(activeResources, fmt.Sprintf("deploy/%s", name))
+		}
+	}
+	for name, state := range mt.TrackingStatefulSets {
+		if state.Status == resourceActive {
+			activeResources = append(activeResources, fmt.Sprintf("sts/%s", name))
+		}
+	}
+	for name, state := range mt.TrackingDaemonSets {
+		if state.Status == resourceActive {
+			activeResources = append(activeResources, fmt.Sprintf("ds/%s", name))
+		}
+	}
+	for name, state := range mt.TrackingJobs {
+		if state.Status == resourceActive {
+			activeResources = append(activeResources, fmt.Sprintf("job/%s", name))
+		}
+	}
+
+	return activeResources
 }
