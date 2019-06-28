@@ -99,25 +99,25 @@ func (mt *multitracker) displayResourceErrorF(resourceKind, resourceName string,
 
 func (mt *multitracker) displayFailedTrackingResourcesDebugMessages() {
 	for name, state := range mt.TrackingDeployments {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
 		mt.displayResourceDebugMessages("deploy", name)
 	}
 	for name, state := range mt.TrackingStatefulSets {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
 		mt.displayResourceDebugMessages("sts", name)
 	}
 	for name, state := range mt.TrackingDaemonSets {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
 		mt.displayResourceDebugMessages("ds", name)
 	}
 	for name, state := range mt.TrackingJobs {
-		if !state.IsFailed {
+		if state.Status != resourceFailed {
 			continue
 		}
 		mt.displayResourceDebugMessages("job", name)
