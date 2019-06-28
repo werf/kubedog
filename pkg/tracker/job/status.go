@@ -32,13 +32,11 @@ type JobStatus struct {
 	Pods map[string]pod.PodStatus
 }
 
-func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus, trackedPodsNames []string) JobStatus {
+func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed bool, trackerFailedReason string, podsStatuses map[string]pod.PodStatus, trackedPodsNames []string) JobStatus {
 	res := JobStatus{
 		JobStatus:        object.Status,
 		StatusGeneration: statusGeneration,
 		Age:              utils.TranslateTimestampSince(object.CreationTimestamp),
-		IsFailed:         isFailed,
-		FailedReason:     failedReason,
 		Pods:             make(map[string]pod.PodStatus),
 	}
 
@@ -99,6 +97,11 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isFailed bool, f
 				res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("succeeded %d->%d", res.SucceededIndicator.Value, res.SucceededIndicator.TargetValue))
 			}
 		}
+	}
+
+	if !res.IsComplete {
+		res.IsFailed = isTrackerFailed
+		res.FailedReason = trackerFailedReason
 	}
 
 	return res
