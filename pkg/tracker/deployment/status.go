@@ -31,14 +31,12 @@ type DeploymentStatus struct {
 	NewPodsNames []string
 }
 
-func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) DeploymentStatus {
+func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isTrackerFailed bool, trackerFailedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) DeploymentStatus {
 	res := DeploymentStatus{
 		StatusGeneration: statusGeneration,
 		DeploymentStatus: object.Status,
 		Pods:             make(map[string]pod.PodStatus),
 		NewPodsNames:     newPodsNames,
-		IsFailed:         isFailed,
-		FailedReason:     failedReason,
 	}
 
 processingPodsStatuses:
@@ -96,6 +94,11 @@ processingPodsStatuses:
 		}
 	} else {
 		res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("observed generation %d should be >= %d", object.Status.ObservedGeneration, object.Generation))
+	}
+
+	if !res.IsReady {
+		res.IsFailed = isTrackerFailed
+		res.FailedReason = trackerFailedReason
 	}
 
 	return res

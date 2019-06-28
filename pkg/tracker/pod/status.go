@@ -23,11 +23,9 @@ type PodStatus struct {
 	FailedReason string
 }
 
-func NewPodStatus(pod *corev1.Pod, isFailed bool, failedReason string) PodStatus {
+func NewPodStatus(pod *corev1.Pod, isTrackerFailed bool, trackerFailedReason string) PodStatus {
 	res := PodStatus{
 		PodStatus:       pod.Status,
-		IsFailed:        isFailed,
-		FailedReason:    failedReason,
 		TotalContainers: int32(len(pod.Spec.Containers)),
 		Age:             utils.TranslateTimestampSince(pod.CreationTimestamp),
 		StatusIndicator: &indicators.StringEqualConditionIndicator{},
@@ -114,6 +112,11 @@ func NewPodStatus(pod *corev1.Pod, isFailed bool, failedReason string) PodStatus
 	res.StatusIndicator.Value = reason
 	res.Restarts = restarts
 	res.ReadyContainers = readyContainers
+
+	if !res.IsReady {
+		res.IsFailed = isTrackerFailed
+		res.FailedReason = trackerFailedReason
+	}
 
 	return res
 }
