@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	ErrTrackInterrupted = errors.New("tracker interrupted")
-	StopTrack           = errors.New("stop tracking now")
+	StopTrack = errors.New("stop tracking now")
 )
 
 const (
@@ -31,7 +30,6 @@ type Tracker struct {
 	ResourceName     string
 	FullResourceName string // full resource name with resource kind (deploy/superapp)
 	Context          context.Context
-	ContextCancel    context.CancelFunc
 }
 
 type Options struct {

@@ -33,7 +33,6 @@ func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) 
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
 			Context:          trk.Context,
-			ContextCancel:    trk.ContextCancel,
 		},
 		Controller: controller,
 		PodAdded:   make(chan *corev1.Pod, 1),

@@ -57,7 +57,6 @@ func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMeta
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
 			Context:          trk.Context,
-			ContextCancel:    trk.ContextCancel,
 		},
 		Controller:         controller,
 		ReplicaSetAdded:    make(chan *extensions.ReplicaSet, 1),

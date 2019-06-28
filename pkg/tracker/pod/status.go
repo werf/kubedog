@@ -2,14 +2,11 @@ package pod
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/flant/kubedog/pkg/tracker/indicators"
+	"github.com/flant/kubedog/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"k8s.io/apimachinery/pkg/util/duration"
 )
 
 type PodStatus struct {
@@ -26,13 +23,11 @@ type PodStatus struct {
 	FailedReason string
 }
 
-func NewPodStatus(pod *corev1.Pod, isFailed bool, failedReason string) PodStatus {
+func NewPodStatus(pod *corev1.Pod, isTrackerFailed bool, trackerFailedReason string) PodStatus {
 	res := PodStatus{
 		PodStatus:       pod.Status,
-		IsFailed:        isFailed,
-		FailedReason:    failedReason,
 		TotalContainers: int32(len(pod.Spec.Containers)),
-		Age:             translateTimestampSince(pod.CreationTimestamp),
+		Age:             utils.TranslateTimestampSince(pod.CreationTimestamp),
 		StatusIndicator: &indicators.StringEqualConditionIndicator{},
 	}
 
@@ -118,13 +113,10 @@ func NewPodStatus(pod *corev1.Pod, isFailed bool, failedReason string) PodStatus
 	res.Restarts = restarts
 	res.ReadyContainers = readyContainers
 
-	return res
-}
-
-func translateTimestampSince(timestamp metav1.Time) string {
-	if timestamp.IsZero() {
-		return "<unknown>"
+	if !res.IsReady {
+		res.IsFailed = isTrackerFailed
+		res.FailedReason = trackerFailedReason
 	}
 
-	return duration.HumanDuration(time.Since(timestamp.Time))
+	return res
 }
