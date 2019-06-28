@@ -202,7 +202,7 @@ func (mt *multitracker) displayJobsProgress() {
 		}
 
 		if status.IsFailed {
-			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
 			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age)
 		}
@@ -279,7 +279,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 		}
 
 		if status.IsFailed {
-			t.Row(resource, replicas, ready, uptodate, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, replicas, ready, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
 			t.Row(resource, replicas, ready, uptodate)
 		}
@@ -350,7 +350,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 		}
 
 		if status.IsFailed {
-			t.Row(resource, replicas, available, uptodate, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, replicas, available, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
 			t.Row(resource, replicas, available, uptodate)
 		}
@@ -421,7 +421,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 		}
 
 		if status.IsFailed {
-			t.Row(resource, replicas, available, uptodate, color.New(color.FgRed).Sprintf("Error: %s", status.FailedReason))
+			t.Row(resource, replicas, available, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
 			t.Row(resource, replicas, available, uptodate)
 		}
@@ -489,7 +489,7 @@ func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods 
 
 		podRow = append(podRow, resource, ready, status, podStatus.Restarts, podStatus.Age)
 		if podStatus.IsFailed {
-			podRow = append(podRow, color.New(color.FgRed).Sprintf("Error: %s", podStatus.FailedReason))
+			podRow = append(podRow, formatResourceError(disableWarningColors, podStatus.FailedReason))
 		}
 
 		podRows = append(podRows, podRow)
@@ -498,4 +498,50 @@ func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods 
 	st.Rows(podRows...)
 
 	return &st
+}
+
+func formatResourceError(disableWarningColors bool, reason string) string {
+	msg := fmt.Sprintf("error: %s", reason)
+	if disableWarningColors {
+		return msg
+	}
+	return color.New(color.FgRed).Sprintf("%s", msg)
+}
+
+func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool, isNew bool) string {
+	if !isNew {
+		return resourceCaption
+	}
+
+	switch resourceFailMode {
+	case FailWholeDeployProcessImmediately:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else if isFailed {
+			return color.New(color.FgRed).Sprintf("%s", resourceCaption)
+		} else {
+			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+		}
+
+	case IgnoreAndContinueDeployProcess:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else {
+			return resourceCaption
+		}
+
+	case HopeUntilEndOfDeployProcess:
+		if isReady {
+			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+		} else {
+			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported resource fail mode '%s'", resourceFailMode))
+	}
+}
+
+func podContainerLogChunkHeader(podName string, chunk *pod.ContainerLogChunk) string {
+	return fmt.Sprintf("po/%s container/%s", podName, chunk.ContainerName)
 }

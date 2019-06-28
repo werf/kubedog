@@ -191,7 +191,7 @@ func (d *Tracker) Track() (err error) {
 			}
 
 		case <-d.Context.Done():
-			return tracker.ErrTrackInterrupted
+			return d.Context.Err()
 
 		case err := <-d.errors:
 			return err
