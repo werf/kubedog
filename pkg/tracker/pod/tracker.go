@@ -194,7 +194,7 @@ func (pod *Tracker) Start() error {
 			pod.Failed <- reason
 
 		case <-pod.Context.Done():
-			return tracker.ErrTrackInterrupted
+			return pod.Context.Err()
 
 		case err := <-pod.errors:
 			return err
@@ -330,7 +330,7 @@ func (pod *Tracker) followContainerLogs(containerName string) error {
 
 		select {
 		case <-pod.Context.Done():
-			return tracker.ErrTrackInterrupted
+			return pod.Context.Err()
 		default:
 		}
 	}
@@ -364,7 +364,7 @@ func (pod *Tracker) trackContainer(containerName string) error {
 			}
 
 		case <-pod.Context.Done():
-			return tracker.ErrTrackInterrupted
+			return pod.Context.Err()
 		}
 	}
 }

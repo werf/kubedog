@@ -39,7 +39,6 @@ func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
 			Context:          trk.Context,
-			ContextCancel:    trk.ContextCancel,
 		},
 		Resource:         resource,
 		Errors:           make(chan error, 0),

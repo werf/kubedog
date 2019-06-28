@@ -170,7 +170,7 @@ func (job *Tracker) Track() error {
 			}
 
 		case <-job.Context.Done():
-			return tracker.ErrTrackInterrupted
+			return job.Context.Err()
 
 		case err := <-job.errors:
 			return err
