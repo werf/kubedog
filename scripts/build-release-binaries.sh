@@ -14,4 +14,11 @@ if [ -z "$VERSION" ] ; then
     exit 1
 fi
 
-build_binaries $VERSION
+docker run --rm \
+    --env SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
+    --volume $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
+    --volume ~/.ssh/known_hosts:/root/.ssh/known_hosts \
+    --volume $(pwd):/kubedog \
+    --workdir /kubedog \
+    flant/werf-builder:1.0.0 \
+    bash -ec "set -e; source scripts/lib/release/build.sh && build_binaries $VERSION"
