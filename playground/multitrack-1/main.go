@@ -12,9 +12,6 @@ func main() {
 	}
 
 	err = multitrack.Multitrack(kube.Kubernetes, multitrack.MultitrackSpecs{
-		Pods: []multitrack.MultitrackSpec{
-			multitrack.MultitrackSpec{ResourceName: "etcd-minikube", Namespace: "kube-system"},
-		},
 		Deployments: []multitrack.MultitrackSpec{
 			multitrack.MultitrackSpec{ResourceName: "tiller-deploy", Namespace: "kube-system"},
 			multitrack.MultitrackSpec{ResourceName: "coredns", Namespace: "kube-system"},
