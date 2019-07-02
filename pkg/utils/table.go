@@ -24,16 +24,12 @@ type Table struct {
 	columnsCount int
 
 	service struct {
-		header           string
-		headerRest       string
-		row              string
-		rowRest          string
-		lastRow          string
-		lastRowRest      string
-		extraRow         string
-		extraRowRest     string
-		lastExtraRow     string
-		lastExtraRowRest string
+		header      string
+		headerRest  string
+		row         string
+		rowRest     string
+		lastRow     string
+		lastRowRest string
 	}
 
 	buf       *bytes.Buffer
@@ -63,10 +59,6 @@ func (t *Table) SubTable(columnsRatio ...float64) Table {
 	st.service.rowRest = "│   "
 	st.service.lastRow = "└── "
 	st.service.lastRowRest = "    "
-	st.service.extraRow = "│   ├── "
-	st.service.extraRowRest = "│   │   "
-	st.service.lastExtraRow = "│   └── "
-	st.service.lastExtraRowRest = "│       "
 
 	return st
 }
@@ -115,13 +107,18 @@ func (t *Table) Row(columns ...interface{}) {
 	t.apply(rowColumns...)
 
 	if len(extraRowColumns) != 0 {
-		t.withService(t.service.extraRow, t.service.extraRowRest, func() {
+		serviceExtraRow := t.serviceRestText + t.service.row
+		serviceExtraRowRest := t.serviceRestText + t.service.rowRest
+		serviceLastExtraRow := t.serviceRestText + t.service.lastRow
+		serviceLastExtraRowRest := t.serviceRestText + t.service.lastRowRest
+
+		t.withService(serviceExtraRow, serviceExtraRowRest, func() {
 			for _, column := range extraRowColumns[:len(extraRowColumns)-1] {
 				t.apply(column)
 			}
 		})
 
-		t.withService(t.service.lastExtraRow, t.service.lastExtraRowRest, func() {
+		t.withService(serviceLastExtraRow, serviceLastExtraRowRest, func() {
 			t.apply(extraRowColumns[len(extraRowColumns)-1])
 		})
 	}
