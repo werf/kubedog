@@ -56,6 +56,8 @@ func (mt *multitracker) TrackJob(kube kubernetes.Interface, spec MultitrackSpec,
 }
 
 func (mt *multitracker) jobAdded(spec MultitrackSpec, feed job.Feed) error {
+	mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "added\n")
 
 	return nil
@@ -87,6 +89,13 @@ func (mt *multitracker) jobAddedPod(spec MultitrackSpec, feed job.Feed, podName 
 }
 
 func (mt *multitracker) jobPodLogChunk(spec MultitrackSpec, feed job.Feed, chunk *pod.PodLogChunk) error {
+	controllerStatus := feed.GetStatus()
+	if podStatus, hasKey := controllerStatus.Pods[chunk.PodName]; hasKey {
+		if podStatus.IsReady {
+			return nil
+		}
+	}
+
 	mt.displayResourceLogChunk("job", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
 	return nil
 }

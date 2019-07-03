@@ -61,9 +61,9 @@ func (mt *multitracker) TrackStatefulSet(kube kubernetes.Interface, spec Multitr
 }
 
 func (mt *multitracker) statefulsetAdded(spec MultitrackSpec, feed statefulset.Feed, ready bool) error {
-	if ready {
-		mt.StatefulSetsStatuses[spec.ResourceName] = feed.GetStatus()
+	mt.StatefulSetsStatuses[spec.ResourceName] = feed.GetStatus()
 
+	if ready {
 		mt.displayResourceTrackerMessageF("sts", spec.ResourceName, "appears to be READY\n")
 
 		return mt.handleResourceReadyCondition(mt.TrackingStatefulSets, spec)
@@ -94,30 +94,16 @@ func (mt *multitracker) statefulsetEventMsg(spec MultitrackSpec, feed statefulse
 }
 
 func (mt *multitracker) statefulsetAddedReplicaSet(spec MultitrackSpec, feed statefulset.Feed, rs replicaset.ReplicaSet) error {
-	if !rs.IsNew {
-		return nil
-	}
-
 	mt.displayResourceTrackerMessageF("sts", spec.ResourceName, "rs/%s added\n", rs.Name)
-
 	return nil
 }
 
 func (mt *multitracker) statefulsetAddedPod(spec MultitrackSpec, feed statefulset.Feed, pod replicaset.ReplicaSetPod) error {
-	if !pod.ReplicaSet.IsNew {
-		return nil
-	}
-
 	mt.displayResourceTrackerMessageF("sts", spec.ResourceName, "po/%s added\n", pod.Name)
-
 	return nil
 }
 
 func (mt *multitracker) statefulsetPodError(spec MultitrackSpec, feed statefulset.Feed, podError replicaset.ReplicaSetPodError) error {
-	if !podError.ReplicaSet.IsNew {
-		return nil
-	}
-
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
 	mt.displayResourceErrorF("sts", spec.ResourceName, "%s\n", reason)
@@ -126,12 +112,14 @@ func (mt *multitracker) statefulsetPodError(spec MultitrackSpec, feed statefulse
 }
 
 func (mt *multitracker) statefulsetPodLogChunk(spec MultitrackSpec, feed statefulset.Feed, chunk *replicaset.ReplicaSetPodLogChunk) error {
-	if !chunk.ReplicaSet.IsNew {
-		return nil
+	controllerStatus := feed.GetStatus()
+	if podStatus, hasKey := controllerStatus.Pods[chunk.PodName]; hasKey {
+		if podStatus.IsReady {
+			return nil
+		}
 	}
 
 	mt.displayResourceLogChunk("sts", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
-
 	return nil
 }
 

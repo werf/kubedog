@@ -29,6 +29,7 @@ func main() {
 	var logsSince string
 	var kubeContext string
 	var kubeConfig string
+	var outputPrefix string
 
 	makeTrackerOptions := func(mode string) tracker.Options {
 		// rollout track defaults
@@ -79,6 +80,7 @@ func main() {
 	rootCmd.PersistentFlags().StringVarP(&logsSince, "logs-since", "", "now", "A duration like 30s, 5m, or 2h to start log records from the past. 'all' to show all logs and 'now' to display only new records (default).")
 	rootCmd.PersistentFlags().StringVarP(&kubeContext, "kube-context", "", os.Getenv("KUBEDOG_KUBE_CONTEXT"), "The name of the kubeconfig context to use (can be set with $KUBEDOG_KUBE_CONTEXT).")
 	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "", os.Getenv("KUBEDOG_KUBE_CONFIG"), "Path to the kubeconfig file (can be set with $KUBEDOG_KUBE_CONFIG).")
+	rootCmd.PersistentFlags().StringVarP(&outputPrefix, "output-prefix", "", "", "Arbitrary string which will be prefixed to kubedog output.")
 
 	versionCmd := &cobra.Command{
 		Use: "version",
@@ -94,6 +96,10 @@ func main() {
 		Example: `echo '{"Deployments":[{"ResourceName":"mydeploy","Namespace":"myns"},{"ResourceName":"myresource","Namespace":"myns","FailMode":"HopeUntilEndOfDeployProcess","AllowFailuresCount":3,"SkipLogsForContainers":["two", "three"]}], "StatefulSets":[{"ResourceName":"mysts","Namespace":"myns"}]}' | kubedog multitrack`,
 		Run: func(cmd *cobra.Command, args []string) {
 			init()
+
+			if outputPrefix != "" {
+				logboek.SetPrefix(outputPrefix, logboek.ColorizeNone)
+			}
 
 			specsInput, err := ioutil.ReadAll(os.Stdin)
 			if err != nil {

@@ -61,9 +61,9 @@ func (mt *multitracker) TrackDaemonSet(kube kubernetes.Interface, spec Multitrac
 }
 
 func (mt *multitracker) daemonsetAdded(spec MultitrackSpec, feed daemonset.Feed, ready bool) error {
-	if ready {
-		mt.DaemonSetsStatuses[spec.ResourceName] = feed.GetStatus()
+	mt.DaemonSetsStatuses[spec.ResourceName] = feed.GetStatus()
 
+	if ready {
 		mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "appears to be READY\n")
 
 		return mt.handleResourceReadyCondition(mt.TrackingDaemonSets, spec)
@@ -95,30 +95,16 @@ func (mt *multitracker) daemonsetEventMsg(spec MultitrackSpec, feed daemonset.Fe
 }
 
 func (mt *multitracker) daemonsetAddedReplicaSet(spec MultitrackSpec, feed daemonset.Feed, rs replicaset.ReplicaSet) error {
-	if !rs.IsNew {
-		return nil
-	}
-
 	mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "rs/%s added\n", rs.Name)
-
 	return nil
 }
 
 func (mt *multitracker) daemonsetAddedPod(spec MultitrackSpec, feed daemonset.Feed, pod replicaset.ReplicaSetPod) error {
-	if !pod.ReplicaSet.IsNew {
-		return nil
-	}
-
 	mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "po/%s added\n", pod.Name)
-
 	return nil
 }
 
 func (mt *multitracker) daemonsetPodError(spec MultitrackSpec, feed daemonset.Feed, podError replicaset.ReplicaSetPodError) error {
-	if !podError.ReplicaSet.IsNew {
-		return nil
-	}
-
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
 	mt.displayResourceErrorF("ds", spec.ResourceName, "%s\n", reason)
@@ -127,12 +113,14 @@ func (mt *multitracker) daemonsetPodError(spec MultitrackSpec, feed daemonset.Fe
 }
 
 func (mt *multitracker) daemonsetPodLogChunk(spec MultitrackSpec, feed daemonset.Feed, chunk *replicaset.ReplicaSetPodLogChunk) error {
-	if !chunk.ReplicaSet.IsNew {
-		return nil
+	controllerStatus := feed.GetStatus()
+	if podStatus, hasKey := controllerStatus.Pods[chunk.PodName]; hasKey {
+		if podStatus.IsReady {
+			return nil
+		}
 	}
 
 	mt.displayResourceLogChunk("ds", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
-
 	return nil
 }
 
