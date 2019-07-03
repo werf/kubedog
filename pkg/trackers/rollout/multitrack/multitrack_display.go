@@ -72,7 +72,9 @@ func (mt *multitracker) setLogProcess(header string) {
 	}
 }
 
+// resetLogProcess should be called every time something is about to be displayed
 func (mt *multitracker) resetLogProcess() {
+	mt.displayCalled = true
 	if mt.currentLogProcessHeader != "" {
 		logboek.LogProcessEnd(logboek.LogProcessEndOptions{WithoutLogOptionalLn: true, WithoutElapsedTime: true})
 		mt.currentLogProcessHeader = ""
@@ -80,13 +82,11 @@ func (mt *multitracker) resetLogProcess() {
 }
 
 func (mt *multitracker) displayResourceTrackerMessageF(resourceKind, resourceName string, format string, a ...interface{}) {
-	mt.resetLogProcess()
 	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
 	mt.debugDisplayMessagesByResource[resource] = append(mt.debugDisplayMessagesByResource[resource], fmt.Sprintf(fmt.Sprintf("%s: %s", resource, format), a...))
 }
 
 func (mt *multitracker) displayResourceEventF(resourceKind, resourceName string, format string, a ...interface{}) {
-	mt.resetLogProcess()
 	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
 	mt.debugDisplayMessagesByResource[resource] = append(mt.debugDisplayMessagesByResource[resource], fmt.Sprintf(fmt.Sprintf("%s event: %s", resource, format), a...))
 }
@@ -153,11 +153,18 @@ func (mt *multitracker) displayMultitrackErrorMessageF(format string, a ...inter
 }
 
 func (mt *multitracker) displayStatusProgress() error {
+	displayLn := false
+	if mt.displayCalled {
+		displayLn = true
+	}
+
 	mt.resetLogProcess()
 
-	caption := color.New(color.Bold).Sprint("Status progress")
+	if displayLn {
+		logboek.LogOptionalLn()
+	}
 
-	logboek.LogOptionalLn()
+	caption := color.New(color.Bold).Sprint("Status progress")
 
 	logboek.LogBlock(caption, logboek.LogBlockOptions{WithoutLogOptionalLn: true}, func() {
 		mt.displayDeploymentsStatusProgress()

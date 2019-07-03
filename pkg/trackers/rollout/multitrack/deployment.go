@@ -61,9 +61,9 @@ func (mt *multitracker) TrackDeployment(kube kubernetes.Interface, spec Multitra
 }
 
 func (mt *multitracker) deploymentAdded(spec MultitrackSpec, feed deployment.Feed, ready bool) error {
-	if ready {
-		mt.DeploymentsStatuses[spec.ResourceName] = feed.GetStatus()
+	mt.DeploymentsStatuses[spec.ResourceName] = feed.GetStatus()
 
+	if ready {
 		mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, "appears to be READY\n")
 
 		return mt.handleResourceReadyCondition(mt.TrackingDeployments, spec)
@@ -127,6 +127,13 @@ func (mt *multitracker) deploymentPodError(spec MultitrackSpec, feed deployment.
 func (mt *multitracker) deploymentPodLogChunk(spec MultitrackSpec, feed deployment.Feed, chunk *replicaset.ReplicaSetPodLogChunk) error {
 	if !chunk.ReplicaSet.IsNew {
 		return nil
+	}
+
+	controllerStatus := feed.GetStatus()
+	if podStatus, hasKey := controllerStatus.Pods[chunk.PodName]; hasKey {
+		if podStatus.IsReady {
+			return nil
+		}
 	}
 
 	mt.displayResourceLogChunk("deploy", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)

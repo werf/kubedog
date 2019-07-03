@@ -141,26 +141,21 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
-	statusReportTicker := time.NewTicker(5 * time.Second)
-	defer statusReportTicker.Stop()
+	statusProgressTicker := time.NewTicker(5 * time.Second)
+	defer statusProgressTicker.Stop()
+
+	doDisplayStatusProgress := func() error {
+		mt.mux.Lock()
+		defer mt.mux.Unlock()
+		return mt.displayStatusProgress()
+	}
 
 	mt.Start(kube, specs, doneChan, errorChan, opts)
 
 	for {
 		select {
-		case <-statusReportTicker.C:
-			err := func() error {
-				mt.mux.Lock()
-				defer mt.mux.Unlock()
-
-				if err := mt.displayStatusProgress(); err != nil {
-					return err
-				}
-
-				return nil
-			}()
-
-			if err != nil {
+		case <-statusProgressTicker.C:
+			if err := doDisplayStatusProgress(); err != nil {
 				return err
 			}
 
@@ -244,7 +239,6 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 			defer mt.mux.Unlock()
 			return mt.displayStatusProgress()
 		}()
-
 		if err != nil {
 			errorChan <- err
 			return
@@ -323,6 +317,7 @@ type multitracker struct {
 	mux      sync.Mutex
 	isFailed bool
 
+	displayCalled                  bool
 	currentLogProcessHeader        string
 	debugDisplayMessagesByResource map[string][]string
 }
