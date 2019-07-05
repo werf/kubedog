@@ -15,6 +15,10 @@ import (
 )
 
 func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec MultitrackSpec, header string, chunk *pod.ContainerLogChunk) {
+	if spec.SkipLogs {
+		return
+	}
+
 	for _, containerName := range spec.SkipLogsForContainers {
 		if containerName == chunk.ContainerName {
 			return
