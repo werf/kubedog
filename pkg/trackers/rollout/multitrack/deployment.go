@@ -64,12 +64,12 @@ func (mt *multitracker) deploymentAdded(spec MultitrackSpec, feed deployment.Fee
 	mt.DeploymentsStatuses[spec.ResourceName] = feed.GetStatus()
 
 	if ready {
-		mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, "appears to be READY\n")
+		mt.displayResourceTrackerMessageF("deploy", spec, "appears to be READY")
 
 		return mt.handleResourceReadyCondition(mt.TrackingDeployments, spec)
 	}
 
-	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, "added\n")
+	mt.displayResourceTrackerMessageF("deploy", spec, "added")
 
 	return nil
 }
@@ -77,18 +77,18 @@ func (mt *multitracker) deploymentAdded(spec MultitrackSpec, feed deployment.Fee
 func (mt *multitracker) deploymentReady(spec MultitrackSpec, feed deployment.Feed) error {
 	mt.DeploymentsStatuses[spec.ResourceName] = feed.GetStatus()
 
-	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, "become READY\n")
+	mt.displayResourceTrackerMessageF("deploy", spec, "become READY")
 
 	return mt.handleResourceReadyCondition(mt.TrackingDeployments, spec)
 }
 
 func (mt *multitracker) deploymentFailed(spec MultitrackSpec, feed deployment.Feed, reason string) error {
-	mt.displayResourceErrorF("deploy", spec.ResourceName, "%s\n", reason)
+	mt.displayResourceErrorF("deploy", spec, "%s", reason)
 	return mt.handleResourceFailure(mt.TrackingDeployments, "deploy", spec, reason)
 }
 
 func (mt *multitracker) deploymentEventMsg(spec MultitrackSpec, feed deployment.Feed, msg string) error {
-	mt.displayResourceEventF("deploy", spec.ResourceName, "%s\n", msg)
+	mt.displayResourceEventF("deploy", spec, "%s\n", msg)
 	return nil
 }
 
@@ -97,7 +97,7 @@ func (mt *multitracker) deploymentAddedReplicaSet(spec MultitrackSpec, feed depl
 		return nil
 	}
 
-	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, "rs/%s added\n", rs.Name)
+	mt.displayResourceTrackerMessageF("deploy", spec, "rs/%s added", rs.Name)
 
 	return nil
 }
@@ -107,7 +107,7 @@ func (mt *multitracker) deploymentAddedPod(spec MultitrackSpec, feed deployment.
 		return nil
 	}
 
-	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, "po/%s added\n", pod.Name)
+	mt.displayResourceTrackerMessageF("deploy", spec, "po/%s added", pod.Name)
 
 	return nil
 }
@@ -119,7 +119,7 @@ func (mt *multitracker) deploymentPodError(spec MultitrackSpec, feed deployment.
 
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
-	mt.displayResourceErrorF("deploy", spec.ResourceName, "%s\n", reason)
+	mt.displayResourceErrorF("deploy", spec, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingDeployments, "deploy", spec, reason)
 }
@@ -136,7 +136,7 @@ func (mt *multitracker) deploymentPodLogChunk(spec MultitrackSpec, feed deployme
 		}
 	}
 
-	mt.displayResourceLogChunk("deploy", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
+	mt.displayResourceLogChunk("deploy", spec, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), chunk.ContainerLogChunk)
 
 	return nil
 }
