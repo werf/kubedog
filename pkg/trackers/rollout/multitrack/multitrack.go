@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flant/logboek"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/flant/kubedog/pkg/tracker"
@@ -69,7 +71,7 @@ type MultitrackSpec struct {
 	ShowLogsOnlyForContainers []string
 	//ShowLogsUntil             DeployCondition TODO
 
-	SkipEvents bool
+	ShowServiceMessages bool
 }
 
 type MultitrackOptions struct {
@@ -143,7 +145,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		JobsStatuses:     make(map[string]job.JobStatus),
 		PrevJobsStatuses: make(map[string]job.JobStatus),
 
-		debugDisplayMessagesByResource: make(map[string][]string),
+		serviceMessagesByResource: make(map[string][]string),
 	}
 
 	errorChan := make(chan error, 0)
@@ -257,7 +259,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 		}
 
 		if mt.hasFailedTrackingResources() {
-			mt.displayFailedTrackingResourcesDebugMessages()
+			mt.displayFailedTrackingResourcesServiceMessages()
 			errorChan <- mt.formatFailedTrackingResourcesError()
 		} else {
 			doneChan <- struct{}{}
@@ -332,7 +334,7 @@ func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, wg *syn
 	delete(contexts, spec.ResourceName)
 
 	if err == ErrFailWholeDeployProcessImmediately {
-		mt.displayFailedTrackingResourcesDebugMessages()
+		mt.displayFailedTrackingResourcesServiceMessages()
 		errorChan <- mt.formatFailedTrackingResourcesError()
 		mt.isFailed = true
 		return
@@ -382,9 +384,10 @@ type multitracker struct {
 	isFailed      bool
 	isTerminating bool
 
-	displayCalled                  bool
-	currentLogProcessHeader        string
-	debugDisplayMessagesByResource map[string][]string
+	displayCalled             bool
+	currentLogProcessHeader   string
+	currentLogProcessOptions  logboek.LogProcessStartOptions
+	serviceMessagesByResource map[string][]string
 }
 
 type multitrackerContext struct {

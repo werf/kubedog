@@ -14,7 +14,7 @@ import (
 	"github.com/flant/logboek"
 )
 
-func (mt *multitracker) displayResourceLogChunk(resourceKind, resourceName string, header string, spec MultitrackSpec, chunk *pod.ContainerLogChunk) {
+func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec MultitrackSpec, header string, chunk *pod.ContainerLogChunk) {
 	for _, containerName := range spec.SkipLogsForContainers {
 		if containerName == chunk.ContainerName {
 			return
@@ -55,7 +55,7 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind, resourceName strin
 	}
 
 	if len(showLines) > 0 {
-		mt.setLogProcess(fmt.Sprintf("%s/%s %s logs", resourceKind, resourceName, header))
+		mt.setLogProcess(fmt.Sprintf("%s/%s %s logs", resourceKind, spec.ResourceName, header), logboek.LogProcessStartOptions{})
 
 		for _, line := range showLines {
 			logboek.OutF("%s\n", line)
@@ -63,76 +63,96 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind, resourceName strin
 	}
 }
 
-func (mt *multitracker) setLogProcess(header string) {
+func (mt *multitracker) setLogProcess(header string, options logboek.LogProcessStartOptions) {
 	if mt.currentLogProcessHeader != header {
 		mt.resetLogProcess()
 
-		logboek.LogProcessStart(header, logboek.LogProcessStartOptions{})
+		logboek.LogProcessStart(header, options)
 		mt.currentLogProcessHeader = header
+		mt.currentLogProcessOptions = options
 	}
 }
 
-// resetLogProcess should be called every time something is about to be displayed
 func (mt *multitracker) resetLogProcess() {
 	mt.displayCalled = true
+
 	if mt.currentLogProcessHeader != "" {
-		logboek.LogProcessEnd(logboek.LogProcessEndOptions{WithoutLogOptionalLn: true, WithoutElapsedTime: true})
+		logboek.LogProcessEnd(logboek.LogProcessEndOptions{ColorizeMsgFunc: mt.currentLogProcessOptions.ColorizeMsgFunc, WithoutLogOptionalLn: true, WithoutElapsedTime: true})
 		mt.currentLogProcessHeader = ""
 	}
 }
 
-func (mt *multitracker) displayResourceTrackerMessageF(resourceKind, resourceName string, format string, a ...interface{}) {
-	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
-	mt.debugDisplayMessagesByResource[resource] = append(mt.debugDisplayMessagesByResource[resource], fmt.Sprintf(fmt.Sprintf("%s: %s", resource, format), a...))
+func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
+	resource := fmt.Sprintf("%s/%s", resourceKind, spec.ResourceName)
+	msg := fmt.Sprintf(format, a...)
+	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
+
+	if spec.ShowServiceMessages {
+		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{logboek.ColorizeInfo})
+		logboek.LogInfoF("%s\n", msg)
+	}
 }
 
-func (mt *multitracker) displayResourceEventF(resourceKind, resourceName string, format string, a ...interface{}) {
-	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
-	mt.debugDisplayMessagesByResource[resource] = append(mt.debugDisplayMessagesByResource[resource], fmt.Sprintf(fmt.Sprintf("%s event: %s", resource, format), a...))
+func (mt *multitracker) displayResourceEventF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
+	resource := fmt.Sprintf("%s/%s", resourceKind, spec.ResourceName)
+	msg := fmt.Sprintf(fmt.Sprintf("event: %s", format), a...)
+	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
+
+	if spec.ShowServiceMessages {
+		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{logboek.ColorizeInfo})
+		logboek.LogInfoF("%s\n", msg)
+	}
 }
 
-func (mt *multitracker) displayResourceErrorF(resourceKind, resourceName string, format string, a ...interface{}) {
+func (mt *multitracker) displayResourceErrorF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
 	mt.resetLogProcess()
-	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
-	logboek.LogErrorF(fmt.Sprintf("%s ERROR: %s", resource, format), a...)
+	logboek.LogErrorF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
 }
 
-func (mt *multitracker) displayFailedTrackingResourcesDebugMessages() {
+func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
 	for name, state := range mt.TrackingDeployments {
 		if state.Status != resourceFailed {
 			continue
 		}
-		mt.displayResourceDebugMessages("deploy", name)
+
+		spec := mt.DeploymentsSpecs[name]
+		mt.displayResourceServiceMessages("deploy", spec)
 	}
 	for name, state := range mt.TrackingStatefulSets {
 		if state.Status != resourceFailed {
 			continue
 		}
-		mt.displayResourceDebugMessages("sts", name)
+
+		spec := mt.StatefulSetsSpecs[name]
+		mt.displayResourceServiceMessages("sts", spec)
 	}
 	for name, state := range mt.TrackingDaemonSets {
 		if state.Status != resourceFailed {
 			continue
 		}
-		mt.displayResourceDebugMessages("ds", name)
+
+		spec := mt.DaemonSetsSpecs[name]
+		mt.displayResourceServiceMessages("ds", spec)
 	}
 	for name, state := range mt.TrackingJobs {
 		if state.Status != resourceFailed {
 			continue
 		}
-		mt.displayResourceDebugMessages("job", name)
+
+		spec := mt.JobsSpecs[name]
+		mt.displayResourceServiceMessages("job", spec)
 	}
 }
 
-func (mt *multitracker) displayResourceDebugMessages(resourceKind, resourceName string) {
-	lines := mt.debugDisplayMessagesByResource[fmt.Sprintf("%s/%s", resourceKind, resourceName)]
+func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec MultitrackSpec) {
+	lines := mt.serviceMessagesByResource[fmt.Sprintf("%s/%s", resourceKind, spec.ResourceName)]
 
 	if len(lines) > 0 {
 		mt.resetLogProcess()
 
 		logboek.LogOptionalLn()
 
-		logboek.LogBlock(fmt.Sprintf("Failed resource %s/%s debug messages", resourceKind, resourceName), logboek.LogBlockOptions{WithoutLogOptionalLn: true}, func() {
+		logboek.LogBlock(fmt.Sprintf("Failed resource %s/%s service messages", resourceKind, spec.ResourceName), logboek.LogBlockOptions{WithoutLogOptionalLn: true}, func() {
 			for _, line := range lines {
 				logboek.LogInfoF("%s", line)
 			}

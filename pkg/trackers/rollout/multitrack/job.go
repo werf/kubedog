@@ -58,7 +58,7 @@ func (mt *multitracker) TrackJob(kube kubernetes.Interface, spec MultitrackSpec,
 func (mt *multitracker) jobAdded(spec MultitrackSpec, feed job.Feed) error {
 	mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
 
-	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "added\n")
+	mt.displayResourceTrackerMessageF("job", spec, "added")
 
 	return nil
 }
@@ -66,36 +66,35 @@ func (mt *multitracker) jobAdded(spec MultitrackSpec, feed job.Feed) error {
 func (mt *multitracker) jobSucceeded(spec MultitrackSpec, feed job.Feed) error {
 	mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
 
-	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "succeeded\n")
+	mt.displayResourceTrackerMessageF("job", spec, "succeeded")
 
 	return mt.handleResourceReadyCondition(mt.TrackingJobs, spec)
 }
 
 func (mt *multitracker) jobFailed(spec MultitrackSpec, feed job.Feed, reason string) error {
-	mt.displayResourceErrorF("job", spec.ResourceName, "%s\n", reason)
-
+	mt.displayResourceErrorF("job", spec, "%s", reason)
 	return mt.handleResourceFailure(mt.TrackingJobs, "job", spec, reason)
 }
 
 func (mt *multitracker) jobEventMsg(spec MultitrackSpec, feed job.Feed, msg string) error {
-	mt.displayResourceEventF("job", spec.ResourceName, "%s\n", msg)
+	mt.displayResourceEventF("job", spec, "%s", msg)
 	return nil
 }
 
 func (mt *multitracker) jobAddedPod(spec MultitrackSpec, feed job.Feed, podName string) error {
-	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "po/%s added\n", podName)
+	mt.displayResourceTrackerMessageF("job", spec, "po/%s added", podName)
 	return nil
 }
 
 func (mt *multitracker) jobPodLogChunk(spec MultitrackSpec, feed job.Feed, chunk *pod.PodLogChunk) error {
-	mt.displayResourceLogChunk("job", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
+	mt.displayResourceLogChunk("job", spec, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), chunk.ContainerLogChunk)
 	return nil
 }
 
 func (mt *multitracker) jobPodError(spec MultitrackSpec, feed job.Feed, podError pod.PodError) error {
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
-	mt.displayResourceErrorF("job", spec.ResourceName, "%s\n", reason)
+	mt.displayResourceErrorF("job", spec, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingJobs, "job", spec, reason)
 }

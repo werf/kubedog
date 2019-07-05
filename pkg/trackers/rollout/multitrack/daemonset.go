@@ -64,12 +64,12 @@ func (mt *multitracker) daemonsetAdded(spec MultitrackSpec, feed daemonset.Feed,
 	mt.DaemonSetsStatuses[spec.ResourceName] = feed.GetStatus()
 
 	if ready {
-		mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "appears to be READY\n")
+		mt.displayResourceTrackerMessageF("ds", spec, "appears to be READY")
 
 		return mt.handleResourceReadyCondition(mt.TrackingDaemonSets, spec)
 	}
 
-	mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "added\n")
+	mt.displayResourceTrackerMessageF("ds", spec, "added")
 
 	return nil
 }
@@ -77,37 +77,36 @@ func (mt *multitracker) daemonsetAdded(spec MultitrackSpec, feed daemonset.Feed,
 func (mt *multitracker) daemonsetReady(spec MultitrackSpec, feed daemonset.Feed) error {
 	mt.DaemonSetsStatuses[spec.ResourceName] = feed.GetStatus()
 
-	mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "become READY\n")
+	mt.displayResourceTrackerMessageF("ds", spec, "become READY")
 
 	return mt.handleResourceReadyCondition(mt.TrackingDaemonSets, spec)
 }
 
 func (mt *multitracker) daemonsetFailed(spec MultitrackSpec, feed daemonset.Feed, reason string) error {
-	mt.displayResourceErrorF("ds", spec.ResourceName, "%s\n", reason)
+	mt.displayResourceErrorF("ds", spec, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingDaemonSets, "ds", spec, reason)
 }
 
 func (mt *multitracker) daemonsetEventMsg(spec MultitrackSpec, feed daemonset.Feed, msg string) error {
-	mt.displayResourceEventF("ds", spec.ResourceName, "%s\n", msg)
-
+	mt.displayResourceEventF("ds", spec, "%s", msg)
 	return nil
 }
 
 func (mt *multitracker) daemonsetAddedReplicaSet(spec MultitrackSpec, feed daemonset.Feed, rs replicaset.ReplicaSet) error {
-	mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "rs/%s added\n", rs.Name)
+	mt.displayResourceTrackerMessageF("ds", spec, "rs/%s added", rs.Name)
 	return nil
 }
 
 func (mt *multitracker) daemonsetAddedPod(spec MultitrackSpec, feed daemonset.Feed, pod replicaset.ReplicaSetPod) error {
-	mt.displayResourceTrackerMessageF("ds", spec.ResourceName, "po/%s added\n", pod.Name)
+	mt.displayResourceTrackerMessageF("ds", spec, "po/%s added", pod.Name)
 	return nil
 }
 
 func (mt *multitracker) daemonsetPodError(spec MultitrackSpec, feed daemonset.Feed, podError replicaset.ReplicaSetPodError) error {
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
-	mt.displayResourceErrorF("ds", spec.ResourceName, "%s\n", reason)
+	mt.displayResourceErrorF("ds", spec, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingDaemonSets, "ds", spec, reason)
 }
@@ -120,7 +119,7 @@ func (mt *multitracker) daemonsetPodLogChunk(spec MultitrackSpec, feed daemonset
 		}
 	}
 
-	mt.displayResourceLogChunk("ds", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
+	mt.displayResourceLogChunk("ds", spec, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), chunk.ContainerLogChunk)
 	return nil
 }
 
