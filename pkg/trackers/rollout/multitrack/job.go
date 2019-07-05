@@ -84,18 +84,10 @@ func (mt *multitracker) jobEventMsg(spec MultitrackSpec, feed job.Feed, msg stri
 
 func (mt *multitracker) jobAddedPod(spec MultitrackSpec, feed job.Feed, podName string) error {
 	mt.displayResourceTrackerMessageF("job", spec.ResourceName, "po/%s added\n", podName)
-
 	return nil
 }
 
 func (mt *multitracker) jobPodLogChunk(spec MultitrackSpec, feed job.Feed, chunk *pod.PodLogChunk) error {
-	controllerStatus := feed.GetStatus()
-	if podStatus, hasKey := controllerStatus.Pods[chunk.PodName]; hasKey {
-		if podStatus.IsReady {
-			return nil
-		}
-	}
-
 	mt.displayResourceLogChunk("job", spec.ResourceName, podContainerLogChunkHeader(chunk.PodName, chunk.ContainerLogChunk), spec, chunk.ContainerLogChunk)
 	return nil
 }
