@@ -197,7 +197,8 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 			}
 
 		case err := <-errorChan:
-			return fmt.Errorf("sts/%s error: %v", name, err)
+			return err
+
 		case <-doneChan:
 			return nil
 		}

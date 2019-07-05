@@ -18,6 +18,13 @@ import (
 	"github.com/flant/kubedog/pkg/tracker/statefulset"
 )
 
+type TrackTerminationMode string
+
+const (
+	WaitUntilResourceReady TrackTerminationMode = "WaitUntilResourceReady"
+	NonBlocking            TrackTerminationMode = "NonBlocking"
+)
+
 type FailMode string
 
 const (
@@ -26,20 +33,19 @@ const (
 	HopeUntilEndOfDeployProcess       FailMode = "HopeUntilEndOfDeployProcess"
 )
 
-type DeployCondition string
-
-const (
-	ControllerIsReady DeployCondition = "ControllerIsReady"
-	PodIsReady        DeployCondition = "PodIsReady"
-	EndOfDeploy       DeployCondition = "EndOfDeploy"
-)
+//type DeployCondition string
+//
+//const (
+//	ControllerIsReady DeployCondition = "ControllerIsReady"
+//	PodIsReady        DeployCondition = "PodIsReady"
+//	EndOfDeploy       DeployCondition = "EndOfDeploy"
+//)
 
 var (
 	ErrFailWholeDeployProcessImmediately = errors.New("fail whole deploy process immediately")
 )
 
 type MultitrackSpecs struct {
-	//Pods         []MultitrackSpec
 	Deployments  []MultitrackSpec
 	StatefulSets []MultitrackSpec
 	DaemonSets   []MultitrackSpec
@@ -50,6 +56,7 @@ type MultitrackSpec struct {
 	ResourceName string
 	Namespace    string
 
+	TrackTerminationMode    TrackTerminationMode
 	FailMode                FailMode
 	AllowFailuresCount      *int
 	FailureThresholdSeconds *int
@@ -60,7 +67,7 @@ type MultitrackSpec struct {
 	SkipLogs                  bool
 	SkipLogsForContainers     []string
 	ShowLogsOnlyForContainers []string
-	ShowLogsUntil             DeployCondition
+	//ShowLogsUntil             DeployCondition TODO
 
 	SkipEvents bool
 }
@@ -74,6 +81,10 @@ func newMultitrackOptions(parentContext context.Context, timeout time.Duration, 
 }
 
 func setDefaultSpecValues(spec *MultitrackSpec) {
+	if spec.TrackTerminationMode == "" {
+		spec.TrackTerminationMode = WaitUntilResourceReady
+	}
+
 	if spec.FailMode == "" {
 		spec.FailMode = FailWholeDeployProcessImmediately
 	}
@@ -86,10 +97,6 @@ func setDefaultSpecValues(spec *MultitrackSpec) {
 	if spec.FailureThresholdSeconds == nil {
 		spec.FailureThresholdSeconds = new(int)
 		*spec.FailureThresholdSeconds = 0
-	}
-
-	if spec.ShowLogsUntil == "" {
-		spec.ShowLogsUntil = PodIsReady
 	}
 }
 
@@ -222,6 +229,11 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 		})
 	}
 
+	if err := mt.applyTrackTerminationMode(); err != nil {
+		errorChan <- fmt.Errorf("unable to apply termination mode: %s", err)
+		return
+	}
+
 	go func() {
 		wg.Wait()
 
@@ -253,6 +265,62 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	}()
 }
 
+func (mt *multitracker) applyTrackTerminationMode() error {
+	if mt.isTerminating {
+		return nil
+	}
+
+	shouldContinueTracking := func(name string, spec MultitrackSpec) bool {
+		switch spec.TrackTerminationMode {
+		case WaitUntilResourceReady:
+			// There is at least one active context with wait mode,
+			// so continue tracking without stopping any contexts
+			return true
+
+		case NonBlocking:
+			return false
+
+		default:
+			panic(fmt.Sprintf("unknown TrackTerminationMode %#v", spec.TrackTerminationMode))
+		}
+	}
+
+	var contextsToStop []*multitrackerContext
+
+	for name, ctx := range mt.DeploymentsContexts {
+		if shouldContinueTracking(name, mt.DeploymentsSpecs[name]) {
+			return nil
+		}
+		contextsToStop = append(contextsToStop, ctx)
+	}
+	for name, ctx := range mt.StatefulSetsContexts {
+		if shouldContinueTracking(name, mt.StatefulSetsSpecs[name]) {
+			return nil
+		}
+		contextsToStop = append(contextsToStop, ctx)
+	}
+	for name, ctx := range mt.DaemonSetsContexts {
+		if shouldContinueTracking(name, mt.DaemonSetsSpecs[name]) {
+			return nil
+		}
+		contextsToStop = append(contextsToStop, ctx)
+	}
+	for name, ctx := range mt.JobsContexts {
+		if shouldContinueTracking(name, mt.JobsSpecs[name]) {
+			return nil
+		}
+		contextsToStop = append(contextsToStop, ctx)
+	}
+
+	mt.isTerminating = true
+
+	for _, ctx := range contextsToStop {
+		ctx.CancelFunc()
+	}
+
+	return nil
+}
+
 func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, wg *sync.WaitGroup, contexts map[string]*multitrackerContext, doneChan chan struct{}, errorChan chan error, trackerFunc func(MultitrackSpec) error) {
 	defer wg.Done()
 
@@ -268,6 +336,8 @@ func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, wg *syn
 		errorChan <- mt.formatFailedTrackingResourcesError()
 		mt.isFailed = true
 		return
+	} else if err == context.Canceled {
+		return
 	} else if err != nil {
 		// unknown error
 		errorChan <- fmt.Errorf("%s/%s track failed: %s", kind, spec.ResourceName, err)
@@ -275,18 +345,11 @@ func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, wg *syn
 		return
 	}
 
-	// Cleanup active contexts
-	//for _, contexts := range []map[string]*multitrackerContext{
-	//	mt.DeploymentsContexts,
-	//	mt.StatefulSetsContexts,
-	//	mt.DaemonSetsContexts,
-	//	mt.JobsContexts,
-	//} {
-	//	for _, ctx := range contexts {
-	//		ctx.CancelFunc()
-	//	}
-	//}
-	//doneChan <- struct{}{}
+	if err := mt.applyTrackTerminationMode(); err != nil {
+		errorChan <- fmt.Errorf("unable to apply termination mode: %s", err)
+		mt.isFailed = true
+		return
+	}
 }
 
 type multitracker struct {
@@ -314,8 +377,10 @@ type multitracker struct {
 	JobsStatuses     map[string]job.JobStatus
 	PrevJobsStatuses map[string]job.JobStatus
 
-	mux      sync.Mutex
-	isFailed bool
+	mux sync.Mutex
+
+	isFailed      bool
+	isTerminating bool
 
 	displayCalled                  bool
 	currentLogProcessHeader        string
