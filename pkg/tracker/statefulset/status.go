@@ -87,7 +87,7 @@ processingPodsStatuses:
 	switch object.Spec.UpdateStrategy.Type {
 	case appsv1.RollingUpdateStatefulSetStrategyType:
 		if object.Spec.Replicas != nil {
-			if object.Spec.UpdateStrategy.RollingUpdate != nil && object.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+			if object.Spec.UpdateStrategy.RollingUpdate != nil && object.Spec.UpdateStrategy.RollingUpdate.Partition != nil && *object.Spec.UpdateStrategy.RollingUpdate.Partition > 0 {
 				// Partitioned rollout
 
 				res.UpToDateIndicator = &indicators.Int64GreaterOrEqualConditionIndicator{

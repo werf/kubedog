@@ -156,9 +156,9 @@ func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec
 
 		logboek.LogOptionalLn()
 
-		logboek.LogBlock(fmt.Sprintf("Failed resource %s/%s service messages", resourceKind, spec.ResourceName), logboek.LogBlockOptions{WithoutLogOptionalLn: true}, func() {
+		logboek.LogBlock(fmt.Sprintf("Failed resource %s/%s service messages", resourceKind, spec.ResourceName), logboek.LogBlockOptions{WithoutLogOptionalLn: true, ColorizeMsgFunc: logboek.ColorizeInfo}, func() {
 			for _, line := range lines {
-				logboek.LogInfoF("%s", line)
+				logboek.LogInfoF("%s\n", line)
 			}
 		})
 
