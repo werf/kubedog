@@ -121,7 +121,14 @@ processingPodsStatuses:
 				TargetValue: int64(*object.Spec.Replicas),
 			}
 
-			if object.Status.UpdatedReplicas < *object.Spec.Replicas {
+			// Workaround for old kubernetes (1.10), which does not update UpdateReplicas field
+			isReady := (object.Status.UpdatedReplicas == 0) && (object.Status.UpdateRevision == object.Status.CurrentRevision)
+
+			if !isReady {
+				isReady = object.Status.UpdatedReplicas >= *object.Spec.Replicas
+			}
+
+			if !isReady {
 				res.IsReady = false
 				res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("up-to-date %d->%d (user should delete old pods manually now!)", object.Status.UpdatedReplicas, *object.Spec.Replicas))
 			}
