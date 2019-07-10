@@ -255,7 +255,7 @@ TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker
 
 ### Track mutiple resources
 
-**Task**: track deployments `tiller-deploy`, `coredns`, pod `etcd-minikube` and job `myjob` simultaneously until all the resources become ready.
+**Task**: track deployments `tiller-deploy`, `coredns` and job `myjob` simultaneously until all the resources become ready.
 
 **Solution**: Multitrack tracker can be used to track multiple resources at once:
 
@@ -277,11 +277,6 @@ func main() {
   err := multitrack.Multitrack(
     kube.Kubernetes,
     multitrack.MultitrackSpecs{
-      Pods: []multitrack.MultitrackSpec{
-        multitrack.MultitrackSpec{
-          ResourceName: "etcd-minikube",
-          Namespace: "kube-system"},
-      },
       Deployments: []multitrack.MultitrackSpec{
         multitrack.MultitrackSpec{
           ResourceName: "tiller-deploy",
