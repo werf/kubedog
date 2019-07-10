@@ -19,7 +19,7 @@ The latest release can be downloaded from [this page](https://bintray.com/flant/
 ### MacOS
 
 ```bash
-curl -L https://dl.bintray.com/flant/kubedog/v0.2.0/kubedog-darwin-amd64-v0.2.0 -o /tmp/kubedog
+curl -L https://dl.bintray.com/flant/kubedog/v0.3.2/kubedog-darwin-amd64-v0.3.2 -o /tmp/kubedog
 chmod +x /tmp/kubedog
 sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ```
@@ -27,44 +27,143 @@ sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ### Linux
 
 ```bash
-curl -L https://dl.bintray.com/flant/kubedog/v0.2.0/kubedog-linux-amd64-v0.2.0 -o /tmp/kubedog
+curl -L https://dl.bintray.com/flant/kubedog/v0.3.2/kubedog-linux-amd64-v0.3.2 -o /tmp/kubedog
 chmod +x /tmp/kubedog
 sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ```
 
 ### Windows
 
-Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.2.0/kubedog-windows-amd64-v0.2.0.exe).
+Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.3.2/kubedog-windows-amd64-v0.3.2.exe).
 
 # Cli usage
 
 Kubedog cli utility is a tool that can be used to track what is going on with the specified resource.
 
-There are 2 modes of resource tracking: follow and rollout. The commands are `kubedog follow ...` and `kubedog rollout track ...` respectively.
+There are 3 modes of resource tracking: multitrack, follow and rollout. The commands are `kubedog multitrack ...`, `kubedog follow ...` and `kubedog rollout track ...` respectively.
+
+DEPRECATION NOTE: Rollout and follow modes are deprecated to use. Old trackers will remain in the cli. But these trackers will not receive future support. The reason is: multitracker solves main kubedog task in the more common way.
+
+## Multitracker cli
+
+There is minimal viable support of multitracker in kubedog cli. To use multitracker user must pass to kubedog stdin json structure which resembles golang structure MultitrackSpecs (see [library description](#multitracker) and [sources](https://github.com/flant/kubedog/blob/master/pkg/trackers/rollout/multitrack/multitrack.go#L57) for more info), for example:
+
+```
+cat << EOF | kubedog multitrack
+{
+  "StatefulSets": [
+    {
+      "ResourceName": "mysts1",
+      "Namespace": "myns"
+    }
+  ],
+  "Deployments": [
+    {
+      "ResourceName": "mydeploy22",
+      "Namespace": "myns"
+    }
+  ]
+}
+EOF
+```
+
+![Kubedog multitrack cli demo](https://raw.githubusercontent.com/flant/werf-demos/master/kubedog/kubedog-multitrack-cmd.gif)
+
+Multitracker can be used in CI/CD deploy pipeline to make sure that some set of resources is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resources. By default kubedog will fail fast giving user fast feedback about failed resources.
+
+## More multitracker demos
+
+![Demo 1](https://raw.githubusercontent.com/flant/werf-demos/master/kubedog/kubedog-multitrack-with-output-prefix.gif)
+
+### Werf demos
+
+[Werf](https://github.com/flant/werf) makes use of kubedog multitracker under the hood, so the output is the same as `kubedog multitrack ...` cli invocation, the modes configured using annotations are passed directly to the `MultitrackSpec` corresponding options:
+
+![Demo 2](https://raw.githubusercontent.com/flant/werf-demos/master/deploy/werf-new-track-modes-1.gif)
+
+![Demo 3](https://raw.githubusercontent.com/flant/werf-demos/master/deploy/werf-new-track-modes-2.gif)
+
+![Demo 4](https://raw.githubusercontent.com/flant/werf-demos/master/deploy/werf-new-track-modes-3.gif)
+
+## Rollout and follow cli (DEPRECATED)
 
 In the rollout and follow modes kubedog will print to the screen logs and other information related to the specified resource. Kubedog aimed to give enough information about resource for the end user, so that no additional kubectl invocation needed to debug and see what is going on with the resource. All data related to the resource will be unified into a single stream of events.
 
-Follow mode can be used as simple `tail -f` tool, but for kubernetes resources.
+Follow mode can be used as simple `tail -f` tool, but for kubernetes resources. Users of rollout tracker encouraged to migrate to multitracker, because old rollout-trackers will not receive future support.
 
 Rollout mode can be used in CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resource.
-
-![Deployment Rollout Animation](doc/deployment_rollout.gif)
-
-![Deployment Follow Animation](doc/deployment_follow.gif)
-
-See `kubedog --help` for more info.
 
 # Library usage: trackers
 
 Kubedog has a low level public methods to get stream of events and logs. These methods can be used to implement different tracking algorithms or `trackers` (more details in [Custom trackers](#library-usage-custom-trackers) section).
 
-Also, kubedog provides a ready-to-go trackers that implement most used tracking logic. These trackers are used by kubedog CLI itself. Currently there are 3 tracker types: [follow](#follow-tracker), [rollout](#rollout-tracker) and [multitracker](#multitracker).
+Also, kubedog provides a ready-to-go trackers that implement most used tracking logic. These trackers are used by kubedog CLI itself.
 
 Tracker aimed to give enough information about resource for the end user, so that no additional kubectl invocation needed to debug and see what is going on with the resource. All data related to the resource will be combined into a single stream of events.
 
 Trackers are using kubernetes informers under the hood, which is a reliable primitive from kubernetes library, instead of using raw watch kubernetes api.
 
-## Follow tracker
+Currently there is a single main tracker available: [multitracker](#multitracker). Old [follow](#follow-tracker) and [rollout](#rollout-tracker) trackers are deprecated to use, because multitracker is a more common way to solve the same problems, that follow and rollout trackers aimed to solve.
+
+## Multitracker
+
+Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical status reports with info about all resources, that are being tracked.
+
+Multitracker is a **rollout style tracker** (see [follow tracker](https://github.com/flant/kubedog#follow-tracker) and [rollout tracker](https://github.com/flant/kubedog#rollout-tracker)), so it runs until all specified resources reach a readiness state.
+
+Import package:
+
+```
+import "github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+```
+
+Available functions:
+
+```
+Multitrack(
+  kube kubernetes.Interface,
+  specs MultitrackSpecs,
+  opts MultitrackOptions
+) error
+```
+
+- `kube` — configured Kubernetes client (see [kube.go](pkg/kube/kube.go#L36))
+- `specs` — description of objects to track
+- `opts` — multitrack specific options
+
+`specs` argument describes what `Deployments`, `StatefulSets`, `DaemonSets` and `Jobs` to track using `MultitrackSpec` structure. `MultitrackSpec` allows to specify different modes of tracking per-resource (such as allowed failures count, log regexp and other):
+
+```
+type MultitrackSpecs struct {
+	Deployments  []MultitrackSpec
+	StatefulSets []MultitrackSpec
+	DaemonSets   []MultitrackSpec
+	Jobs         []MultitrackSpec
+}
+
+type MultitrackSpec struct {
+	ResourceName string
+	Namespace    string
+
+	TrackTerminationMode    TrackTerminationMode
+	FailMode                FailMode
+	AllowFailuresCount      *int
+	FailureThresholdSeconds *int
+
+	LogRegex                *regexp.Regexp
+	LogRegexByContainerName map[string]*regexp.Regexp
+
+	SkipLogs                  bool
+	SkipLogsForContainers     []string
+	ShowLogsOnlyForContainers []string
+
+	ShowServiceMessages bool
+}
+```
+
+`Multitrack` function is a blocking call, which will return on error or when all resources are ready accordingly to the specified specs options.
+
+## Follow tracker (DEPRECATED)
 
 Follow tracker simply prints to the screen all resource related events. Follow tracker can be used as simple `tail -f` tool, but for kubernetes resources. This tracker used to implement follow mode of the CLI.
 
@@ -120,7 +219,7 @@ These functions run until specified resource is terminated. Error is returned on
 
 > Note: Objects’ related Kubernetes errors such as `CrashLoopBackOff`, `ErrImagePull` and others are considered as events. They are printed to the screen and error is not returned in these cases.
 
-## Rollout tracker
+## Rollout tracker (DEPRECATED)
 
 Rollout tracker is aimed to be used in the tools for the CI/CD deploy pipeline to make sure that some resource is ready or done before proceeding deploy process. These trackers are used to implement rollout mode of the CLI.
 
@@ -152,130 +251,7 @@ TrackStatefulSet(name, namespace string, kube kubernetes.Interface, opts tracker
 - `kube` — configured Kubernetes client (see [kube.go](pkg/kube/kube.go#L36))
 - `opts` — tracker options (context, timeout, starting time for logs)
 
-
-## Multitracker (NEW)
-
-Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical status reports with info about all resources, that are being tracked.
-
-Multitracker is now available only as a **rollout style tracker** (see [follow tracker](https://github.com/flant/kubedog#follow-tracker) and [rollout tracker](https://github.com/flant/kubedog#rollout-tracker)), so it runs until all resources reach a readiness state.
-
-Import package:
-
-```
-import "github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
-```
-
-Available functions:
-
-```
-Multitrack(
-  kube kubernetes.Interface,
-  specs MultitrackSpecs,
-  opts MultitrackOptions
-) error
-```
-
-- `kube` — configured Kubernetes client (see [kube.go](pkg/kube/kube.go#L36))
-- `specs` — description of objects to track
-- `opts` — multitrack specific options
-
-`specs` argument describes what `Pods`, `Deployments`, `StatefulSets`, `DaemonSets` and `Jobs` to track using `MultitrackSpec` structure. `MultitrackSpec` allows to specify different modes of tracking per-resource (such as allowed failures count, log regexp and other):
-
-```
-type MultitrackSpecs struct {
-	Pods         []MultitrackSpec
-	Deployments  []MultitrackSpec
-	StatefulSets []MultitrackSpec
-	DaemonSets   []MultitrackSpec
-	Jobs         []MultitrackSpec
-}
-
-type MultitrackSpec struct {
-	ResourceName string
-	Namespace    string
-
-	FailMode                FailMode
-	AllowFailuresCount      *int
-	FailureThresholdSeconds *int
-
-	LogRegex                *regexp.Regexp
-	LogRegexByContainerName map[string]*regexp.Regexp
-
-	SkipLogs                  bool
-	SkipLogsForContainers     []string
-	ShowLogsOnlyForContainers []string
-	ShowLogsUntil             DeployCondition
-
-	SkipEvents bool
-}
-```
-
-
 ## Examples of using trackers
-
-### Track until ready
-
-**Task**: track `mydeployment` Deployment in namespace `mynamespace` until it is ready.
-
-**Solution**: Rollout tracker can be used to track a resource until it is ready:
-
-```
-import (
-  "fmt"
-  "os"
-
-  "github.com/flant/kubedog/pkg/kube"
-  "github.com/flant/kubedog/pkg/tracker"
-  "github.com/flant/kubedog/pkg/trackers/rollout"
-)
-
-func main() {
-  _ = kube.Init()
-
-  err := rollout.TrackDeployment(
-    "mydeployment",
-    "mynamespace",
-    kube.Kubernetes,
-    tracker.Options{Timeout: 300 * time.Second}
-  )
-  if err != nil {
-    fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
-    os.Exit(1)
-  }
-}
-```
-
-### Track forever
-
-**Task**: track `myjob` Job in namespace `mynamespace` forever.
-
-**Solution**: Follow tracker can be used to track a resource forever or until it is deleted:
-
-```
-import (
-  "fmt"
-  "os"
-
-  "github.com/flant/kubedog/pkg/kube"
-  "github.com/flant/kubedog/pkg/tracker"
-  "github.com/flant/kubedog/pkg/trackers/follow"
-)
-
-func main() {
-  _ = kube.Init()
-
-  err = follow.TrackJob(
-    "myjob",
-    "mynamespace",
-    kube.Kubernetes,
-    tracker.Options{Timeout: 300 * time.Second}
-  )
-  if err != nil {
-    fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
-    os.Exit(1)
-  }
-}
-```
 
 ### Track mutiple resources
 
@@ -333,7 +309,6 @@ func main() {
   }
 }
 ```
-
 
 # Library usage: Custom trackers
 
@@ -431,4 +406,4 @@ func main() {
 
 # Support
 
-You can ask for support in [werf chat in Telegram](https://t.me/werf_ru).
+You can ask for support in [werf cncf slack channel](https://cloud-native.slack.com/messages/CHY2THYUU), [werf chat in Telegram](https://t.me/werf_ru) or simply create an issue.
