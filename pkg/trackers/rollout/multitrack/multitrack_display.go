@@ -203,7 +203,7 @@ func (mt *multitracker) displayStatusProgress() error {
 }
 
 func (mt *multitracker) displayJobsProgress() {
-	t := utils.NewTable(.5, .1, .1, .1, .1, .1)
+	t := utils.NewTable(.55, .1, .1, .1, .1, .05)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("JOB", "ACTIVE", "SUCCEEDED", "FAILED", "DURATION", "AGE")
 
@@ -476,8 +476,8 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 }
 
 func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
-	st := t.SubTable(.3, .16, .2, .16, .16)
-	st.Header("POD", "RDY", "STATUS", "RESTARTS", "AGE")
+	st := t.SubTable(.33, .16, .23, .18, .1)
+	st.Header("POD", "READY", "STATUS", "RESTARTS", "AGE")
 
 	podsNames := []string{}
 	for podName := range pods {

@@ -43,7 +43,7 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		} else {
 			res += color.New(color.FgYellow).Sprintf("%s", prevIndicator.Value)
 		}
-		res += "->"
+		res += " -> "
 	}
 
 	if !opts.IsResourceNew {
