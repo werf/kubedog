@@ -482,7 +482,7 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 		resourcesStates[spec.ResourceName].FailuresCount++
 
 		if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
-			mt.displayMultitrackServiceMessageF("%d out of %d allowed errors occurred for %s/%s\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
+			mt.displayMultitrackServiceMessageF("%d/%d allowed errors occurred for %s/%s: continue tracking\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
 			return nil
 		}
 
@@ -515,7 +515,7 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 			resourcesStates[spec.ResourceName].FailuresCount++
 
 			if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
-				mt.displayMultitrackServiceMessageF("%d out of %d allowed errors occurred for %s/%s\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
+				mt.displayMultitrackServiceMessageF("%d/%d allowed errors occurred for %s/%s: continue tracking\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
 				return nil
 			}
 

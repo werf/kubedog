@@ -88,7 +88,7 @@ func (mt *multitracker) deploymentFailed(spec MultitrackSpec, feed deployment.Fe
 }
 
 func (mt *multitracker) deploymentEventMsg(spec MultitrackSpec, feed deployment.Feed, msg string) error {
-	mt.displayResourceEventF("deploy", spec, "%s\n", msg)
+	mt.displayResourceEventF("deploy", spec, "%s", msg)
 	return nil
 }
 
