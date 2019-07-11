@@ -203,7 +203,7 @@ func (mt *multitracker) displayStatusProgress() error {
 }
 
 func (mt *multitracker) displayJobsProgress() {
-	t := utils.NewTable(.55, .1, .1, .1, .1, .05)
+	t := utils.NewTable(.53, .1, .12, .1, .1, .05)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("JOB", "ACTIVE", "SUCCEEDED", "FAILED", "DURATION", "AGE")
 
@@ -263,7 +263,7 @@ func (mt *multitracker) displayJobsProgress() {
 }
 
 func (mt *multitracker) displayStatefulSetsStatusProgress() {
-	t := utils.NewTable(.7, .1, .1, .1)
+	t := utils.NewTable(.68, .1, .1, .12)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("STATEFULSET", "REPLICAS", "READY", "UP-TO-DATE")
 
@@ -334,7 +334,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 }
 
 func (mt *multitracker) displayDaemonSetsStatusProgress() {
-	t := utils.NewTable(.7, .1, .1, .1)
+	t := utils.NewTable(.66, .1, .12, .12)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("DAEMONSET", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
@@ -405,7 +405,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 }
 
 func (mt *multitracker) displayDeploymentsStatusProgress() {
-	t := utils.NewTable(.7, .1, .1, .1)
+	t := utils.NewTable(.66, .1, .12, .12)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("DEPLOYMENT", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
