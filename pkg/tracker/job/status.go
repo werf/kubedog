@@ -57,18 +57,24 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 
 	if len(trackedPodsNames) == 0 {
 		for _, c := range object.Status.Conditions {
-			if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
-				res.IsComplete = true
-			} else {
-				res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("condition %s->%s", batchv1.JobComplete, corev1.ConditionTrue))
+			switch c.Type {
+			case batchv1.JobComplete:
+				if c.Status == corev1.ConditionTrue {
+					res.IsComplete = true
+				}
 
-				if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue {
+			case batchv1.JobFailed:
+				if c.Status == corev1.ConditionTrue {
 					if !res.IsFailed {
 						res.IsFailed = true
 						res.FailedReason = c.Reason
 					}
 				}
 			}
+		}
+
+		if !res.IsComplete {
+			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("condition %s->%s", batchv1.JobComplete, corev1.ConditionTrue))
 		}
 	} else {
 		res.WaitingForMessages = append(res.WaitingForMessages, "pods should be complete")
@@ -99,7 +105,7 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 		}
 	}
 
-	if !res.IsComplete {
+	if !res.IsComplete && !res.IsFailed {
 		res.IsFailed = isTrackerFailed
 		res.FailedReason = trackerFailedReason
 	}

@@ -113,7 +113,14 @@ func NewPodStatus(pod *corev1.Pod, isTrackerFailed bool, trackerFailedReason str
 	res.Restarts = restarts
 	res.ReadyContainers = readyContainers
 
-	if !res.IsReady {
+	if pod.Status.Phase == "Failed" {
+		if !res.IsFailed {
+			res.IsFailed = true
+			res.FailedReason = reason
+		}
+	}
+
+	if !res.IsReady && !res.IsFailed {
 		res.IsFailed = isTrackerFailed
 		res.FailedReason = trackerFailedReason
 	}

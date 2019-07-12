@@ -96,7 +96,7 @@ processingPodsStatuses:
 		res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("observed generation %d should be >= %d", object.Status.ObservedGeneration, object.Generation))
 	}
 
-	if !res.IsReady {
+	if !res.IsReady && !res.IsFailed {
 		res.IsFailed = isTrackerFailed
 		res.FailedReason = trackerFailedReason
 	}
