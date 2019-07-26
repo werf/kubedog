@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/flant/logboek"
@@ -72,6 +73,32 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Unable to init logs: %s\n", err)
 			os.Exit(1)
 		}
+
+		logboek.EnableLogColor()
+		if noColorVal := os.Getenv("KUBEDOG_NO_COLOR"); noColorVal != "" {
+			noColor := false
+			for _, val := range []string{"1", "on", "true"} {
+				if noColorVal == val {
+					noColor = true
+					break
+				}
+			}
+
+			if noColor {
+				logboek.DisableLogColor()
+			}
+		}
+
+		if terminalWidthStr := os.Getenv("KUBEDOG_TERMINAL_WIDTH"); terminalWidthStr != "" {
+			terminalWidth, err := strconv.Atoi(terminalWidthStr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Bad value specified for KUBEDOG_TERMINAL_WIDTH, integer expected: %s\n", err)
+				os.Exit(1)
+			}
+
+			logboek.SetWidth(terminalWidth)
+		}
+
 	}
 
 	rootCmd := &cobra.Command{Use: "kubedog"}
