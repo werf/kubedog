@@ -76,10 +76,18 @@ type MultitrackSpec struct {
 
 type MultitrackOptions struct {
 	tracker.Options
+	StatusProgressPeriod time.Duration
 }
 
-func newMultitrackOptions(parentContext context.Context, timeout time.Duration, logsFromTime time.Time) MultitrackOptions {
-	return MultitrackOptions{Options: tracker.Options{ParentContext: parentContext, Timeout: timeout, LogsFromTime: logsFromTime}}
+func newMultitrackOptions(parentContext context.Context, timeout, statusProgessPeriod time.Duration, logsFromTime time.Time) MultitrackOptions {
+	return MultitrackOptions{
+		Options: tracker.Options{
+			ParentContext: parentContext,
+			Timeout:       timeout,
+			LogsFromTime:  logsFromTime,
+		},
+		StatusProgressPeriod: statusProgessPeriod,
+	}
 }
 
 func setDefaultSpecValues(spec *MultitrackSpec) {
@@ -150,8 +158,15 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
-	statusProgressTicker := time.NewTicker(5 * time.Second)
-	defer statusProgressTicker.Stop()
+
+	var statusProgressChan <-chan time.Time
+	if opts.StatusProgressPeriod.Seconds() > 0 {
+		statusProgressTicker := time.NewTicker(opts.StatusProgressPeriod)
+		defer statusProgressTicker.Stop()
+		statusProgressChan = statusProgressTicker.C
+	} else {
+		statusProgressChan = make(chan time.Time, 0)
+	}
 
 	doDisplayStatusProgress := func() error {
 		mt.mux.Lock()
@@ -163,7 +178,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 
 	for {
 		select {
-		case <-statusProgressTicker.C:
+		case <-statusProgressChan:
 			if err := doDisplayStatusProgress(); err != nil {
 				return err
 			}
@@ -191,7 +206,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 		wg.Add(1)
 
 		go mt.runSpecTracker("deploy", spec, mt.DeploymentsContexts[spec.ResourceName], &wg, mt.DeploymentsContexts, doneChan, errorChan, func(spec MultitrackSpec, mtCtx *multitrackerContext) error {
-			return mt.TrackDeployment(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.LogsFromTime))
+			return mt.TrackDeployment(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.StatusProgressPeriod, opts.LogsFromTime))
 		})
 	}
 
@@ -203,7 +218,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 		wg.Add(1)
 
 		go mt.runSpecTracker("sts", spec, mt.StatefulSetsContexts[spec.ResourceName], &wg, mt.StatefulSetsContexts, doneChan, errorChan, func(spec MultitrackSpec, mtCtx *multitrackerContext) error {
-			return mt.TrackStatefulSet(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.LogsFromTime))
+			return mt.TrackStatefulSet(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.StatusProgressPeriod, opts.LogsFromTime))
 		})
 	}
 
@@ -215,7 +230,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 		wg.Add(1)
 
 		go mt.runSpecTracker("ds", spec, mt.DaemonSetsContexts[spec.ResourceName], &wg, mt.DaemonSetsContexts, doneChan, errorChan, func(spec MultitrackSpec, mtCtx *multitrackerContext) error {
-			return mt.TrackDaemonSet(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.LogsFromTime))
+			return mt.TrackDaemonSet(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.StatusProgressPeriod, opts.LogsFromTime))
 		})
 	}
 
@@ -227,7 +242,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 		wg.Add(1)
 
 		go mt.runSpecTracker("job", spec, mt.JobsContexts[spec.ResourceName], &wg, mt.JobsContexts, doneChan, errorChan, func(spec MultitrackSpec, mtCtx *multitrackerContext) error {
-			return mt.TrackJob(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.LogsFromTime))
+			return mt.TrackJob(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.StatusProgressPeriod, opts.LogsFromTime))
 		})
 	}
 

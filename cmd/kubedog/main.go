@@ -27,6 +27,7 @@ func main() {
 
 	var namespace string
 	var timeoutSeconds int
+	var statusProgressPeriodSeconds uint
 	var logsSince string
 	var kubeContext string
 	var kubeConfig string
@@ -141,13 +142,19 @@ func main() {
 				os.Exit(1)
 			}
 
-			err = multitrack.Multitrack(kube.Kubernetes, specs, multitrack.MultitrackOptions{Options: makeTrackerOptions("track")})
+			multitrackOptions := multitrack.MultitrackOptions{
+				StatusProgressPeriod: time.Second * time.Duration(statusProgressPeriodSeconds),
+				Options:              makeTrackerOptions("track"),
+			}
+			err = multitrack.Multitrack(kube.Kubernetes, specs, multitrackOptions)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		},
 	}
+	multitrackCmd.PersistentFlags().UintVarP(&statusProgressPeriodSeconds, "status-progress-period", "", 5, "Status progress period in seconds. Set 0 to stop showing status progress.")
+
 	rootCmd.AddCommand(multitrackCmd)
 
 	followCmd := &cobra.Command{Use: "follow"}
