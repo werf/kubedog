@@ -27,7 +27,7 @@ func main() {
 
 	var namespace string
 	var timeoutSeconds int
-	var statusProgressPeriodSeconds uint
+	var statusProgressPeriodSeconds int64
 	var logsSince string
 	var kubeContext string
 	var kubeConfig string
@@ -153,7 +153,7 @@ func main() {
 			}
 		},
 	}
-	multitrackCmd.PersistentFlags().UintVarP(&statusProgressPeriodSeconds, "status-progress-period", "", 5, "Status progress period in seconds. Set 0 to stop showing status progress.")
+	multitrackCmd.PersistentFlags().Int64VarP(&statusProgressPeriodSeconds, "status-progress-period", "", 5, "Status progress period in seconds. Set -1 to stop showing status progress.")
 
 	rootCmd.AddCommand(multitrackCmd)
 

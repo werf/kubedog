@@ -160,8 +160,14 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 	doneChan := make(chan struct{}, 0)
 
 	var statusProgressChan <-chan time.Time
-	if opts.StatusProgressPeriod.Seconds() > 0 {
-		statusProgressTicker := time.NewTicker(opts.StatusProgressPeriod)
+
+	statusProgressPeriod := opts.StatusProgressPeriod
+	if opts.StatusProgressPeriod == 0 {
+		statusProgressPeriod = 5 * time.Second
+	}
+
+	if statusProgressPeriod > 0 {
+		statusProgressTicker := time.NewTicker(statusProgressPeriod)
 		defer statusProgressTicker.Stop()
 		statusProgressChan = statusProgressTicker.C
 	} else {
