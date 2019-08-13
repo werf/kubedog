@@ -1,8 +1,10 @@
 # kubedog
 
-Kubedog is a library and cli utility that allows watching and following kubernetes resources in CI/CD deploy pipelines.
+Kubedog is a library that allows watching and following kubernetes resources in CI/CD deploy pipelines.
 
 This library is used in the [werf CI/CD tool](https://github.com/flant/werf) to track resources during deploy process.
+
+**NOTE** Cli utility is intent to be used to observe library abilities and for debug purposes. Further improvement of cli is not planned. Cli is only a minimal viable interface to access library functions.
 
 # Installation
 
@@ -38,11 +40,13 @@ Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.3.2/kubedog-windo
 
 # Cli usage
 
+**NOTE** Cli utility is intent to be used to observe library abilities and for debug purposes. Further improvement of cli is not planned. Cli is only a minimal viable interface to access library functions.
+
 Kubedog cli utility is a tool that can be used to track what is going on with the specified resource.
 
 There are 3 modes of resource tracking: multitrack, follow and rollout. The commands are `kubedog multitrack ...`, `kubedog follow ...` and `kubedog rollout track ...` respectively.
 
-DEPRECATION NOTE: Rollout and follow modes are deprecated to use. Old trackers will remain in the cli. But these trackers will not receive future support. The reason is: multitracker solves main kubedog task in the more common way.
+**DEPRECATION NOTE** Rollout and follow modes are deprecated to use. Old trackers will remain in the cli. But these trackers will not receive future support. The reason is: multitracker solves main kubedog task in the more common way.
 
 ## Multitracker cli
 
