@@ -14,6 +14,11 @@ import (
 	"github.com/flant/logboek"
 )
 
+var (
+	statusProgressTableRatio    = []float64{.58, .11, .12, .19}
+	statusProgressSubTableRatio = []float64{.40, .15, .20, .25}
+)
+
 func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec MultitrackSpec, header string, chunk *pod.ContainerLogChunk) {
 	if spec.SkipLogs {
 		return
@@ -81,7 +86,7 @@ func (mt *multitracker) resetLogProcess() {
 	mt.displayCalled = true
 
 	if mt.currentLogProcessHeader != "" {
-		logboek.LogProcessEnd(logboek.LogProcessEndOptions{ColorizeMsgFunc: mt.currentLogProcessOptions.ColorizeMsgFunc, WithoutLogOptionalLn: true, WithoutElapsedTime: true})
+		logboek.LogProcessEnd(logboek.LogProcessEndOptions{ColorizeMsgFunc: mt.currentLogProcessOptions.ColorizeMsgFunc, WithoutLogOptionalLn: false, WithoutElapsedTime: true})
 		mt.currentLogProcessHeader = ""
 	}
 }
@@ -203,9 +208,9 @@ func (mt *multitracker) displayStatusProgress() error {
 }
 
 func (mt *multitracker) displayJobsProgress() {
-	t := utils.NewTable(.53, .1, .12, .1, .1, .05)
+	t := utils.NewTable(statusProgressTableRatio...)
 	t.SetWidth(logboek.ContentWidth() - 1)
-	t.Header("JOB", "ACTIVE", "SUCCEEDED", "FAILED", "DURATION", "AGE")
+	t.Header("JOB", "ACTIVE", "DURATION", "SUCCEEDED/FAILED")
 
 	resourcesNames := []string{}
 	for name := range mt.JobsSpecs {
@@ -233,9 +238,9 @@ func (mt *multitracker) displayJobsProgress() {
 		}
 
 		if status.IsFailed {
-			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age, formatResourceError(disableWarningColors, status.FailedReason))
+			t.Row(resource, status.Active, status.Duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"), formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
-			t.Row(resource, status.Active, succeeded, status.Failed, status.Duration, status.Age)
+			t.Row(resource, status.Active, status.Duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"))
 		}
 
 		if len(status.Pods) > 0 {
@@ -263,7 +268,7 @@ func (mt *multitracker) displayJobsProgress() {
 }
 
 func (mt *multitracker) displayStatefulSetsStatusProgress() {
-	t := utils.NewTable(.68, .1, .1, .12)
+	t := utils.NewTable(statusProgressTableRatio...)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("STATEFULSET", "REPLICAS", "READY", "UP-TO-DATE")
 
@@ -334,7 +339,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 }
 
 func (mt *multitracker) displayDaemonSetsStatusProgress() {
-	t := utils.NewTable(.66, .1, .12, .12)
+	t := utils.NewTable(statusProgressTableRatio...)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("DAEMONSET", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
@@ -405,7 +410,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 }
 
 func (mt *multitracker) displayDeploymentsStatusProgress() {
-	t := utils.NewTable(.66, .1, .12, .12)
+	t := utils.NewTable(statusProgressTableRatio...)
 	t.SetWidth(logboek.ContentWidth() - 1)
 	t.Header("DEPLOYMENT", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
@@ -476,8 +481,8 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 }
 
 func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
-	st := t.SubTable(.33, .16, .23, .18, .1)
-	st.Header("POD", "READY", "STATUS", "RESTARTS", "AGE")
+	st := t.SubTable(statusProgressSubTableRatio...)
+	st.Header("POD", "READY", "RESTARTS", "STATUS")
 
 	podsNames := []string{}
 	for podName := range pods {
@@ -518,7 +523,7 @@ func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods 
 			})
 		}
 
-		podRow = append(podRow, resource, ready, status, podStatus.Restarts, podStatus.Age)
+		podRow = append(podRow, resource, ready, podStatus.Restarts, status)
 		if podStatus.IsFailed {
 			podRow = append(podRow, formatResourceError(disableWarningColors, podStatus.FailedReason))
 		}
