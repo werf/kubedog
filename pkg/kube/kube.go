@@ -78,24 +78,27 @@ func Init(opts InitOptions) error {
 	return nil
 }
 
-type GetClientsOptions struct {
+type GetAllContextsClientsOptions struct {
 	KubeConfig string
 }
 
-func GetAllClients(opts GetClientsOptions) ([]kubernetes.Interface, error) {
+const inClusterContextName = "inClusterContext"
+
+func GetAllContextsClients(opts GetAllContextsClientsOptions) (map[string]kubernetes.Interface, error) {
 	// Try to load contexts from kubeconfig in flags or from ~/.kube/config
 	var outOfClusterErr error
-	contexts, outOfClusterErr := getOutOfClusterContexts(opts.KubeConfig)
+	contexts, outOfClusterErr := getOutOfClusterContextsClients(opts.KubeConfig)
 	// return if contexts are loaded successfully
 	if contexts != nil {
 		return contexts, nil
 	}
 	if hasInClusterConfig() {
-		context, err := getInClusterContext()
+		clientset, err := getInClusterContextClient()
 		if err != nil {
 			return nil, err
 		}
-		return []kubernetes.Interface{context}, nil
+
+		return map[string]kubernetes.Interface{inClusterContextName: clientset}, nil
 	}
 	// if not in cluster return outOfCluster error
 	if outOfClusterErr != nil {
@@ -170,8 +173,8 @@ func getOutOfClusterConfig(contextName string, configPath string) (config *rest.
 	return
 }
 
-func getOutOfClusterContexts(configPath string) (contexts []kubernetes.Interface, err error) {
-	contexts = make([]kubernetes.Interface, 0)
+func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.Interface, error) {
+	contexts := make(map[string]kubernetes.Interface, 0)
 
 	rc, err := getClientConfig("", configPath).RawConfig()
 	if err != nil {
@@ -191,10 +194,10 @@ func getOutOfClusterContexts(configPath string) (contexts []kubernetes.Interface
 			return nil, err
 		}
 
-		contexts = append(contexts, clientset)
+		contexts[contextName] = clientset
 	}
 
-	return
+	return contexts, nil
 }
 
 func getInClusterConfig() (config *rest.Config, err error) {
@@ -212,13 +215,13 @@ func getInClusterConfig() (config *rest.Config, err error) {
 	return
 }
 
-func getInClusterContext() (context kubernetes.Interface, err error) {
+func getInClusterContextClient() (clientset kubernetes.Interface, err error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("in-cluster configuration problem: %s", err)
 	}
 
-	context, err = kubernetes.NewForConfig(config)
+	clientset, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
