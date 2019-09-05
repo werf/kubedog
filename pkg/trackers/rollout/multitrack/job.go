@@ -14,58 +14,78 @@ func (mt *multitracker) TrackJob(kube kubernetes.Interface, spec MultitrackSpec,
 	feed.OnAdded(func() error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobAdded(spec, feed)
 	})
 	feed.OnSucceeded(func() error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobSucceeded(spec, feed)
 	})
 	feed.OnFailed(func(reason string) error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobFailed(spec, feed, reason)
 	})
 	feed.OnEventMsg(func(msg string) error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobEventMsg(spec, feed, msg)
 	})
 	feed.OnAddedPod(func(podName string) error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobAddedPod(spec, feed, podName)
 	})
 	feed.OnPodLogChunk(func(chunk *pod.PodLogChunk) error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobPodLogChunk(spec, feed, chunk)
 	})
 	feed.OnPodError(func(podError pod.PodError) error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
+
+		mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
+
 		return mt.jobPodError(spec, feed, podError)
 	})
-	feed.OnStatusReport(func(status job.JobStatus) error {
+	feed.OnStatus(func(status job.JobStatus) error {
 		mt.mux.Lock()
 		defer mt.mux.Unlock()
-		return mt.jobStatusReport(spec, feed, status)
+
+		mt.JobsStatuses[spec.ResourceName] = status
+
+		return nil
 	})
 
 	return feed.Track(spec.ResourceName, spec.Namespace, kube, opts.Options)
 }
 
 func (mt *multitracker) jobAdded(spec MultitrackSpec, feed job.Feed) error {
-	mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
-
 	mt.displayResourceTrackerMessageF("job", spec, "added")
 
 	return nil
 }
 
 func (mt *multitracker) jobSucceeded(spec MultitrackSpec, feed job.Feed) error {
-	mt.JobsStatuses[spec.ResourceName] = feed.GetStatus()
-
 	mt.displayResourceTrackerMessageF("job", spec, "succeeded")
 
 	return mt.handleResourceReadyCondition(mt.TrackingJobs, spec)
@@ -97,9 +117,4 @@ func (mt *multitracker) jobPodError(spec MultitrackSpec, feed job.Feed, podError
 	mt.displayResourceErrorF("job", spec, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingJobs, "job", spec, reason)
-}
-
-func (mt *multitracker) jobStatusReport(spec MultitrackSpec, feed job.Feed, status job.JobStatus) error {
-	mt.JobsStatuses[spec.ResourceName] = status
-	return nil
 }

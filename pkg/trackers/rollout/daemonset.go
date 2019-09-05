@@ -17,8 +17,8 @@ import (
 func TrackDaemonSetTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := daemonset.NewFeed()
 
-	feed.OnAdded(func(ready bool) error {
-		if ready {
+	feed.OnAdded(func(isReady bool) error {
+		if isReady {
 			fmt.Fprintf(display.Out, "# ds/%s appears to be ready. Exit\n", name)
 			return tracker.StopTrack
 		}

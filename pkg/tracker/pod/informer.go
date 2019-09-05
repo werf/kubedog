@@ -24,9 +24,6 @@ type PodsInformer struct {
 }
 
 func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) *PodsInformer {
-	if debug.Debug() {
-		fmt.Printf("> NewPodsInformer\n")
-	}
 	return &PodsInformer{
 		Tracker: tracker.Tracker{
 			Kube:             trk.Kube,

@@ -12,6 +12,8 @@ import (
 type PodStatus struct {
 	corev1.PodStatus
 
+	StatusGeneration uint64
+
 	StatusIndicator *indicators.StringEqualConditionIndicator
 	Age             string
 	Restarts        int32
@@ -20,15 +22,19 @@ type PodStatus struct {
 
 	IsReady      bool
 	IsFailed     bool
+	IsSucceeded  bool
 	FailedReason string
+
+	ContainersErrors map[string]string
 }
 
-func NewPodStatus(pod *corev1.Pod, isTrackerFailed bool, trackerFailedReason string) PodStatus {
+func NewPodStatus(pod *corev1.Pod, statusGeneration uint64, trackedContainers []string, isTrackerFailed bool, trackerFailedReason string) PodStatus {
 	res := PodStatus{
-		PodStatus:       pod.Status,
-		TotalContainers: int32(len(pod.Spec.Containers)),
-		Age:             utils.TranslateTimestampSince(pod.CreationTimestamp),
-		StatusIndicator: &indicators.StringEqualConditionIndicator{},
+		PodStatus:        pod.Status,
+		TotalContainers:  int32(len(pod.Spec.Containers)),
+		Age:              utils.TranslateTimestampSince(pod.CreationTimestamp),
+		StatusIndicator:  &indicators.StringEqualConditionIndicator{},
+		StatusGeneration: statusGeneration,
 	}
 
 	for _, cond := range pod.Status.Conditions {
@@ -113,17 +119,45 @@ func NewPodStatus(pod *corev1.Pod, isTrackerFailed bool, trackerFailedReason str
 	res.Restarts = restarts
 	res.ReadyContainers = readyContainers
 
-	if pod.Status.Phase == "Failed" {
-		if !res.IsFailed {
+	if len(trackedContainers) == 0 {
+		switch pod.Status.Phase {
+		case corev1.PodSucceeded:
+			res.IsSucceeded = true
+		case corev1.PodFailed:
 			res.IsFailed = true
 			res.FailedReason = reason
 		}
 	}
 
-	if !res.IsReady && !res.IsFailed {
+	if !res.IsReady && !res.IsFailed && !res.IsSucceeded {
 		res.IsFailed = isTrackerFailed
 		res.FailedReason = trackerFailedReason
 	}
 
+	setContainersStatusesToPodStatus(&res, pod)
+
 	return res
+}
+
+func setContainersStatusesToPodStatus(status *PodStatus, pod *corev1.Pod) {
+	allContainerStatuses := make([]corev1.ContainerStatus, 0)
+	for _, cs := range pod.Status.InitContainerStatuses {
+		allContainerStatuses = append(allContainerStatuses, cs)
+	}
+	for _, cs := range pod.Status.ContainerStatuses {
+		allContainerStatuses = append(allContainerStatuses, cs)
+	}
+
+	for _, cs := range allContainerStatuses {
+		if cs.State.Waiting != nil {
+			switch cs.State.Waiting.Reason {
+			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff":
+				if status.ContainersErrors == nil {
+					status.ContainersErrors = make(map[string]string)
+				}
+
+				status.ContainersErrors[cs.Name] = fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message)
+			}
+		}
+	}
 }

@@ -25,7 +25,7 @@ type JobStatus struct {
 
 	WaitingForMessages []string
 
-	IsComplete   bool
+	IsSucceeded  bool
 	IsFailed     bool
 	FailedReason string
 
@@ -60,7 +60,7 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 			switch c.Type {
 			case batchv1.JobComplete:
 				if c.Status == corev1.ConditionTrue {
-					res.IsComplete = true
+					res.IsSucceeded = true
 				}
 
 			case batchv1.JobFailed:
@@ -73,7 +73,7 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 			}
 		}
 
-		if !res.IsComplete {
+		if !res.IsSucceeded {
 			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("condition %s->%s", batchv1.JobComplete, corev1.ConditionTrue))
 		}
 	} else {
@@ -92,7 +92,7 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 	} else {
 		res.SucceededIndicator.TargetValue = 1
 
-		if !res.IsComplete {
+		if !res.IsSucceeded {
 			parallelism := int32(0)
 			if object.Spec.Parallelism != nil {
 				parallelism = *object.Spec.Parallelism
@@ -105,7 +105,7 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 		}
 	}
 
-	if !res.IsComplete && !res.IsFailed {
+	if !res.IsSucceeded && !res.IsFailed {
 		res.IsFailed = isTrackerFailed
 		res.FailedReason = trackerFailedReason
 	}

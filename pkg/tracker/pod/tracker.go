@@ -43,18 +43,32 @@ type PodError struct {
 	PodName string
 }
 
+type FailedReport struct {
+	FailedReason string
+	PodStatus    PodStatus
+}
+
+type ContainerErrorReport struct {
+	ContainerError
+	PodStatus PodStatus
+}
+
 type Tracker struct {
 	tracker.Tracker
 
-	Added             chan struct{}
-	Succeeded         chan struct{}
-	Failed            chan string
+	Added     chan PodStatus
+	Succeeded chan PodStatus
+	Ready     chan PodStatus
+	Failed    chan FailedReport
+	Status    chan PodStatus
+
 	EventMsg          chan string
-	Ready             chan struct{}
 	ContainerLogChunk chan *ContainerLogChunk
-	ContainerError    chan ContainerError
-	StatusReport      chan PodStatus
-	LastStatus        PodStatus
+	ContainerError    chan ContainerErrorReport
+
+	// LastStatus struct is needed for the Job tracker.
+	// LastStatus contains latest known and actual resource status.
+	LastStatus PodStatus
 
 	State                           tracker.TrackerState
 	ContainerTrackerStates          map[string]tracker.TrackerState
@@ -69,8 +83,9 @@ type Tracker struct {
 	objectModified chan *corev1.Pod
 	objectDeleted  chan *corev1.Pod
 	objectFailed   chan string
-	containerDone  chan string
-	errors         chan error
+
+	containerDone chan string
+	errors        chan error
 }
 
 func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *Tracker {
@@ -83,15 +98,15 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 			Context:          ctx,
 		},
 
-		Added:     make(chan struct{}, 0),
-		Succeeded: make(chan struct{}, 0),
+		Added:     make(chan PodStatus, 1),
+		Succeeded: make(chan PodStatus, 0),
+		Ready:     make(chan PodStatus, 0),
+		Failed:    make(chan FailedReport, 0),
+		Status:    make(chan PodStatus, 100),
 
-		Failed:            make(chan string, 1),
 		EventMsg:          make(chan string, 1),
-		Ready:             make(chan struct{}, 0),
-		ContainerError:    make(chan ContainerError, 0),
+		ContainerError:    make(chan ContainerErrorReport, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
-		StatusReport:      make(chan PodStatus, 100),
 
 		State:                           tracker.Initial,
 		ContainerTrackerStates:          make(map[string]tracker.TrackerState),
@@ -116,58 +131,21 @@ func (pod *Tracker) Start() error {
 
 	for {
 		select {
-		case containerName := <-pod.containerDone:
-			trackedContainers := make([]string, 0)
-			for _, name := range pod.TrackedContainers {
-				if name != containerName {
-					trackedContainers = append(trackedContainers, name)
-				}
-			}
-			pod.TrackedContainers = trackedContainers
-
-			done, err := pod.handlePodState(pod.lastObject)
-			if err != nil {
-				return err
-			}
-			if done {
-				return nil
-			}
-
 		case object := <-pod.objectAdded:
-			done, err := pod.handlePodState(object)
-			if err != nil {
+			if err := pod.handlePodState(object); err != nil {
 				return err
-			}
-			if done {
-				return nil
-			}
-
-			pod.runEventsInformer()
-
-			switch pod.State {
-			case tracker.Initial:
-				pod.State = tracker.ResourceAdded
-				pod.Added <- struct{}{}
-
-				err := pod.runContainersTrackers(object)
-				if err != nil {
-					return err
-				}
 			}
 
 		case object := <-pod.objectModified:
-			done, err := pod.handlePodState(object)
-			if err != nil {
+			if err := pod.handlePodState(object); err != nil {
 				return err
-			}
-			if done {
-				return nil
 			}
 
 		case <-pod.objectDeleted:
 			pod.lastObject = nil
-			pod.LastStatus = PodStatus{}
-			pod.StatusReport <- pod.LastStatus
+			pod.State = tracker.ResourceDeleted
+			pod.failedReason = "resource deleted"
+			pod.LastStatus = PodStatus{IsFailed: true, FailedReason: pod.failedReason}
 
 			keys := []string{}
 			for k := range pod.ContainerTrackerStates {
@@ -177,58 +155,121 @@ func (pod *Tracker) Start() error {
 				pod.ContainerTrackerStates[k] = tracker.ContainerTrackerDone
 			}
 
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` resource gone: stop tracking\n", pod.ResourceName)
-			}
-
-			return nil
+			pod.Failed <- FailedReport{PodStatus: pod.LastStatus, FailedReason: pod.LastStatus.FailedReason}
+			// TODO (longterm): This is not a fail, object may disappear then appear again.
+			// TODO (longterm): At this level tracker should allow that situation and still continue tracking.
 
 		case reason := <-pod.objectFailed:
-			pod.State = "Failed"
+			pod.State = tracker.ResourceFailed
 			pod.failedReason = reason
 
+			var status PodStatus
 			if pod.lastObject != nil {
-				pod.LastStatus = NewPodStatus(pod.lastObject, pod.State == "Failed", pod.failedReason)
-				pod.StatusReport <- pod.LastStatus
+				pod.StatusGeneration++
+				status = NewPodStatus(pod.lastObject, pod.StatusGeneration, pod.TrackedContainers, pod.State == tracker.ResourceFailed, pod.failedReason)
+			} else {
+				status = PodStatus{IsFailed: true, FailedReason: reason}
 			}
-			pod.Failed <- reason
+
+			pod.LastStatus = status
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: reason}
+
+		case containerName := <-pod.containerDone:
+			trackedContainers := make([]string, 0)
+			for _, name := range pod.TrackedContainers {
+				if name != containerName {
+					trackedContainers = append(trackedContainers, name)
+				}
+			}
+			pod.TrackedContainers = trackedContainers
+
+			if pod.lastObject != nil {
+				if err := pod.handlePodState(pod.lastObject); err != nil {
+					return err
+				}
+			}
 
 		case <-pod.Context.Done():
+			if pod.Context.Err() == context.Canceled {
+				return nil
+			}
 			return pod.Context.Err()
-
 		case err := <-pod.errors:
 			return err
 		}
 	}
 }
 
-func (pod *Tracker) handlePodState(object *corev1.Pod) (done bool, err error) {
+func (pod *Tracker) handlePodState(object *corev1.Pod) error {
 	pod.lastObject = object
+	pod.StatusGeneration++
 
-	pod.LastStatus = NewPodStatus(object, pod.State == "Failed", pod.failedReason)
+	status := NewPodStatus(object, pod.StatusGeneration, pod.TrackedContainers, pod.State == tracker.ResourceFailed, pod.failedReason)
+	pod.LastStatus = status
 
-	pod.StatusReport <- pod.LastStatus
-
-	err = pod.handleContainersState(object)
-	if err != nil {
-		return false, err
+	if err := pod.handleContainersState(object); err != nil {
+		return fmt.Errorf("unable to handle pod containers state: %s", err)
 	}
 
-	if pod.LastStatus.IsReady {
-		pod.Ready <- struct{}{}
-	}
-
-	if len(pod.TrackedContainers) == 0 {
-		if object.Status.Phase == corev1.PodSucceeded {
-			pod.Succeeded <- struct{}{}
-			done = true
-		} else if object.Status.Phase == corev1.PodFailed {
-			pod.Failed <- "pod is in a Failed phase"
-			done = true
+	for containerName, msg := range status.ContainersErrors {
+		pod.ContainerError <- ContainerErrorReport{
+			ContainerError: ContainerError{
+				ContainerName: containerName,
+				Message:       msg,
+			},
+			PodStatus: status,
 		}
 	}
 
-	return
+	switch pod.State {
+	case tracker.Initial:
+		pod.runEventsInformer()
+
+		if err := pod.runContainersTrackers(object); err != nil {
+			return fmt.Errorf("unable to start tracking pod/%s containers: %s", pod.ResourceName, err)
+		}
+
+		if status.IsFailed {
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
+		} else if status.IsSucceeded {
+			pod.State = tracker.ResourceSucceeded
+			pod.Succeeded <- status
+		} else if status.IsReady {
+			pod.State = tracker.ResourceReady
+			pod.Ready <- status
+		} else {
+			pod.State = tracker.ResourceAdded
+			pod.Added <- status
+		}
+	case tracker.ResourceAdded, tracker.ResourceFailed:
+		if status.IsFailed {
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
+		} else if status.IsSucceeded {
+			pod.State = tracker.ResourceSucceeded
+			pod.Succeeded <- status
+		} else if status.IsReady {
+			pod.State = tracker.ResourceReady
+			pod.Ready <- status
+		} else {
+			pod.Status <- status
+		}
+	case tracker.ResourceSucceeded:
+		pod.Status <- status
+	case tracker.ResourceReady:
+		if status.IsFailed {
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
+		} else if status.IsSucceeded {
+			pod.State = tracker.ResourceSucceeded
+			pod.Succeeded <- status
+		} else {
+			pod.Status <- status
+		}
+	}
+
+	return nil
 }
 
 func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
@@ -243,23 +284,13 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	for _, cs := range allContainerStatuses {
 		oldState := pod.ContainerTrackerStates[cs.Name]
 
-		if cs.State.Waiting != nil {
-			switch cs.State.Waiting.Reason {
-			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff":
-				pod.ContainerError <- ContainerError{
-					ContainerName: cs.Name,
-					Message:       fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message),
-				}
-			}
-		}
-
 		if cs.State.Running != nil || cs.State.Terminated != nil {
 			pod.ContainerTrackerStates[cs.Name] = tracker.FollowingContainerLogs
 		}
 
-		if oldState != pod.ContainerTrackerStates[cs.Name] {
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` container `%s` state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerTrackerStates[cs.Name])
+		if debug.Debug() {
+			if oldState != pod.ContainerTrackerStates[cs.Name] {
+				fmt.Printf("pod/%s container/%s state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerTrackerStates[cs.Name])
 			}
 		}
 	}
@@ -352,7 +383,7 @@ func (pod *Tracker) trackContainer(containerName string) error {
 				err := pod.followContainerLogs(containerName)
 				if err != nil {
 					if debug.Debug() {
-						fmt.Fprintf(os.Stderr, "Pod `%s` Container `%s` logs streaming error: %s\n", pod.ResourceName, containerName, err)
+						fmt.Fprintf(os.Stderr, "pod/%s container/%s logs streaming error: %s\n", pod.ResourceName, containerName, err)
 					}
 				}
 				return nil
@@ -360,7 +391,7 @@ func (pod *Tracker) trackContainer(containerName string) error {
 			case tracker.ContainerTrackerDone:
 				return nil
 			default:
-				return fmt.Errorf("unknown Pod's `%s` Container `%s` tracker state `%s`", pod.ResourceName, containerName, state)
+				return fmt.Errorf("unknown pod/%s container/%s tracker state %q", pod.ResourceName, containerName, state)
 			}
 
 		case <-pod.Context.Done():
@@ -388,8 +419,7 @@ func (pod *Tracker) runContainersTrackers(object *corev1.Pod) error {
 				fmt.Printf("Starting to track Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
 			}
 
-			err := pod.trackContainer(containerName)
-			if err != nil {
+			if err := pod.trackContainer(containerName); err != nil {
 				pod.errors <- err
 			}
 
@@ -461,13 +491,7 @@ func (pod *Tracker) runInformer() error {
 
 // runEventsInformer watch for DaemonSet events
 func (pod *Tracker) runEventsInformer() {
-	if pod.lastObject == nil {
-		return
-	}
-
 	eventInformer := event.NewEventInformer(&pod.Tracker, pod.lastObject)
 	eventInformer.WithChannels(pod.EventMsg, pod.objectFailed, pod.errors)
 	eventInformer.Run()
-
-	return
 }
