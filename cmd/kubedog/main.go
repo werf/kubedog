@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/flant/logboek"
+	"k8s.io/klog"
 
 	"github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
 
@@ -24,6 +25,9 @@ import (
 func main() {
 	// set flag.Parsed() for glog
 	flag.CommandLine.Parse([]string{})
+
+	klog.SetOutputBySeverity("INFO", ioutil.Discard)
+	klog.SetOutputBySeverity("WARNING", ioutil.Discard)
 
 	var namespace string
 	var timeoutSeconds int
