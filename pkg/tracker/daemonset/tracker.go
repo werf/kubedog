@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	extensions "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,10 +29,10 @@ type Tracker struct {
 
 	State                string
 	Conditions           []string
-	FinalDaemonSetStatus extensions.DaemonSetStatus
+	FinalDaemonSetStatus appsv1.DaemonSetStatus
 	CurrentReady         bool
 
-	lastObject       *extensions.DaemonSet
+	lastObject       *appsv1.DaemonSet
 	statusGeneration uint64
 	failedReason     string
 	podStatuses      map[string]pod.PodStatus
@@ -51,9 +51,9 @@ type Tracker struct {
 	PodError     chan replicaset.ReplicaSetPodError
 	StatusReport chan DaemonSetStatus
 
-	resourceAdded     chan *extensions.DaemonSet
-	resourceModified  chan *extensions.DaemonSet
-	resourceDeleted   chan *extensions.DaemonSet
+	resourceAdded     chan *appsv1.DaemonSet
+	resourceModified  chan *appsv1.DaemonSet
+	resourceDeleted   chan *appsv1.DaemonSet
 	resourceFailed    chan string
 	podAdded          chan *corev1.Pod
 	podDone           chan string
@@ -91,9 +91,9 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		podStatuses:    make(map[string]pod.PodStatus),
 		podGenerations: make(map[string]string),
 
-		resourceAdded:     make(chan *extensions.DaemonSet, 1),
-		resourceModified:  make(chan *extensions.DaemonSet, 1),
-		resourceDeleted:   make(chan *extensions.DaemonSet, 1),
+		resourceAdded:     make(chan *appsv1.DaemonSet, 1),
+		resourceModified:  make(chan *appsv1.DaemonSet, 1),
+		resourceDeleted:   make(chan *appsv1.DaemonSet, 1),
 		resourceFailed:    make(chan string, 1),
 		podAdded:          make(chan *corev1.Pod, 1),
 		podDone:           make(chan string, 1),
@@ -238,26 +238,26 @@ func (d *Tracker) runDaemonSetInformer() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.ExtensionsV1beta1().DaemonSets(d.Namespace).List(tweakListOptions(options))
+			return client.AppsV1().DaemonSets(d.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.ExtensionsV1beta1().DaemonSets(d.Namespace).Watch(tweakListOptions(options))
+			return client.AppsV1().DaemonSets(d.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(d.Context, lw, &extensions.DaemonSet{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(d.Context, lw, &appsv1.DaemonSet{}, nil, func(e watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    Daemonset/%s event: %#v\n", d.ResourceName, e.Type)
 			}
 
-			var object *extensions.DaemonSet
+			var object *appsv1.DaemonSet
 
 			if e.Type != watch.Error {
 				var ok bool
-				object, ok = e.Object.(*extensions.DaemonSet)
+				object, ok = e.Object.(*appsv1.DaemonSet)
 				if !ok {
-					return true, fmt.Errorf("expected %s to be a *extensions.DaemonSet, got %T", d.ResourceName, e.Object)
+					return true, fmt.Errorf("expected %s to be a *appsv1.DaemonSet, got %T", d.ResourceName, e.Object)
 				}
 			}
 
@@ -375,7 +375,7 @@ func (d *Tracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleDaemonSetStatus(object *extensions.DaemonSet) (ready bool, err error) {
+func (d *Tracker) handleDaemonSetStatus(object *appsv1.DaemonSet) (ready bool, err error) {
 	if debug.Debug() {
 		fmt.Printf("%s\n", getDaemonSetStatus(object))
 	}

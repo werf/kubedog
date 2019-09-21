@@ -3,7 +3,7 @@ package replicaset
 import (
 	"fmt"
 
-	extensions "k8s.io/api/extensions/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -41,9 +41,9 @@ type ReplicaSetPodError struct {
 type ReplicaSetInformer struct {
 	tracker.Tracker
 	Controller         utils.ControllerMetadata
-	ReplicaSetAdded    chan *extensions.ReplicaSet
-	ReplicaSetModified chan *extensions.ReplicaSet
-	ReplicaSetDeleted  chan *extensions.ReplicaSet
+	ReplicaSetAdded    chan *appsv1.ReplicaSet
+	ReplicaSetModified chan *appsv1.ReplicaSet
+	ReplicaSetDeleted  chan *appsv1.ReplicaSet
 	Errors             chan error
 }
 
@@ -59,16 +59,16 @@ func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMeta
 			Context:          trk.Context,
 		},
 		Controller:         controller,
-		ReplicaSetAdded:    make(chan *extensions.ReplicaSet, 1),
-		ReplicaSetModified: make(chan *extensions.ReplicaSet, 1),
-		ReplicaSetDeleted:  make(chan *extensions.ReplicaSet, 1),
+		ReplicaSetAdded:    make(chan *appsv1.ReplicaSet, 1),
+		ReplicaSetModified: make(chan *appsv1.ReplicaSet, 1),
+		ReplicaSetDeleted:  make(chan *appsv1.ReplicaSet, 1),
 		Errors:             make(chan error, 0),
 	}
 }
 
-func (r *ReplicaSetInformer) WithChannels(added chan *extensions.ReplicaSet,
-	modified chan *extensions.ReplicaSet,
-	deleted chan *extensions.ReplicaSet,
+func (r *ReplicaSetInformer) WithChannels(added chan *appsv1.ReplicaSet,
+	modified chan *appsv1.ReplicaSet,
+	deleted chan *appsv1.ReplicaSet,
 	errors chan error) *ReplicaSetInformer {
 	r.ReplicaSetAdded = added
 	r.ReplicaSetModified = modified
@@ -92,26 +92,26 @@ func (r *ReplicaSetInformer) Run() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.ExtensionsV1beta1().ReplicaSets(r.Namespace).List(tweakListOptions(options))
+			return client.AppsV1().ReplicaSets(r.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.ExtensionsV1beta1().ReplicaSets(r.Namespace).Watch(tweakListOptions(options))
+			return client.AppsV1().ReplicaSets(r.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(r.Context, lw, &extensions.ReplicaSet{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(r.Context, lw, &appsv1.ReplicaSet{}, nil, func(e watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    %s replica set event: %#v\n", r.FullResourceName, e.Type)
 			}
 
-			var object *extensions.ReplicaSet
+			var object *appsv1.ReplicaSet
 
 			if e.Type != watch.Error {
 				var ok bool
-				object, ok = e.Object.(*extensions.ReplicaSet)
+				object, ok = e.Object.(*appsv1.ReplicaSet)
 				if !ok {
-					return true, fmt.Errorf("extensions.ReplicaSet informer for %s got unexpected object %T", r.FullResourceName, e.Object)
+					return true, fmt.Errorf("appsv1.ReplicaSet informer for %s got unexpected object %T", r.FullResourceName, e.Object)
 				}
 			}
 

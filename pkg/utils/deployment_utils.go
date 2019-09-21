@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	extensions "k8s.io/api/extensions/v1beta1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +25,7 @@ const (
 	TimedOutReason = "ProgressDeadlineExceeded"
 )
 
-//func DeploymentCompleteAll(deployment *extensions.Deployment) {
+//func DeploymentCompleteAll(deployment *appsv1.Deployment) {
 
 //}
 
@@ -49,7 +49,7 @@ func greaterOrEqualSign(isGreaterOrEqual bool) string {
 // current with the new status of the deployment that the controller is observing. More specifically,
 // when new pods are scaled up or become available, or old pods are scaled down, then we consider the
 // deployment is progressing.
-func DeploymentProgressing(deployment *extensions.Deployment, newStatus *extensions.DeploymentStatus) bool {
+func DeploymentProgressing(deployment *appsv1.Deployment, newStatus *appsv1.DeploymentStatus) bool {
 	oldStatus := deployment.Status
 
 	// Old replicas that need to be scaled down
@@ -66,7 +66,7 @@ var nowFn = func() time.Time { return time.Now() }
 // DeploymentTimedOut considers a deployment to have timed out once its condition that reports progress
 // is older than progressDeadlineSeconds or a Progressing condition with a TimedOutReason reason already
 // exists.
-func DeploymentTimedOut(deployment *extensions.Deployment, newStatus *extensions.DeploymentStatus) bool {
+func DeploymentTimedOut(deployment *appsv1.Deployment, newStatus *appsv1.DeploymentStatus) bool {
 	if deployment.Spec.ProgressDeadlineSeconds == nil {
 		return false
 	}
@@ -74,7 +74,7 @@ func DeploymentTimedOut(deployment *extensions.Deployment, newStatus *extensions
 	// Look for the Progressing condition. If it doesn't exist, we have no base to estimate progress.
 	// If it's already set with a TimedOutReason reason, we have already timed out, no need to check
 	// again.
-	condition := GetDeploymentCondition(*newStatus, extensions.DeploymentProgressing)
+	condition := GetDeploymentCondition(*newStatus, appsv1.DeploymentProgressing)
 	if condition == nil {
 		return false
 	}
@@ -97,7 +97,7 @@ func DeploymentTimedOut(deployment *extensions.Deployment, newStatus *extensions
 }
 
 // GetDeploymentCondition returns the condition with the provided type.
-func GetDeploymentCondition(status extensions.DeploymentStatus, condType extensions.DeploymentConditionType) *extensions.DeploymentCondition {
+func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
 	for i := range status.Conditions {
 		c := status.Conditions[i]
 		if c.Type == condType {
@@ -120,16 +120,16 @@ func Revision(obj runtime.Object) (int64, error) {
 	return strconv.ParseInt(v, 10, 64)
 }
 
-type rsListFunc func(string, metav1.ListOptions) ([]*extensions.ReplicaSet, error)
+type rsListFunc func(string, metav1.ListOptions) ([]*appsv1.ReplicaSet, error)
 
 // rsListFromClient returns an rsListFunc that wraps the given client.
 func rsListFromClient(c kubernetes.Interface) rsListFunc {
-	return func(namespace string, options metav1.ListOptions) ([]*extensions.ReplicaSet, error) {
-		rsList, err := c.ExtensionsV1beta1().ReplicaSets(namespace).List(options)
+	return func(namespace string, options metav1.ListOptions) ([]*appsv1.ReplicaSet, error) {
+		rsList, err := c.AppsV1().ReplicaSets(namespace).List(options)
 		if err != nil {
 			return nil, err
 		}
-		var ret []*extensions.ReplicaSet
+		var ret []*appsv1.ReplicaSet
 		for i := range rsList.Items {
 			ret = append(ret, &rsList.Items[i])
 		}
@@ -140,7 +140,7 @@ func rsListFromClient(c kubernetes.Interface) rsListFunc {
 // GetAllReplicaSets returns the old and new replica sets targeted by the given Deployment. It gets PodList and ReplicaSetList from client interface.
 // Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
 // The third returned value is the new replica set, and it may be nil if it doesn't exist yet.
-func GetAllReplicaSets(deployment *extensions.Deployment, c kubernetes.Interface) ([]*extensions.ReplicaSet, []*extensions.ReplicaSet, *extensions.ReplicaSet, error) {
+func GetAllReplicaSets(deployment *appsv1.Deployment, c kubernetes.Interface) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet, *appsv1.ReplicaSet, error) {
 	rsList, err := ListReplicaSets(deployment, rsListFromClient(c))
 	if err != nil {
 		return nil, nil, nil, err
@@ -157,7 +157,7 @@ func GetAllReplicaSets(deployment *extensions.Deployment, c kubernetes.Interface
 }
 
 // FindNewReplicaSet returns the new RS this given deployment targets (the one with the same pod template).
-func FindNewReplicaSet(deployment *extensions.Deployment, rsList []*extensions.ReplicaSet) (*extensions.ReplicaSet, error) {
+func FindNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) (*appsv1.ReplicaSet, error) {
 	newRSTemplate := GetNewReplicaSetTemplate(deployment)
 	sort.Sort(ReplicaSetsByCreationTimestamp(rsList))
 	for i := range rsList {
@@ -173,8 +173,8 @@ func FindNewReplicaSet(deployment *extensions.Deployment, rsList []*extensions.R
 	return nil, nil
 }
 
-func IsReplicaSetNew(deployment *extensions.Deployment, rsMap map[string]*extensions.ReplicaSet, rsName string) (bool, error) {
-	rsList := []*extensions.ReplicaSet{}
+func IsReplicaSetNew(deployment *appsv1.Deployment, rsMap map[string]*appsv1.ReplicaSet, rsName string) (bool, error) {
+	rsList := []*appsv1.ReplicaSet{}
 	for _, rs := range rsMap {
 		rsList = append(rsList, rs)
 	}
@@ -189,7 +189,7 @@ func IsReplicaSetNew(deployment *extensions.Deployment, rsMap map[string]*extens
 
 // GetNewReplicaSetTemplate returns the desired PodTemplateSpec for the new ReplicaSet corresponding to the given ReplicaSet.
 // Callers of this helper need to set the DefaultDeploymentUniqueLabelKey k/v pair.
-func GetNewReplicaSetTemplate(deployment *extensions.Deployment) corev1.PodTemplateSpec {
+func GetNewReplicaSetTemplate(deployment *appsv1.Deployment) corev1.PodTemplateSpec {
 	// newRS will have the same template as in deployment spec.
 	return corev1.PodTemplateSpec{
 		ObjectMeta: deployment.Spec.Template.ObjectMeta,
@@ -199,9 +199,9 @@ func GetNewReplicaSetTemplate(deployment *extensions.Deployment) corev1.PodTempl
 
 // FindOldReplicaSets returns the old replica sets targeted by the given Deployment, with the given slice of RSes.
 // Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
-func FindOldReplicaSets(deployment *extensions.Deployment, rsList []*extensions.ReplicaSet) ([]*extensions.ReplicaSet, []*extensions.ReplicaSet, error) {
-	var requiredRSs []*extensions.ReplicaSet
-	var allRSs []*extensions.ReplicaSet
+func FindOldReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet, error) {
+	var requiredRSs []*appsv1.ReplicaSet
+	var allRSs []*appsv1.ReplicaSet
 	newRS, err := FindNewReplicaSet(deployment, rsList)
 	if err != nil {
 		return nil, nil, err
@@ -223,7 +223,7 @@ func FindOldReplicaSets(deployment *extensions.Deployment, rsList []*extensions.
 // Note that this does NOT attempt to reconcile ControllerRef (adopt/orphan),
 // because only the controller itself should do that.
 // However, it does filter out anything whose ControllerRef doesn't match.
-func ListReplicaSets(deployment *extensions.Deployment, getRSList rsListFunc) ([]*extensions.ReplicaSet, error) {
+func ListReplicaSets(deployment *appsv1.Deployment, getRSList rsListFunc) ([]*appsv1.ReplicaSet, error) {
 	// TODO: Right now we list replica sets by their labels. We should list them by selector, i.e. the replica set's selector
 	//       should be a superset of the deployment's selector, see https://github.com/kubernetes/kubernetes/issues/19830.
 	namespace := deployment.Namespace
@@ -237,7 +237,7 @@ func ListReplicaSets(deployment *extensions.Deployment, getRSList rsListFunc) ([
 		return all, err
 	}
 	// Only include those whose ControllerRef matches the Deployment.
-	owned := make([]*extensions.ReplicaSet, 0, len(all))
+	owned := make([]*appsv1.ReplicaSet, 0, len(all))
 	for _, rs := range all {
 		controllerRef := GetControllerOf(rs)
 		if controllerRef != nil && controllerRef.UID == deployment.UID {
@@ -259,7 +259,7 @@ func EqualIgnoreHash(template1, template2 corev1.PodTemplateSpec) bool {
 	}
 	// We make sure len(labels2) >= len(labels1)
 	for k, v := range labels2 {
-		if labels1[k] != v && k != extensions.DefaultDeploymentUniqueLabelKey {
+		if labels1[k] != v && k != appsv1.DefaultDeploymentUniqueLabelKey {
 			return false
 		}
 	}
@@ -269,7 +269,7 @@ func EqualIgnoreHash(template1, template2 corev1.PodTemplateSpec) bool {
 }
 
 // ReplicaSetsByCreationTimestamp sorts a list of ReplicaSet by creation timestamp, using their names as a tie breaker.
-type ReplicaSetsByCreationTimestamp []*extensions.ReplicaSet
+type ReplicaSetsByCreationTimestamp []*appsv1.ReplicaSet
 
 func (o ReplicaSetsByCreationTimestamp) Len() int      { return len(o) }
 func (o ReplicaSetsByCreationTimestamp) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
@@ -312,7 +312,7 @@ func PodListFromClient(c kubernetes.Interface) PodListFunc {
 // Note that this does NOT attempt to reconcile ControllerRef (adopt/orphan),
 // because only the controller itself should do that.
 // However, it does filter out anything whose ControllerRef doesn't match.
-func ListPods(deployment *extensions.Deployment, rsList []*extensions.ReplicaSet, getPodList PodListFunc) (*corev1.PodList, error) {
+func ListPods(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet, getPodList PodListFunc) (*corev1.PodList, error) {
 	namespace := deployment.Namespace
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {
