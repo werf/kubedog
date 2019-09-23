@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/flant/kubedog/pkg/tracker/debug"
-	extensions "k8s.io/api/extensions/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
-func getDaemonSetStatus(obj *extensions.DaemonSet) string {
+func getDaemonSetStatus(obj *appsv1.DaemonSet) string {
 	msgs := []string{}
 
 	for _, c := range obj.Status.Conditions {

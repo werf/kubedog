@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	extensions "k8s.io/api/extensions/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 
 	"k8s.io/client-go/kubernetes"
 
@@ -12,7 +12,7 @@ import (
 	"github.com/flant/kubedog/pkg/utils"
 )
 
-func getDeploymentStatus(client kubernetes.Interface, prevObj *extensions.Deployment, newObj *extensions.Deployment) string {
+func getDeploymentStatus(client kubernetes.Interface, prevObj *appsv1.Deployment, newObj *appsv1.Deployment) string {
 	if prevObj == nil {
 		prevObj = newObj
 	}
@@ -35,7 +35,7 @@ func getDeploymentStatus(client kubernetes.Interface, prevObj *extensions.Deploy
 	return strings.Join(msgs, "\n")
 }
 
-func getReplicaSetsStatus(client kubernetes.Interface, deployment *extensions.Deployment) string {
+func getReplicaSetsStatus(client kubernetes.Interface, deployment *appsv1.Deployment) string {
 	msgs := []string{}
 
 	_, allOlds, newRs, err := utils.GetAllReplicaSets(deployment, client)

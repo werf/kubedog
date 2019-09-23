@@ -17,8 +17,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	extensions "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	watchtools "k8s.io/client-go/tools/watch"
 )
@@ -29,12 +29,12 @@ type Tracker struct {
 
 	State                 string
 	Conditions            []string
-	FinalDeploymentStatus extensions.DeploymentStatus
+	FinalDeploymentStatus appsv1.DeploymentStatus
 	NewReplicaSetName     string
 	CurrentReady          bool
 
-	knownReplicaSets map[string]*extensions.ReplicaSet
-	lastObject       *extensions.Deployment
+	knownReplicaSets map[string]*appsv1.ReplicaSet
+	lastObject       *appsv1.Deployment
 	statusGeneration uint64
 	failedReason     string
 	podStatuses      map[string]pod.PodStatus
@@ -50,13 +50,13 @@ type Tracker struct {
 	PodError        chan replicaset.ReplicaSetPodError
 	StatusReport    chan DeploymentStatus
 
-	resourceAdded         chan *extensions.Deployment
-	resourceModified      chan *extensions.Deployment
-	resourceDeleted       chan *extensions.Deployment
+	resourceAdded         chan *appsv1.Deployment
+	resourceModified      chan *appsv1.Deployment
+	resourceDeleted       chan *appsv1.Deployment
 	resourceFailed        chan string
-	replicaSetAdded       chan *extensions.ReplicaSet
-	replicaSetModified    chan *extensions.ReplicaSet
-	replicaSetDeleted     chan *extensions.ReplicaSet
+	replicaSetAdded       chan *appsv1.ReplicaSet
+	replicaSetModified    chan *appsv1.ReplicaSet
+	replicaSetDeleted     chan *appsv1.ReplicaSet
 	podAdded              chan *corev1.Pod
 	podDone               chan string
 	errors                chan error
@@ -93,20 +93,20 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		StatusReport:    make(chan DeploymentStatus, 100),
 		//PodReady:        make(chan bool, 1),
 
-		knownReplicaSets: make(map[string]*extensions.ReplicaSet),
+		knownReplicaSets: make(map[string]*appsv1.ReplicaSet),
 		podStatuses:      make(map[string]pod.PodStatus),
 		rsNameByPod:      make(map[string]string),
 
 		TrackedPods: make([]string, 0),
 
 		//PodError: make(chan PodError, 0),
-		resourceAdded:         make(chan *extensions.Deployment, 1),
-		resourceModified:      make(chan *extensions.Deployment, 1),
-		resourceDeleted:       make(chan *extensions.Deployment, 1),
+		resourceAdded:         make(chan *appsv1.Deployment, 1),
+		resourceModified:      make(chan *appsv1.Deployment, 1),
+		resourceDeleted:       make(chan *appsv1.Deployment, 1),
 		resourceFailed:        make(chan string, 1),
-		replicaSetAdded:       make(chan *extensions.ReplicaSet, 1),
-		replicaSetModified:    make(chan *extensions.ReplicaSet, 1),
-		replicaSetDeleted:     make(chan *extensions.ReplicaSet, 1),
+		replicaSetAdded:       make(chan *appsv1.ReplicaSet, 1),
+		replicaSetModified:    make(chan *appsv1.ReplicaSet, 1),
+		replicaSetDeleted:     make(chan *appsv1.ReplicaSet, 1),
 		podAdded:              make(chan *corev1.Pod, 1),
 		podDone:               make(chan string, 1),
 		errors:                make(chan error, 0),
@@ -317,24 +317,24 @@ func (d *Tracker) runDeploymentInformer() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.ExtensionsV1beta1().Deployments(d.Namespace).List(tweakListOptions(options))
+			return client.AppsV1().Deployments(d.Namespace).List(tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.ExtensionsV1beta1().Deployments(d.Namespace).Watch(tweakListOptions(options))
+			return client.AppsV1().Deployments(d.Namespace).Watch(tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(d.Context, lw, &extensions.Deployment{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(d.Context, lw, &appsv1.Deployment{}, nil, func(e watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    deploy/%s event: %#v\n", d.ResourceName, e.Type)
 			}
 
-			var object *extensions.Deployment
+			var object *appsv1.Deployment
 
 			if e.Type != watch.Error {
 				var ok bool
-				object, ok = e.Object.(*extensions.Deployment)
+				object, ok = e.Object.(*appsv1.Deployment)
 				if !ok {
 					return true, fmt.Errorf("expected %s to be a *extension.Deployment, got %T", d.ResourceName, e.Object)
 				}
@@ -473,7 +473,7 @@ func (d *Tracker) runPodTracker(podName, rsName string) error {
 	return nil
 }
 
-func (d *Tracker) handleDeploymentState(object *extensions.Deployment) (ready bool, err error) {
+func (d *Tracker) handleDeploymentState(object *appsv1.Deployment) (ready bool, err error) {
 	if debug.Debug() {
 		fmt.Printf("%s\n%s\n",
 			getDeploymentStatus(d.Kube, d.lastObject, object),

@@ -7,11 +7,11 @@ import (
 	"github.com/flant/kubedog/pkg/tracker/pod"
 	"github.com/flant/kubedog/pkg/utils"
 
-	extensions "k8s.io/api/extensions/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 type DeploymentStatus struct {
-	extensions.DeploymentStatus
+	appsv1.DeploymentStatus
 
 	StatusGeneration uint64
 
@@ -31,7 +31,7 @@ type DeploymentStatus struct {
 	NewPodsNames []string
 }
 
-func NewDeploymentStatus(object *extensions.Deployment, statusGeneration uint64, isTrackerFailed bool, trackerFailedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) DeploymentStatus {
+func NewDeploymentStatus(object *appsv1.Deployment, statusGeneration uint64, isTrackerFailed bool, trackerFailedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) DeploymentStatus {
 	res := DeploymentStatus{
 		StatusGeneration: statusGeneration,
 		DeploymentStatus: object.Status,
@@ -105,7 +105,7 @@ processingPodsStatuses:
 }
 
 // Status returns a message describing deployment status, and a bool value indicating if the status is considered done.
-func DeploymentRolloutStatus(deployment *extensions.Deployment, revision int64) (string, bool, error) {
+func DeploymentRolloutStatus(deployment *appsv1.Deployment, revision int64) (string, bool, error) {
 	if revision > 0 {
 		deploymentRev, err := utils.Revision(deployment)
 		if err != nil {
@@ -116,7 +116,7 @@ func DeploymentRolloutStatus(deployment *extensions.Deployment, revision int64) 
 		}
 	}
 	if deployment.Generation <= deployment.Status.ObservedGeneration {
-		cond := utils.GetDeploymentCondition(deployment.Status, extensions.DeploymentProgressing)
+		cond := utils.GetDeploymentCondition(deployment.Status, appsv1.DeploymentProgressing)
 		if cond != nil && cond.Reason == utils.TimedOutReason {
 			return "", false, fmt.Errorf("deployment %q exceeded its progress deadline", deployment.Name)
 		}

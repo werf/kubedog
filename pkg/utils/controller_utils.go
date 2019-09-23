@@ -4,7 +4,6 @@ import (
 	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	extensions "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,9 +21,9 @@ type ReplicaSetControllerWrapper struct {
 	replicaSetTemplate corev1.PodTemplateSpec
 	labelSelector      *metav1.LabelSelector
 	metadata           metav1.Object
-	deployment         *extensions.Deployment
+	deployment         *appsv1.Deployment
 	statefulSet        *appsv1.StatefulSet
-	daemonSet          *extensions.DaemonSet
+	daemonSet          *appsv1.DaemonSet
 }
 
 func (w *ReplicaSetControllerWrapper) NewReplicaSetTemplate() corev1.PodTemplateSpec {
@@ -54,7 +53,7 @@ func ControllerAccessor(controller interface{}) ControllerMetadata {
 	}
 
 	switch c := controller.(type) {
-	case *extensions.Deployment:
+	case *appsv1.Deployment:
 		w.replicaSetTemplate = corev1.PodTemplateSpec{
 			ObjectMeta: c.Spec.Template.ObjectMeta,
 			Spec:       c.Spec.Template.Spec,
@@ -66,7 +65,7 @@ func ControllerAccessor(controller interface{}) ControllerMetadata {
 			Spec:       c.Spec.Template.Spec,
 		}
 		w.labelSelector = c.Spec.Selector
-	case *extensions.DaemonSet:
+	case *appsv1.DaemonSet:
 		w.replicaSetTemplate = corev1.PodTemplateSpec{
 			ObjectMeta: c.Spec.Template.ObjectMeta,
 			Spec:       c.Spec.Template.Spec,
