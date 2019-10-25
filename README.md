@@ -393,7 +393,7 @@ func main() {
   err := feed.Track(
     "mypod",
     "mynamespace",
-    kube.Interface,
+    kube.Kubernetes,
     tracker.Options{}
   )
   if err != nil {
