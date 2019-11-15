@@ -311,46 +311,45 @@ func main() {
 
 # Library usage: Custom trackers
 
-Kubedog defines a `Feed` interface of callbacks that executed on events, so you need to implement callbacks and a `Track` method of this interface to get stream of events and logs.
+Kubedog defines a `Feed` interface for an object that holds callbacks which will be executed on events. User may set only needed callbacks using `Feed`.
 
-Kubedog provides convenient helpers for different kind of resources with ready `Track` methods. To create a custom tracker for pod, deployment, statefulset, daemonset or job, one could create feed object with a call to a `NewFeed` function and define callbacks. This tracker can be started with a call of a `Track` method. `NewFeed` helpers available in these packages:
+Kubedog provides convenient helpers for different kind of resources with implemented `Track` methods. To create a custom tracker for pod, deployment, statefulset, daemonset or job, one could create feed object with a call to a `NewFeed` function, set callbacks and call `Track` method to start the feed. `Track` method is blocking and will return upon tracking termination.
+
+`NewFeed` helpers are available in these packages:
 
 ```
 import "github.com/flant/kubedog/pkg/tracker/pod"
-import "github.com/flant/kubedog/pkg/tracker/deployment"
+import "github.com/flant/kubedog/pqkg/tracker/deployment"
 import "github.com/flant/kubedog/pkg/tracker/statefulset"
 import "github.com/flant/kubedog/pkg/tracker/daemonset"
 import "github.com/flant/kubedog/pkg/tracker/job"
 ```
 
-Callback for different resources are slightly differs, for example, `Feed` interface for pod looks like:
+For example, `Feed` interface for pod looks like:
 
 ```
 type Feed interface {
-  // Callbacks
-  OnAdded(func() error)
-  OnSucceeded(func() error)
-  OnFailed(func(reason string) error)
-  OnEventMsg(func(msg string) error)
-  OnReady(func() error)
-  OnContainerLogChunk(func(*ContainerLogChunk) error)
-  OnContainerError(func(ContainerError) error)
-  OnStatusReport(func(PodStatus) error)
+	// callbacks
+	OnAdded(func() error)
+	OnSucceeded(func() error)
+	OnFailed(func(string) error)
+	OnReady(func() error)
+	OnEventMsg(func(msg string) error)
+	OnContainerLogChunk(func(*ContainerLogChunk) error)
+	OnContainerError(func(ContainerError) error)
+	OnStatus(func(PodStatus) error)
 
-  GetStatus() PodStatus
+	GetStatus() PodStatus
 
-  Track(
-    podName,
-    namespace string,
-    kube kubernetes.Interface,
-    opts tracker.Options
-  ) error
+	Track(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
 }
 ```
 
-`Track` method starts informers and runs callbacks on events. Each  callback may return error with predefined type to interrupt the tracking process with error. An error of type `tracker.StopTrack` can be returned to interrupt the tracking process without error.
+Note that each resource have own `Feed` interface because callbacks set can be slightly different for different kinds of resources.
 
-Method `GetStatus` can be called by any callback to get a status of tracked resource.
+`Track` method starts informers and runs callbacks on events. Each callback may return an error with predefined type to interrupt the tracking process with error. An error of type `tracker.StopTrack` can be returned to interrupt the tracking process without error (i.e. `Track` method of the feed will return `err=nil`).
+
+`GetStatus` method can be called by any callback at any time to get a status of tracked resource.
 
 ## Example of custom tracker
 
@@ -385,7 +384,7 @@ func main() {
   feed.OnFailed(func(reason string) error {
     return fmt.Errorf("pod failed: %s", reason)
   })
-  feed.OnStatusReport(func(status pod.PodStatus) error {
+  feed.OnStatus(func(status pod.PodStatus) error {
     fmt.Printf("Pod status: %#v\n", status)
     return nil
   })

@@ -15,8 +15,8 @@ import (
 func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := deployment.NewFeed()
 
-	feed.OnAdded(func(ready bool) error {
-		if ready {
+	feed.OnAdded(func(isReady bool) error {
+		if isReady {
 			fmt.Fprintf(display.Out, "# deploy/%s appears to be ready\n", name)
 			return tracker.StopTrack
 		}

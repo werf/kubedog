@@ -14,12 +14,13 @@ import (
 type Feed interface {
 	OnAdded(func() error)
 	OnSucceeded(func() error)
-	OnFailed(func(reason string) error)
-	OnEventMsg(func(msg string) error)
+	OnFailed(func(string) error)
 	OnReady(func() error)
+
+	OnEventMsg(func(msg string) error)
 	OnContainerLogChunk(func(*ContainerLogChunk) error)
 	OnContainerError(func(ContainerError) error)
-	OnStatusReport(func(PodStatus) error)
+	OnStatus(func(PodStatus) error)
 
 	GetStatus() PodStatus
 	Track(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error
@@ -37,7 +38,7 @@ type feed struct {
 	OnReadyFunc             func() error
 	OnContainerLogChunkFunc func(*ContainerLogChunk) error
 	OnContainerErrorFunc    func(ContainerError) error
-	OnStatusReportFunc      func(PodStatus) error
+	OnStatusFunc            func(PodStatus) error
 
 	statusMux sync.Mutex
 	status    PodStatus
@@ -49,10 +50,10 @@ func (f *feed) OnAdded(function func() error) {
 func (f *feed) OnSucceeded(function func() error) {
 	f.OnSucceededFunc = function
 }
-func (f *feed) OnFailed(function func(reason string) error) {
+func (f *feed) OnFailed(function func(string) error) {
 	f.OnFailedFunc = function
 }
-func (f *feed) OnEventMsg(function func(msg string) error) {
+func (f *feed) OnEventMsg(function func(string) error) {
 	f.OnEventMsgFunc = function
 }
 func (f *feed) OnReady(function func() error) {
@@ -64,8 +65,8 @@ func (f *feed) OnContainerLogChunk(function func(*ContainerLogChunk) error) {
 func (f *feed) OnContainerError(function func(ContainerError) error) {
 	f.OnContainerErrorFunc = function
 }
-func (f *feed) OnStatusReport(function func(PodStatus) error) {
-	f.OnStatusReportFunc = function
+func (f *feed) OnStatus(function func(PodStatus) error) {
+	f.OnStatusFunc = function
 }
 
 func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
@@ -110,13 +111,11 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case containerError := <-pod.ContainerError:
-			if debug.Debug() {
-				fmt.Printf("Pod's `%s` container error: %#v", pod.ResourceName, containerError)
-			}
+		case report := <-pod.ContainerError:
+			f.setStatus(report.PodStatus)
 
 			if f.OnContainerErrorFunc != nil {
-				err := f.OnContainerErrorFunc(containerError)
+				err := f.OnContainerErrorFunc(report.ContainerError)
 				if err == tracker.StopTrack {
 					return nil
 				}
@@ -125,10 +124,8 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case <-pod.Added:
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` added\n", pod.ResourceName)
-			}
+		case status := <-pod.Added:
+			f.setStatus(status)
 
 			if f.OnAddedFunc != nil {
 				err := f.OnAddedFunc()
@@ -140,10 +137,8 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case <-pod.Succeeded:
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` succeeded\n", pod.ResourceName)
-			}
+		case status := <-pod.Succeeded:
+			f.setStatus(status)
 
 			if f.OnSucceededFunc != nil {
 				err := f.OnSucceededFunc()
@@ -155,13 +150,11 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case reason := <-pod.Failed:
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` failed: %s\n", pod.ResourceName, reason)
-			}
+		case failed := <-pod.Failed:
+			f.setStatus(failed.PodStatus)
 
 			if f.OnFailedFunc != nil {
-				err := f.OnFailedFunc(reason)
+				err := f.OnFailedFunc(failed.FailedReason)
 				if err == tracker.StopTrack {
 					return nil
 				}
@@ -185,10 +178,8 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case <-pod.Ready:
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` ready\n", pod.ResourceName)
-			}
+		case status := <-pod.Ready:
+			f.setStatus(status)
 
 			if f.OnReadyFunc != nil {
 				err := f.OnReadyFunc()
@@ -200,11 +191,11 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 				}
 			}
 
-		case status := <-pod.StatusReport:
-			f.setPodStatus(status)
+		case status := <-pod.Status:
+			f.setStatus(status)
 
-			if f.OnStatusReportFunc != nil {
-				err := f.OnStatusReportFunc(status)
+			if f.OnStatusFunc != nil {
+				err := f.OnStatusFunc(status)
 				if err == tracker.StopTrack {
 					return nil
 				}
@@ -215,14 +206,13 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 		case err := <-errorChan:
 			return err
-
 		case <-doneChan:
 			return nil
 		}
 	}
 }
 
-func (f *feed) setPodStatus(status PodStatus) {
+func (f *feed) setStatus(status PodStatus) {
 	f.statusMux.Lock()
 	defer f.statusMux.Unlock()
 	f.status = status
