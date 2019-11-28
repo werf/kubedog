@@ -477,8 +477,8 @@ func (pod *Tracker) runInformer() error {
 			return false, nil
 		})
 
-		if err != nil {
-			pod.errors <- err
+		if err := tracker.AdaptInformerError(err); err != nil {
+			pod.errors <- fmt.Errorf("pod/%s informer error: %s", pod.ResourceName, err)
 		}
 
 		if debug.Debug() {

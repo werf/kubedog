@@ -3,7 +3,6 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/tracker/debug"
@@ -40,7 +39,6 @@ type PodErrorReport struct {
 
 type Tracker struct {
 	tracker.Tracker
-	LogsFromTime time.Time
 
 	State             tracker.TrackerState
 	Conditions        []string
@@ -89,9 +87,8 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 			FullResourceName: fmt.Sprintf("deploy/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
+			LogsFromTime:     opts.LogsFromTime,
 		},
-
-		LogsFromTime: opts.LogsFromTime,
 
 		Added:  make(chan DeploymentStatus, 1),
 		Ready:  make(chan DeploymentStatus, 0),
@@ -424,7 +421,7 @@ func (d *Tracker) runDeploymentInformer() {
 			return false, nil
 		})
 
-		if err != nil {
+		if err := tracker.AdaptInformerError(err); err != nil {
 			d.errors <- err
 		}
 

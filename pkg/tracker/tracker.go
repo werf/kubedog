@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/wait"
+
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -33,6 +35,7 @@ type Tracker struct {
 	ResourceName     string
 	FullResourceName string // full resource name with resource kind (deploy/superapp)
 	Context          context.Context
+	LogsFromTime     time.Time
 
 	StatusGeneration uint64
 }
@@ -55,4 +58,11 @@ func ResourceErrorf(format string, a ...interface{}) error {
 	return &ResourceError{
 		msg: fmt.Sprintf(format, a...),
 	}
+}
+
+func AdaptInformerError(err error) error {
+	if err == wait.ErrWaitTimeout {
+		return nil
+	}
+	return err
 }

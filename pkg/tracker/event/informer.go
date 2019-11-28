@@ -108,15 +108,14 @@ func (e *EventInformer) Run() {
 				//	fmt.Printf("> Event: %#v\n", object)
 				//}
 			case watch.Error:
-				err := fmt.Errorf("> Event error: %v", ev.Object)
-				return true, err
+				return true, fmt.Errorf("event watch error: %v", ev.Object)
 			}
 
 			return false, nil
 		})
 
-		if err != nil {
-			e.Errors <- err
+		if err := tracker.AdaptInformerError(err); err != nil {
+			e.Errors <- fmt.Errorf("event informer for %s failed: %s", e.FullResourceName, err)
 		}
 
 		if debug.Debug() {

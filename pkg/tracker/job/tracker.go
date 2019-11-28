@@ -3,6 +3,9 @@ package job
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/flant/kubedog/pkg/utils"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +40,7 @@ type PodAddedReport struct {
 
 type Tracker struct {
 	tracker.Tracker
+	LogsFromTime time.Time
 
 	Added     chan JobStatus
 	Succeeded chan JobStatus
@@ -61,6 +65,7 @@ type Tracker struct {
 	objectFailed   chan string
 	errors         chan error
 
+	podAddedRelay chan *corev1.Pod
 	// Relay events from subordinate pods to the main Track goroutine.
 	// Map data by pod name.
 	podStatusesRelay        chan map[string]pod.PodStatus
@@ -68,7 +73,7 @@ type Tracker struct {
 	donePodsRelay           chan map[string]pod.PodStatus
 }
 
-func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface) *Tracker {
+func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -76,6 +81,7 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 			FullResourceName: fmt.Sprintf("job/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
+			LogsFromTime:     opts.LogsFromTime,
 		},
 
 		Added:     make(chan JobStatus, 1),
@@ -98,6 +104,7 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		objectFailed:   make(chan string, 1),
 		errors:         make(chan error, 0),
 
+		podAddedRelay:           make(chan *corev1.Pod, 0),
 		podStatusesRelay:        make(chan map[string]pod.PodStatus, 10),
 		podContainerErrorsRelay: make(chan map[string]pod.ContainerErrorReport, 10),
 		donePodsRelay:           make(chan map[string]pod.PodStatus, 10),
@@ -145,6 +152,20 @@ func (job *Tracker) Track() error {
 			job.Failed <- status
 			// TODO (longterm): This is not a fail, object may disappear then appear again.
 			// TODO (longterm): At this level tracker should allow that situation and still continue tracking.
+
+		case pod := <-job.podAddedRelay:
+			if job.lastObject != nil {
+				job.StatusGeneration++
+				status := NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
+				job.AddedPod <- PodAddedReport{
+					PodName:   pod.Name,
+					JobStatus: status,
+				}
+			}
+
+			if err := job.runPodTracker(pod.Name); err != nil {
+				return err
+			}
 
 		case donePods := <-job.donePodsRelay:
 			trackedPodsNames := make([]string, 0)
@@ -251,8 +272,8 @@ func (job *Tracker) runInformer() error {
 			return false, nil
 		})
 
-		if err != nil {
-			job.errors <- err
+		if err != tracker.AdaptInformerError(err) {
+			job.errors <- fmt.Errorf("job informer error: %s", err)
 		}
 
 		if debug.Debug() {
@@ -271,11 +292,8 @@ func (job *Tracker) handleJobState(object *batchv1.Job) error {
 
 	switch job.State {
 	case tracker.Initial:
+		job.runPodsInformer(object)
 		job.runEventsInformer(object)
-
-		if err := job.runPodsTrackers(object); err != nil {
-			return fmt.Errorf("unable to track job %s pods: %s", job.ResourceName, err)
-		}
 
 		if status.IsFailed {
 			job.State = tracker.ResourceFailed
@@ -304,76 +322,10 @@ func (job *Tracker) handleJobState(object *batchv1.Job) error {
 	return nil
 }
 
-func (job *Tracker) runPodsTrackers(object *batchv1.Job) error {
-	// FIXME: use PodsInformer to track new pods
-
-	selector, err := metav1.LabelSelectorAsSelector(object.Spec.Selector)
-	if err != nil {
-		return err
-	}
-
-	list, err := job.Kube.CoreV1().Pods(job.Namespace).List(metav1.ListOptions{LabelSelector: selector.String()})
-	if err != nil {
-		return err
-	}
-	for _, item := range list.Items {
-		err := job.runPodTracker(item.Name)
-		if err != nil {
-			return err
-		}
-	}
-
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.LabelSelector = selector.String()
-		return options
-	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return job.Kube.CoreV1().Pods(job.Namespace).List(tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return job.Kube.CoreV1().Pods(job.Namespace).Watch(tweakListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err = watchtools.UntilWithSync(job.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("Job `%s` pods informer event: %#v\n", job.ResourceName, e.Type)
-			}
-
-			object, ok := e.Object.(*corev1.Pod)
-			if !ok {
-				return true, fmt.Errorf("expected %s to be a *corev1.Pod, got %T", job.ResourceName, e.Object)
-			}
-
-			if e.Type == watch.Added {
-				for _, podName := range job.TrackedPodsNames {
-					if podName == object.Name {
-						// Already under tracking
-						return false, nil
-					}
-				}
-
-				err := job.runPodTracker(object.Name)
-				if err != nil {
-					return true, err
-				}
-			}
-
-			return false, nil
-		})
-
-		if err != nil {
-			job.errors <- err
-		}
-
-		if debug.Debug() {
-			fmt.Printf("Job `%s` pods informer done\n", job.ResourceName)
-		}
-	}()
-
-	return nil
+func (job *Tracker) runPodsInformer(object *batchv1.Job) {
+	podsInformer := pod.NewPodsInformer(&job.Tracker, utils.ControllerAccessor(object))
+	podsInformer.WithChannels(job.podAddedRelay, job.errors)
+	podsInformer.Run()
 }
 
 func (job *Tracker) runPodTracker(podName string) error {
@@ -382,22 +334,17 @@ func (job *Tracker) runPodTracker(podName string) error {
 
 	ctx, cancelPodCtx := context.WithCancel(job.Context)
 	podTracker := pod.NewTracker(ctx, podName, job.Namespace, job.Kube)
-	job.TrackedPodsNames = append(job.TrackedPodsNames, podName)
-
-	job.StatusGeneration++
-	status := NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
-	job.AddedPod <- PodAddedReport{
-		PodName:   podTracker.ResourceName,
-		JobStatus: status,
+	if !job.LogsFromTime.IsZero() {
+		podTracker.LogsFromTime = job.LogsFromTime
 	}
+	job.TrackedPodsNames = append(job.TrackedPodsNames, podName)
 
 	go func() {
 		if debug.Debug() {
 			fmt.Printf("Starting Job's `%s` Pod `%s` tracker\n", job.ResourceName, podTracker.ResourceName)
 		}
 
-		err := podTracker.Start()
-		if err != nil {
+		if err := podTracker.Start(); err != nil {
 			errorChan <- err
 		} else {
 			doneChan <- struct{}{}
