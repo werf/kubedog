@@ -24,6 +24,7 @@ type FormatTableElemOptions struct {
 type StringEqualConditionIndicator struct {
 	Value       string
 	TargetValue string
+	FailedValue string
 }
 
 func (indicator *StringEqualConditionIndicator) IsProgressing(prevIndicator *StringEqualConditionIndicator) bool {
@@ -32,6 +33,10 @@ func (indicator *StringEqualConditionIndicator) IsProgressing(prevIndicator *Str
 
 func (indicator *StringEqualConditionIndicator) IsReady() bool {
 	return (indicator.Value == indicator.TargetValue)
+}
+
+func (indicator *StringEqualConditionIndicator) IsFailed() bool {
+	return (indicator.Value == indicator.FailedValue)
 }
 
 func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *StringEqualConditionIndicator, opts FormatTableElemOptions) string {
@@ -50,6 +55,12 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		res += indicator.Value
 	} else if indicator.IsReady() {
 		res += color.New(color.FgGreen).Sprintf("%s", indicator.Value)
+	} else if indicator.IsFailed() {
+		if opts.DisableWarningColors {
+			res += indicator.Value
+		} else {
+			res += color.New(color.FgRed).Sprintf("%s", indicator.Value)
+		}
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.Value

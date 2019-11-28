@@ -116,6 +116,7 @@ func NewPodStatus(pod *corev1.Pod, statusGeneration uint64, trackedContainers []
 	}
 
 	res.StatusIndicator.Value = reason
+	res.StatusIndicator.FailedValue = "Error"
 	res.Restarts = restarts
 	res.ReadyContainers = readyContainers
 

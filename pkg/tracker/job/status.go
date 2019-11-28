@@ -55,7 +55,16 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 		res.Duration = duration.HumanDuration(res.CompletionTime.Sub(res.StartTime.Time))
 	}
 
-	if len(trackedPodsNames) == 0 {
+	doCheckJobConditions := true
+	for _, trackedPodName := range trackedPodsNames {
+		podStatus := podsStatuses[trackedPodName]
+
+		if !podStatus.IsFailed && !podStatus.IsSucceeded {
+			doCheckJobConditions = false // unterminated pods exists
+		}
+	}
+
+	if doCheckJobConditions {
 		for _, c := range object.Status.Conditions {
 			switch c.Type {
 			case batchv1.JobComplete:
@@ -77,7 +86,7 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("condition %s->%s", batchv1.JobComplete, corev1.ConditionTrue))
 		}
 	} else {
-		res.WaitingForMessages = append(res.WaitingForMessages, "pods should be complete")
+		res.WaitingForMessages = append(res.WaitingForMessages, "pods should be terminated")
 	}
 
 	res.SucceededIndicator = &indicators.Int32EqualConditionIndicator{}
