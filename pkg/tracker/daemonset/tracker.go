@@ -3,7 +3,6 @@ package daemonset
 import (
 	"context"
 	"fmt"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +38,6 @@ type PodErrorReport struct {
 
 type Tracker struct {
 	tracker.Tracker
-	LogsFromTime time.Time
 
 	State            tracker.TrackerState
 	TrackedPodsNames []string
@@ -73,9 +71,6 @@ type Tracker struct {
 }
 
 func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
-	if debug.Debug() {
-		fmt.Printf("> daemonset.NewTracker\n")
-	}
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -83,9 +78,8 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 			FullResourceName: fmt.Sprintf("ds/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
+			LogsFromTime:     opts.LogsFromTime,
 		},
-
-		LogsFromTime: opts.LogsFromTime,
 
 		TrackedPodsNames: make([]string, 0),
 
@@ -310,7 +304,7 @@ func (d *Tracker) runDaemonSetInformer() {
 			return false, nil
 		})
 
-		if err != nil {
+		if err := tracker.AdaptInformerError(err); err != nil {
 			d.errors <- err
 		}
 

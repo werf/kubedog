@@ -2,7 +2,9 @@ package utils
 
 import (
 	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +26,7 @@ type ReplicaSetControllerWrapper struct {
 	deployment         *appsv1.Deployment
 	statefulSet        *appsv1.StatefulSet
 	daemonSet          *appsv1.DaemonSet
+	job                *batchv1.Job
 }
 
 func (w *ReplicaSetControllerWrapper) NewReplicaSetTemplate() corev1.PodTemplateSpec {
@@ -66,6 +69,12 @@ func ControllerAccessor(controller interface{}) ControllerMetadata {
 		}
 		w.labelSelector = c.Spec.Selector
 	case *appsv1.DaemonSet:
+		w.replicaSetTemplate = corev1.PodTemplateSpec{
+			ObjectMeta: c.Spec.Template.ObjectMeta,
+			Spec:       c.Spec.Template.Spec,
+		}
+		w.labelSelector = c.Spec.Selector
+	case *batchv1.Job:
 		w.replicaSetTemplate = corev1.PodTemplateSpec{
 			ObjectMeta: c.Spec.Template.ObjectMeta,
 			Spec:       c.Spec.Template.Spec,

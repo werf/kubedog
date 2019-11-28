@@ -3,7 +3,6 @@ package statefulset
 import (
 	"context"
 	"fmt"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +34,6 @@ type PodErrorReport struct {
 
 type Tracker struct {
 	tracker.Tracker
-	LogsFromTime time.Time
 
 	State      tracker.TrackerState
 	Conditions []string
@@ -81,9 +79,8 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 			FullResourceName: fmt.Sprintf("sts/%s", name),
 			ResourceName:     name,
 			Context:          ctx,
+			LogsFromTime:     opts.LogsFromTime,
 		},
-
-		LogsFromTime: opts.LogsFromTime,
 
 		Added:  make(chan StatefulSetStatus, 1),
 		Ready:  make(chan StatefulSetStatus, 0),
@@ -309,7 +306,7 @@ func (d *Tracker) runStatefulSetInformer() {
 			return false, nil
 		})
 
-		if err != nil {
+		if err := tracker.AdaptInformerError(err); err != nil {
 			d.errors <- err
 		}
 

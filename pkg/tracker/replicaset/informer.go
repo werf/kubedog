@@ -127,7 +127,7 @@ func (r *ReplicaSetInformer) Run() {
 			return false, nil
 		})
 
-		if err != nil {
+		if err := tracker.AdaptInformerError(err); err != nil {
 			r.Errors <- err
 		}
 
