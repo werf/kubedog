@@ -145,13 +145,10 @@ func (job *Tracker) Track() error {
 			job.Failed <- status
 
 		case <-job.objectDeleted:
-			job.lastObject = nil
 			job.State = tracker.ResourceDeleted
-			job.failedReason = "resource deleted"
-			status := JobStatus{IsFailed: true, FailedReason: job.failedReason}
-			job.Failed <- status
-			// TODO (longterm): This is not a fail, object may disappear then appear again.
-			// TODO (longterm): At this level tracker should allow that situation and still continue tracking.
+			job.lastObject = nil
+			job.TrackedPodsNames = nil
+			job.Status <- JobStatus{}
 
 		case pod := <-job.podAddedRelay:
 			if job.lastObject != nil {
@@ -168,7 +165,7 @@ func (job *Tracker) Track() error {
 			}
 
 		case donePods := <-job.donePodsRelay:
-			trackedPodsNames := make([]string, 0)
+			var trackedPodsNames []string
 
 		trackedPodsIteration:
 			for _, name := range job.TrackedPodsNames {
@@ -317,6 +314,17 @@ func (job *Tracker) handleJobState(object *batchv1.Job) error {
 		}
 	case tracker.ResourceSucceeded:
 		job.Status <- status
+	case tracker.ResourceDeleted:
+		if status.IsFailed {
+			job.State = tracker.ResourceFailed
+			job.Failed <- status
+		} else if status.IsSucceeded {
+			job.State = tracker.ResourceSucceeded
+			job.Succeeded <- status
+		} else {
+			job.State = tracker.ResourceAdded
+			job.Added <- status
+		}
 	}
 
 	return nil

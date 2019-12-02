@@ -95,8 +95,6 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		podStatuses:  make(map[string]pod.PodStatus),
 		podRevisions: make(map[string]string),
 
-		TrackedPodsNames: make([]string, 0),
-
 		resourceAdded:    make(chan *appsv1.StatefulSet, 1),
 		resourceModified: make(chan *appsv1.StatefulSet, 1),
 		resourceDeleted:  make(chan *appsv1.StatefulSet, 1),
@@ -134,12 +132,12 @@ func (d *Tracker) Track() (err error) {
 			}
 
 		case <-d.resourceDeleted:
-			d.lastObject = nil
 			d.State = tracker.ResourceDeleted
-			d.failedReason = "resource deleted"
-			d.Failed <- StatefulSetStatus{IsFailed: true, FailedReason: d.failedReason}
-			// TODO (longterm): This is not a fail, object may disappear then appear again.
-			// TODO (longterm): At this level tracker should allow that situation and still continue tracking.
+			d.lastObject = nil
+			d.TrackedPodsNames = nil
+			d.podStatuses = make(map[string]pod.PodStatus)
+			d.podRevisions = make(map[string]string)
+			d.Status <- StatefulSetStatus{}
 
 		case reason := <-d.resourceFailed:
 			d.State = tracker.ResourceFailed
@@ -419,9 +417,19 @@ func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) error {
 		} else {
 			d.Status <- status
 		}
-
 	case tracker.ResourceSucceeded:
 		d.Status <- status
+	case tracker.ResourceDeleted:
+		if status.IsFailed {
+			d.State = tracker.ResourceFailed
+			d.Failed <- status
+		} else if status.IsReady {
+			d.State = tracker.ResourceReady
+			d.Ready <- status
+		} else {
+			d.State = tracker.ResourceAdded
+			d.Added <- status
+		}
 	}
 
 	return nil
