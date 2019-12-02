@@ -144,8 +144,10 @@ func (pod *Tracker) Start() error {
 		case <-pod.objectDeleted:
 			pod.lastObject = nil
 			pod.State = tracker.ResourceDeleted
-			pod.failedReason = "resource deleted"
-			pod.LastStatus = PodStatus{IsFailed: true, FailedReason: pod.failedReason}
+
+			status := PodStatus{}
+
+			pod.LastStatus = status
 
 			keys := []string{}
 			for k := range pod.ContainerTrackerStates {
@@ -155,9 +157,7 @@ func (pod *Tracker) Start() error {
 				pod.ContainerTrackerStates[k] = tracker.ContainerTrackerDone
 			}
 
-			pod.Failed <- FailedReport{PodStatus: pod.LastStatus, FailedReason: pod.LastStatus.FailedReason}
-			// TODO (longterm): This is not a fail, object may disappear then appear again.
-			// TODO (longterm): At this level tracker should allow that situation and still continue tracking.
+			pod.Status <- status
 
 		case reason := <-pod.objectFailed:
 			pod.State = tracker.ResourceFailed
@@ -266,6 +266,20 @@ func (pod *Tracker) handlePodState(object *corev1.Pod) error {
 			pod.Succeeded <- status
 		} else {
 			pod.Status <- status
+		}
+	case tracker.ResourceDeleted:
+		if status.IsFailed {
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
+		} else if status.IsSucceeded {
+			pod.State = tracker.ResourceSucceeded
+			pod.Succeeded <- status
+		} else if status.IsReady {
+			pod.State = tracker.ResourceReady
+			pod.Ready <- status
+		} else {
+			pod.State = tracker.ResourceAdded
+			pod.Added <- status
 		}
 	}
 
