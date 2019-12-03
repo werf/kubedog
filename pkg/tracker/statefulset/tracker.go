@@ -193,8 +193,10 @@ func (d *Tracker) Track() (err error) {
 			}
 			d.TrackedPodsNames = trackedPodsNames
 
-			if err := d.handleStatefulSetState(d.lastObject); err != nil {
-				return err
+			if d.lastObject != nil {
+				if err := d.handleStatefulSetState(d.lastObject); err != nil {
+					return err
+				}
 			}
 
 		case podStatuses := <-d.podStatusesRelay:
@@ -202,10 +204,9 @@ func (d *Tracker) Track() (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				d.StatusGeneration++
-				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
-
-				d.Status <- status
+				if err := d.handleStatefulSetState(d.lastObject); err != nil {
+					return err
+				}
 			}
 
 		case podLogChunks := <-d.podLogChunksRelay:

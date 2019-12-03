@@ -191,8 +191,10 @@ func (d *Tracker) Track() error {
 			}
 			d.TrackedPodsNames = trackedPodsNames
 
-			if err := d.handleDaemonSetState(d.lastObject); err != nil {
-				return err
+			if d.lastObject != nil {
+				if err := d.handleDaemonSetState(d.lastObject); err != nil {
+					return err
+				}
 			}
 
 		case podStatuses := <-d.podStatusesRelay:
@@ -200,8 +202,9 @@ func (d *Tracker) Track() error {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				d.StatusGeneration++
-				d.Status <- NewDaemonSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
+				if err := d.handleDaemonSetState(d.lastObject); err != nil {
+					return err
+				}
 			}
 
 		case podContainerErrors := <-d.podContainerErrorsRelay:

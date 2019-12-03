@@ -185,8 +185,10 @@ func (job *Tracker) Track() error {
 			}
 			job.TrackedPodsNames = trackedPodsNames
 
-			if err := job.handleJobState(job.lastObject); err != nil {
-				return err
+			if job.lastObject != nil {
+				if err := job.handleJobState(job.lastObject); err != nil {
+					return err
+				}
 			}
 
 		case podStatuses := <-job.podStatusesRelay:
@@ -194,8 +196,9 @@ func (job *Tracker) Track() error {
 				job.podStatuses[podName] = podStatus
 			}
 			if job.lastObject != nil {
-				job.StatusGeneration++
-				job.Status <- NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
+				if err := job.handleJobState(job.lastObject); err != nil {
+					return err
+				}
 			}
 
 		case podContainerErrors := <-job.podContainerErrorsRelay:
