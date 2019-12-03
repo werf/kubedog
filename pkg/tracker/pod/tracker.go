@@ -111,7 +111,6 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 		State:                           tracker.Initial,
 		ContainerTrackerStates:          make(map[string]tracker.TrackerState),
 		ProcessedContainerLogTimestamps: make(map[string]time.Time),
-		TrackedContainers:               make([]string, 0),
 		LogsFromTime:                    time.Time{},
 
 		objectAdded:    make(chan *corev1.Pod, 0),
@@ -142,11 +141,11 @@ func (pod *Tracker) Start() error {
 			}
 
 		case <-pod.objectDeleted:
-			pod.lastObject = nil
 			pod.State = tracker.ResourceDeleted
-
+			pod.lastObject = nil
+			pod.ContainerTrackerStates = make(map[string]tracker.TrackerState)
+			pod.ProcessedContainerLogTimestamps = make(map[string]time.Time)
 			status := PodStatus{}
-
 			pod.LastStatus = status
 
 			keys := []string{}
