@@ -3,6 +3,7 @@ package statefulset
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -122,12 +123,12 @@ func (d *Tracker) Track() (err error) {
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			if err := d.handleStatefulSetState(object); err != nil {
+			if err := d.handleStatefulSetState(object, nil); err != nil {
 				return err
 			}
 
 		case object := <-d.resourceModified:
-			if err := d.handleStatefulSetState(object); err != nil {
+			if err := d.handleStatefulSetState(object, nil); err != nil {
 				return err
 			}
 
@@ -140,24 +141,34 @@ func (d *Tracker) Track() (err error) {
 			d.Status <- StatefulSetStatus{}
 
 		case reason := <-d.resourceFailed:
-			d.State = tracker.ResourceFailed
-			d.failedReason = reason
+			if strings.Index(reason, "The POST operation against Pod could not be completed at this time, please try again.") != -1 {
+				// this is warning, not an error
 
-			var status StatefulSetStatus
-			if d.lastObject != nil {
-				d.StatusGeneration++
-				status = NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
+				if d.lastObject != nil {
+					if err := d.handleStatefulSetState(d.lastObject, []string{reason}); err != nil {
+						return err
+					}
+				}
 			} else {
-				status = StatefulSetStatus{IsFailed: true, FailedReason: reason}
+				d.State = tracker.ResourceFailed
+				d.failedReason = reason
+
+				var status StatefulSetStatus
+				if d.lastObject != nil {
+					d.StatusGeneration++
+					status = NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
+				} else {
+					status = StatefulSetStatus{IsFailed: true, FailedReason: reason}
+				}
+				d.Failed <- status
 			}
-			d.Failed <- status
 
 		case pod := <-d.podAddedRelay:
 			d.podRevisions[pod.Name] = pod.Labels["controller-revision-hash"]
 
 			if d.lastObject != nil {
 				d.StatusGeneration++
-				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
+				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
 
 				d.AddedPod <- PodAddedReport{
 					ReplicaSetPod: replicaset.ReplicaSetPod{
@@ -194,7 +205,7 @@ func (d *Tracker) Track() (err error) {
 			d.TrackedPodsNames = trackedPodsNames
 
 			if d.lastObject != nil {
-				if err := d.handleStatefulSetState(d.lastObject); err != nil {
+				if err := d.handleStatefulSetState(d.lastObject, nil); err != nil {
 					return err
 				}
 			}
@@ -204,7 +215,7 @@ func (d *Tracker) Track() (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				if err := d.handleStatefulSetState(d.lastObject); err != nil {
+				if err := d.handleStatefulSetState(d.lastObject, nil); err != nil {
 					return err
 				}
 			}
@@ -226,7 +237,7 @@ func (d *Tracker) Track() (err error) {
 			}
 			if d.lastObject != nil {
 				d.StatusGeneration++
-				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
+				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
 
 				for podName, containerError := range podContainerErrors {
 					d.PodError <- PodErrorReport{
@@ -387,11 +398,11 @@ func (d *Tracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet) error {
+func (d *Tracker) handleStatefulSetState(object *appsv1.StatefulSet, warningMessages []string) error {
 	d.lastObject = object
 	d.StatusGeneration++
 
-	status := NewStatefulSetStatus(object, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
+	status := NewStatefulSetStatus(object, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, warningMessages, d.podStatuses, d.getNewPodsNames())
 
 	switch d.State {
 	case tracker.Initial:

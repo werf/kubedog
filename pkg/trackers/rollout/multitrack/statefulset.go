@@ -2,7 +2,6 @@ package multitrack
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/flant/kubedog/pkg/tracker/replicaset"
 	"github.com/flant/kubedog/pkg/tracker/statefulset"
@@ -106,20 +105,7 @@ func (mt *multitracker) statefulsetReady(spec MultitrackSpec, feed statefulset.F
 	return mt.handleResourceReadyCondition(mt.TrackingStatefulSets, spec)
 }
 
-func (mt *multitracker) isPostOperationCouldNotBeCompletedError(reason string) bool {
-	return strings.Index(reason, "The POST operation against Pod could not be completed at this time, please try again.") != -1
-}
-
-func (mt *multitracker) handlePostOperationCouldNotBeCompleted(spec MultitrackSpec, reason string) error {
-	mt.displayResourceTrackerMessageF("sts", spec, "WARNING: %s", reason)
-	return nil
-}
-
 func (mt *multitracker) statefulsetFailed(spec MultitrackSpec, feed statefulset.Feed, reason string) error {
-	if mt.isPostOperationCouldNotBeCompletedError(reason) {
-		return mt.handlePostOperationCouldNotBeCompleted(spec, reason)
-	}
-
 	mt.displayResourceErrorF("sts", spec, "%s", reason)
 	return mt.handleResourceFailure(mt.TrackingStatefulSets, "sts", spec, reason)
 }
