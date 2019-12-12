@@ -317,7 +317,12 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 		if status.IsFailed {
 			t.Row(resource, replicas, ready, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
-			t.Row(resource, replicas, ready, uptodate)
+			args := []interface{}{}
+			args = append(args, resource, replicas, ready, uptodate)
+			for _, w := range status.WarningMessages {
+				args = append(args, formatResourceWarning(disableWarningColors, w))
+			}
+			t.Row(args...)
 		}
 
 		if len(status.Pods) > 0 {
@@ -533,6 +538,14 @@ func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods 
 	st.Rows(podRows...)
 
 	return &st
+}
+
+func formatResourceWarning(disableWarningColors bool, reason string) string {
+	msg := fmt.Sprintf("warning: %s", reason)
+	if disableWarningColors {
+		return msg
+	}
+	return color.New(color.FgYellow).Sprintf("%s", msg)
 }
 
 func formatResourceError(disableWarningColors bool, reason string) string {

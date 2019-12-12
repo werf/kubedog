@@ -19,6 +19,7 @@ type StatefulSetStatus struct {
 	UpToDateIndicator *indicators.Int64GreaterOrEqualConditionIndicator
 
 	WaitingForMessages []string
+	WarningMessages    []string
 
 	IsReady      bool
 	IsFailed     bool
@@ -28,7 +29,7 @@ type StatefulSetStatus struct {
 	NewPodsNames []string
 }
 
-func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, isFailed bool, failedReason string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) StatefulSetStatus {
+func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, isFailed bool, failedReason string, warningMessages []string, podsStatuses map[string]pod.PodStatus, newPodsNames []string) StatefulSetStatus {
 	res := StatefulSetStatus{
 		StatusGeneration:  statusGeneration,
 		StatefulSetStatus: object.Status,
@@ -37,6 +38,7 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 		IsReady:           true,
 		IsFailed:          isFailed,
 		FailedReason:      failedReason,
+		WarningMessages:   warningMessages,
 	}
 
 	// TODO: share common code from deploy, ds and sts
