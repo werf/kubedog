@@ -97,7 +97,7 @@ func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec
 	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
 
 	if spec.ShowServiceMessages {
-		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{logboek.ColorizeInfo})
+		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{ColorizeMsgFunc: logboek.ColorizeInfo})
 		logboek.LogInfoF("%s\n", msg)
 	}
 }
@@ -108,7 +108,7 @@ func (mt *multitracker) displayResourceEventF(resourceKind string, spec Multitra
 	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
 
 	if spec.ShowServiceMessages {
-		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{logboek.ColorizeInfo})
+		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{ColorizeMsgFunc: logboek.ColorizeInfo})
 		logboek.LogInfoF("%s\n", msg)
 	}
 }
