@@ -407,7 +407,7 @@ type multitracker struct {
 
 	displayCalled             bool
 	currentLogProcessHeader   string
-	currentLogProcessOptions  logboek.LogProcessStartOptions
+	currentLogProcessOptions  logboek.LevelLogProcessStartOptions
 	serviceMessagesByResource map[string][]string
 }
 

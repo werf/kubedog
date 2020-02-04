@@ -9,17 +9,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/flant/logboek"
+	"github.com/spf13/cobra"
 	"k8s.io/klog"
 
-	"github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+	"github.com/flant/logboek"
 
 	"github.com/flant/kubedog"
 	"github.com/flant/kubedog/pkg/kube"
 	"github.com/flant/kubedog/pkg/tracker"
 	"github.com/flant/kubedog/pkg/trackers/follow"
 	"github.com/flant/kubedog/pkg/trackers/rollout"
-	"github.com/spf13/cobra"
+	"github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
 )
 
 func main() {
@@ -130,7 +130,7 @@ func main() {
 			init()
 
 			if outputPrefix != "" {
-				logboek.SetPrefix(outputPrefix, logboek.ColorizeNone)
+				logboek.SetPrefix(outputPrefix, nil)
 			}
 
 			specsInput, err := ioutil.ReadAll(os.Stdin)
