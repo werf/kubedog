@@ -4,7 +4,7 @@ require (
 	github.com/Azure/go-autorest v11.1.0+incompatible // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/fatih/color v1.7.0
-	github.com/flant/logboek v0.2.6-0.20200204105935-c9ed7cccdb7e
+	github.com/flant/logboek v0.2.6-0.20190918091020-d00ba619a349
 	github.com/google/btree v1.0.0 // indirect
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190212212710-3befbb6ad0cc // indirect
