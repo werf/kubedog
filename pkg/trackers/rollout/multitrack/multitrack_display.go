@@ -64,7 +64,7 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec Multit
 	}
 
 	if len(showLines) > 0 {
-		mt.setLogProcess(fmt.Sprintf("%s/%s %s logs", resourceKind, spec.ResourceName, header), logboek.LogProcessStartOptions{})
+		mt.setLogProcess(fmt.Sprintf("%s/%s %s logs", resourceKind, spec.ResourceName, header), logboek.LevelLogProcessStartOptions{})
 
 		for _, line := range showLines {
 			logboek.OutF("%s\n", line)
@@ -72,11 +72,11 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec Multit
 	}
 }
 
-func (mt *multitracker) setLogProcess(header string, options logboek.LogProcessStartOptions) {
+func (mt *multitracker) setLogProcess(header string, options logboek.LevelLogProcessStartOptions) {
 	if mt.currentLogProcessHeader != header {
 		mt.resetLogProcess()
 
-		logboek.LogProcessStart(header, options)
+		logboek.Default.LogProcessStart(header, options)
 		mt.currentLogProcessHeader = header
 		mt.currentLogProcessOptions = options
 	}
@@ -86,7 +86,13 @@ func (mt *multitracker) resetLogProcess() {
 	mt.displayCalled = true
 
 	if mt.currentLogProcessHeader != "" {
-		logboek.LogProcessEnd(logboek.LogProcessEndOptions{ColorizeMsgFunc: mt.currentLogProcessOptions.ColorizeMsgFunc, WithoutLogOptionalLn: false, WithoutElapsedTime: true})
+		logboek.Default.LogProcessEnd(
+			logboek.LevelLogProcessEndOptions{
+				Style:                mt.currentLogProcessOptions.Style,
+				WithoutLogOptionalLn: false,
+				WithoutElapsedTime:   true,
+			},
+		)
 		mt.currentLogProcessHeader = ""
 	}
 }
@@ -97,8 +103,14 @@ func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec
 	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
 
 	if spec.ShowServiceMessages {
-		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{ColorizeMsgFunc: logboek.ColorizeInfo})
-		logboek.LogInfoF("%s\n", msg)
+		mt.setLogProcess(
+			fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName),
+			logboek.LevelLogProcessStartOptions{
+				Style: logboek.DetailsStyle(),
+			},
+		)
+
+		logboek.Default.LogFDetails("%s\n", msg)
 	}
 }
 
@@ -108,14 +120,18 @@ func (mt *multitracker) displayResourceEventF(resourceKind string, spec Multitra
 	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
 
 	if spec.ShowServiceMessages {
-		mt.setLogProcess(fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName), logboek.LogProcessStartOptions{ColorizeMsgFunc: logboek.ColorizeInfo})
-		logboek.LogInfoF("%s\n", msg)
+		mt.setLogProcess(
+			fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName),
+			logboek.LevelLogProcessStartOptions{Style: logboek.DetailsStyle()},
+		)
+
+		logboek.Default.LogFDetails("%s\n", msg)
 	}
 }
 
 func (mt *multitracker) displayResourceErrorF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.LogErrorF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
+	logboek.LogWarnF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
 }
 
 func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
@@ -161,11 +177,20 @@ func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec
 
 		logboek.LogOptionalLn()
 
-		logboek.LogBlock(fmt.Sprintf("Failed resource %s/%s service messages", resourceKind, spec.ResourceName), logboek.LogBlockOptions{WithoutLogOptionalLn: true, ColorizeMsgFunc: logboek.ColorizeInfo}, func() {
-			for _, line := range lines {
-				logboek.LogInfoF("%s\n", line)
-			}
-		})
+		_ = logboek.Default.LogBlock(
+			fmt.Sprintf("Failed resource %s/%s service messages", resourceKind, spec.ResourceName),
+			logboek.LevelLogBlockOptions{
+				WithoutLogOptionalLn: true,
+				Style:                logboek.DetailsStyle(),
+			},
+			func() error {
+				for _, line := range lines {
+					logboek.Default.LogFDetails("%s\n", line)
+				}
+
+				return nil
+			},
+		)
 
 		logboek.LogOptionalLn()
 	}
@@ -173,12 +198,12 @@ func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec
 
 func (mt *multitracker) displayMultitrackServiceMessageF(format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.LogHighlightF(format, a...)
+	logboek.Default.LogFHighlight(format, a...)
 }
 
 func (mt *multitracker) displayMultitrackErrorMessageF(format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.LogErrorF(format, a...)
+	logboek.LogWarnF(format, a...)
 }
 
 func (mt *multitracker) displayStatusProgress() error {
@@ -195,11 +220,13 @@ func (mt *multitracker) displayStatusProgress() error {
 
 	caption := color.New(color.Bold).Sprint("Status progress")
 
-	logboek.LogBlock(caption, logboek.LogBlockOptions{WithoutLogOptionalLn: true}, func() {
+	_ = logboek.Default.LogBlock(caption, logboek.LevelLogBlockOptions{WithoutLogOptionalLn: true}, func() error {
 		mt.displayDeploymentsStatusProgress()
 		mt.displayDaemonSetsStatusProgress()
 		mt.displayStatefulSetsStatusProgress()
 		mt.displayJobsProgress()
+
+		return nil
 	})
 
 	logboek.LogOptionalLn()
@@ -224,8 +251,8 @@ func (mt *multitracker) displayJobsProgress() {
 
 		spec := mt.JobsSpecs[name]
 
-		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
-		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
+		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
+		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
 
 		resource := formatResourceCaption(name, spec.FailMode, status.IsSucceeded, status.IsFailed, true)
 
@@ -284,8 +311,8 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 
 		spec := mt.StatefulSetsSpecs[name]
 
-		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
-		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
+		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
+		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
 
 		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed, true)
 
@@ -360,8 +387,8 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 
 		spec := mt.DaemonSetsSpecs[name]
 
-		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
-		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
+		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
+		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
 
 		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed, true)
 
@@ -430,8 +457,8 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 		status := mt.DeploymentsStatuses[name]
 		spec := mt.DeploymentsSpecs[name]
 
-		showProgress := (status.StatusGeneration > prevStatus.StatusGeneration)
-		disableWarningColors := (spec.FailMode == IgnoreAndContinueDeployProcess)
+		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
+		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
 
 		resource := formatResourceCaption(name, spec.FailMode, status.IsReady, status.IsFailed, true)
 
