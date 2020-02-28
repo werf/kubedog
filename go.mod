@@ -1,7 +1,6 @@
 module github.com/flant/kubedog
 
 require (
-	github.com/Azure/go-autorest v11.1.0+incompatible // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/fatih/color v1.7.0
 	github.com/flant/logboek v0.2.6-0.20190918091020-d00ba619a349
