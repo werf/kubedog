@@ -3,8 +3,8 @@ package multitrack
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/tracker/job"
-	"github.com/flant/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/tracker/job"
+	"github.com/werf/kubedog/pkg/tracker/pod"
 	"k8s.io/client-go/kubernetes"
 )
 

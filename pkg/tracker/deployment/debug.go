@@ -8,8 +8,8 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/flant/kubedog/pkg/tracker/debug"
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 func getDeploymentStatus(client kubernetes.Interface, prevObj *appsv1.Deployment, newObj *appsv1.Deployment) string {

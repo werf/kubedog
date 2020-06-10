@@ -17,10 +17,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/flant/kubedog/pkg/display"
-	"github.com/flant/kubedog/pkg/tracker"
-	"github.com/flant/kubedog/pkg/tracker/debug"
-	"github.com/flant/kubedog/pkg/tracker/event"
+	"github.com/werf/kubedog/pkg/display"
+	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/tracker/event"
 )
 
 type ContainerError struct {

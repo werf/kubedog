@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/utils"
 
-	"github.com/flant/kubedog/pkg/tracker/indicators"
-	"github.com/flant/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/tracker/indicators"
+	"github.com/werf/kubedog/pkg/tracker/pod"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"

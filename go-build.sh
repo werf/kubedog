@@ -4,4 +4,4 @@ set -e
 
 export GO111MODULE=on
 
-go install github.com/flant/kubedog/cmd/kubedog
+go install github.com/werf/kubedog/cmd/kubedog

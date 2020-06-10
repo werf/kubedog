@@ -3,12 +3,12 @@ package follow
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/tracker/pod"
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/flant/kubedog/pkg/display"
-	"github.com/flant/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/display"
+	"github.com/werf/kubedog/pkg/tracker"
 )
 
 func TrackPod(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {

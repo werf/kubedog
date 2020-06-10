@@ -8,10 +8,10 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/flant/kubedog/pkg/tracker/indicators"
-	"github.com/flant/kubedog/pkg/tracker/pod"
-	"github.com/flant/kubedog/pkg/utils"
-	"github.com/flant/logboek"
+	"github.com/werf/kubedog/pkg/tracker/indicators"
+	"github.com/werf/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/logboek"
 )
 
 var (

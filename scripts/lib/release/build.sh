@@ -17,8 +17,8 @@ go_build() {
             echo "# Building kubedog $VERSION for $os $arch ..."
 
             GOOS=$os GOARCH=$arch CGO_ENABLED=0 \
-              go build -ldflags="-s -w -X github.com/flant/kubedog.Version=$VERSION" \
-                       -o $outputFile github.com/flant/kubedog/cmd/kubedog
+              go build -ldflags="-s -w -X github.com/werf/kubedog.Version=$VERSION" \
+                       -o $outputFile github.com/werf/kubedog/cmd/kubedog
 
             echo "# Built $outputFile"
         done
