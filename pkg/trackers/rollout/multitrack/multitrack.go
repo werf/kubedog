@@ -9,15 +9,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flant/logboek"
+	"github.com/werf/logboek"
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/flant/kubedog/pkg/tracker"
-	"github.com/flant/kubedog/pkg/tracker/daemonset"
-	"github.com/flant/kubedog/pkg/tracker/deployment"
-	"github.com/flant/kubedog/pkg/tracker/job"
-	"github.com/flant/kubedog/pkg/tracker/statefulset"
+	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/tracker/daemonset"
+	"github.com/werf/kubedog/pkg/tracker/deployment"
+	"github.com/werf/kubedog/pkg/tracker/job"
+	"github.com/werf/kubedog/pkg/tracker/statefulset"
 )
 
 type TrackTerminationMode string

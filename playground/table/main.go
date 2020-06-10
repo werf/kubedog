@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/fatih/color"
-	"github.com/flant/logboek"
+	"github.com/werf/logboek"
 
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 func main() {

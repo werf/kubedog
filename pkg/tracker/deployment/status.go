@@ -3,9 +3,9 @@ package deployment
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/tracker/indicators"
-	"github.com/flant/kubedog/pkg/tracker/pod"
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/tracker/indicators"
+	"github.com/werf/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 )

@@ -9,7 +9,7 @@ import (
 
 	"github.com/acarl005/stripansi"
 
-	"github.com/flant/logboek"
+	"github.com/werf/logboek"
 )
 
 type Table struct {

@@ -15,12 +15,12 @@ import (
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/flant/kubedog/pkg/tracker"
-	"github.com/flant/kubedog/pkg/tracker/debug"
-	"github.com/flant/kubedog/pkg/tracker/event"
-	"github.com/flant/kubedog/pkg/tracker/pod"
-	"github.com/flant/kubedog/pkg/tracker/replicaset"
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/tracker/event"
+	"github.com/werf/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type PodAddedReport struct {

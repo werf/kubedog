@@ -12,14 +12,14 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/klog"
 
-	"github.com/flant/logboek"
+	"github.com/werf/logboek"
 
-	"github.com/flant/kubedog"
-	"github.com/flant/kubedog/pkg/kube"
-	"github.com/flant/kubedog/pkg/tracker"
-	"github.com/flant/kubedog/pkg/trackers/follow"
-	"github.com/flant/kubedog/pkg/trackers/rollout"
-	"github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+	"github.com/werf/kubedog"
+	"github.com/werf/kubedog/pkg/kube"
+	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/trackers/follow"
+	"github.com/werf/kubedog/pkg/trackers/rollout"
+	"github.com/werf/kubedog/pkg/trackers/rollout/multitrack"
 )
 
 func main() {

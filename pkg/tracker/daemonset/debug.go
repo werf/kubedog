@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/flant/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/tracker/debug"
 	appsv1 "k8s.io/api/apps/v1"
 )
 

@@ -2,7 +2,7 @@
 
 Kubedog is a library that allows watching and following kubernetes resources in CI/CD deploy pipelines.
 
-This library is used in the [werf CI/CD tool](https://github.com/flant/werf) to track resources during deploy process.
+This library is used in the [werf CI/CD tool](https://github.com/werf/werf) to track resources during deploy process.
 
 **NOTE** Cli utility is intent to be used to observe library abilities and for debug purposes. Further improvement of cli is not planned. Cli is only a minimal viable interface to access library functions.
 
@@ -11,7 +11,7 @@ This library is used in the [werf CI/CD tool](https://github.com/flant/werf) to 
 ## Install library
 
 ```
-go get github.com/flant/kubedog
+go get github.com/werf/kubedog
 ```
 
 ## Install CLI
@@ -50,7 +50,7 @@ There are 3 modes of resource tracking: multitrack, follow and rollout. The comm
 
 ## Multitracker cli
 
-There is minimal viable support of multitracker in kubedog cli. To use multitracker user must pass to kubedog stdin json structure which resembles golang structure MultitrackSpecs (see [library description](#multitracker) and [sources](https://github.com/flant/kubedog/blob/master/pkg/trackers/rollout/multitrack/multitrack.go#L57) for more info), for example:
+There is minimal viable support of multitracker in kubedog cli. To use multitracker user must pass to kubedog stdin json structure which resembles golang structure MultitrackSpecs (see [library description](#multitracker) and [sources](https://github.com/werf/kubedog/blob/master/pkg/trackers/rollout/multitrack/multitrack.go#L57) for more info), for example:
 
 ```
 cat << EOF | kubedog multitrack
@@ -71,23 +71,23 @@ cat << EOF | kubedog multitrack
 EOF
 ```
 
-![Kubedog multitrack cli demo](https://raw.githubusercontent.com/flant/werf-demos/master/kubedog/kubedog-multitrack-cmd.gif)
+![Kubedog multitrack cli demo](https://raw.githubusercontent.com/werf/werf-demos/master/kubedog/kubedog-multitrack-cmd.gif)
 
 Multitracker can be used in CI/CD deploy pipeline to make sure that some set of resources is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resources. By default kubedog will fail fast giving user fast feedback about failed resources.
 
 ## More multitracker demos
 
-![Demo 1](https://raw.githubusercontent.com/flant/werf-demos/master/kubedog/kubedog-multitrack-with-output-prefix.gif)
+![Demo 1](https://raw.githubusercontent.com/werf/werf-demos/master/kubedog/kubedog-multitrack-with-output-prefix.gif)
 
 ### Werf demos
 
-[Werf](https://github.com/flant/werf) makes use of kubedog multitracker under the hood, so the output is the same as `kubedog multitrack ...` cli invocation, the modes configured using annotations are passed directly to the `MultitrackSpec` corresponding options:
+[Werf](https://github.com/werf/werf) makes use of kubedog multitracker under the hood, so the output is the same as `kubedog multitrack ...` cli invocation, the modes configured using annotations are passed directly to the `MultitrackSpec` corresponding options:
 
-![Demo 2](https://raw.githubusercontent.com/flant/werf-demos/master/deploy/werf-new-track-modes-1.gif)
+![Demo 2](https://raw.githubusercontent.com/werf/werf-demos/master/deploy/werf-new-track-modes-1.gif)
 
-![Demo 3](https://raw.githubusercontent.com/flant/werf-demos/master/deploy/werf-new-track-modes-2.gif)
+![Demo 3](https://raw.githubusercontent.com/werf/werf-demos/master/deploy/werf-new-track-modes-2.gif)
 
-![Demo 4](https://raw.githubusercontent.com/flant/werf-demos/master/deploy/werf-new-track-modes-3.gif)
+![Demo 4](https://raw.githubusercontent.com/werf/werf-demos/master/deploy/werf-new-track-modes-3.gif)
 
 ## Rollout and follow cli (DEPRECATED)
 
@@ -113,12 +113,12 @@ Currently there is a single main tracker available: [multitracker](#multitracker
 
 Multitracker allows tracking multiple resources of multiple kinds at the same time. Multitracker combines all data from all resources into single stream of messages. Also this tracker gives periodical status reports with info about all resources, that are being tracked.
 
-Multitracker is a **rollout style tracker** (see [follow tracker](https://github.com/flant/kubedog#follow-tracker) and [rollout tracker](https://github.com/flant/kubedog#rollout-tracker)), so it runs until all specified resources reach a readiness state.
+Multitracker is a **rollout style tracker** (see [follow tracker](https://github.com/werf/kubedog#follow-tracker) and [rollout tracker](https://github.com/werf/kubedog#rollout-tracker)), so it runs until all specified resources reach a readiness state.
 
 Import package:
 
 ```
-import "github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+import "github.com/werf/kubedog/pkg/trackers/rollout/multitrack"
 ```
 
 Available functions:
@@ -174,7 +174,7 @@ Follow tracker simply prints to the screen all resource related events. Follow t
 Import package:
 
 ```
-import "github.com/flant/kubedog/pkg/trackers/follow"
+import "github.com/werf/kubedog/pkg/trackers/follow"
 ```
 
 Available functions:
@@ -237,7 +237,7 @@ Important differences from the [follow tracker](#follow-tracker) are:
 Import package:
 
 ```
-import "github.com/flant/kubedog/pkg/trackers/rollout"
+import "github.com/werf/kubedog/pkg/trackers/rollout"
 ```
 
 Available functions:
@@ -270,9 +270,9 @@ import (
   "fmt"
   "os"
 
-  "github.com/flant/kubedog/pkg/kube"
-  "github.com/flant/kubedog/pkg/tracker"
-  "github.com/flant/kubedog/pkg/trackers/rollout/multitrack"
+  "github.com/werf/kubedog/pkg/kube"
+  "github.com/werf/kubedog/pkg/tracker"
+  "github.com/werf/kubedog/pkg/trackers/rollout/multitrack"
 )
 
 func main() {
@@ -318,11 +318,11 @@ Kubedog provides convenient helpers for different kind of resources with impleme
 `NewFeed` helpers are available in these packages:
 
 ```
-import "github.com/flant/kubedog/pkg/tracker/pod"
-import "github.com/flant/kubedog/pqkg/tracker/deployment"
-import "github.com/flant/kubedog/pkg/tracker/statefulset"
-import "github.com/flant/kubedog/pkg/tracker/daemonset"
-import "github.com/flant/kubedog/pkg/tracker/job"
+import "github.com/werf/kubedog/pkg/tracker/pod"
+import "github.com/werf/kubedog/pqkg/tracker/deployment"
+import "github.com/werf/kubedog/pkg/tracker/statefulset"
+import "github.com/werf/kubedog/pkg/tracker/daemonset"
+import "github.com/werf/kubedog/pkg/tracker/job"
 ```
 
 For example, `Feed` interface for pod looks like:
@@ -362,9 +362,9 @@ import (
   "fmt"
   "os"
 
-  "github.com/flant/kubedog/pkg/kube"
-  "github.com/flant/kubedog/pkg/tracker"
-  "github.com/flant/kubedog/pkg/tracker/pod"
+  "github.com/werf/kubedog/pkg/kube"
+  "github.com/werf/kubedog/pkg/tracker"
+  "github.com/werf/kubedog/pkg/tracker/pod"
 )
 
 func main() {

@@ -3,8 +3,8 @@ package pod
 import (
 	"fmt"
 
-	"github.com/flant/kubedog/pkg/tracker/indicators"
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/tracker/indicators"
+	"github.com/werf/kubedog/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 )

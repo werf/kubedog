@@ -17,7 +17,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/openstack"
 
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 const (

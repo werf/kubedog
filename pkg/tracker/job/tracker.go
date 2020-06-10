@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/flant/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/utils"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,10 +17,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/flant/kubedog/pkg/tracker"
-	"github.com/flant/kubedog/pkg/tracker/debug"
-	"github.com/flant/kubedog/pkg/tracker/event"
-	"github.com/flant/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/tracker/event"
+	"github.com/werf/kubedog/pkg/tracker/pod"
 )
 
 type FailedReport struct {
