@@ -1,16 +1,18 @@
 # Using kubedog
 
 * [CLI usage](#cli-usage)
-** [Multitracker CLI](#multitracker-cli)
-** [More multitracker demos](more-multitracker-demos)
-** [Rollout and follow cli (DEPRECATED)](rollout-and-follow-cli-deprecated)
+  * [Multitracker CLI](#multitracker-cli)
+  * [More multitracker demos](#more-multitracker-demos)
+  * [Rollout and follow CLI (DEPRECATED)](#rollout-and-follow-cli-deprecated)
+
 * [Library usage: Trackers](#library-usage-trackers)
-** [Multitracker](#multitracker)
-** [Follow tracker (DEPRECATED)](#follow-tracker-deprecated)
-** [Rollout tracker (DEPRECATED)](#rollout-tracker-deprecated)
-** [Examples of using trackers](#examples-of-using-trackers)
+  * [Multitracker](#multitracker)
+  * [Follow tracker (DEPRECATED)](#follow-tracker-deprecated)
+  * [Rollout tracker (DEPRECATED)](#rollout-tracker-deprecated)
+  * [Examples of using trackers](#examples-of-using-trackers)
+
 * [Library usage: Custom trackers](#library-usage-custom-trackers)
-** [Example of a custom tracker](#example-of-a-custom-tracker)
+  * [Example of a custom tracker](#example-of-a-custom-tracker)
 
 ## CLI usage
 
@@ -29,7 +31,9 @@ The commands are `kubedog multitrack ...`, `kubedog follow ...` and `kubedog rol
 
 ### Multitracker CLI
 
-There is minimal viable support of multitracker in kubedog's CLI. To use multitracker, you need pass a JSON structure to kubedog's STDIN. It resembles golang's `MultitrackSpecs` structure (please check [library description](#multitracker) and [source code](https://github.com/werf/kubedog/blob/master/pkg/trackers/rollout/multitrack/multitrack.go#L57) for details). For example:
+There is minimal viable support of multitracker in kubedog's CLI. To use multitracker, you need pass a JSON structure to kubedog's STDIN. It resembles golang's `MultitrackSpecs` structure (please check [library description](#multitracker) and [source code](https://github.com/werf/kubedog/blob/master/pkg/trackers/rollout/multitrack/multitrack.go#L57) for details).
+
+For example:
 
 ```
 cat << EOF | kubedog multitrack
@@ -52,7 +56,7 @@ EOF
 
 ![Kubedog multitrack CLI demo](https://raw.githubusercontent.com/werf/werf-demos/master/kubedog/kubedog-multitrack-cmd.gif)
 
-Multitracker can be used in CI/CD deploy pipeline to make sure that some set of resources is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resources. By default kubedog will fail fast giving user fast feedback about failed resources.
+Multitracker can be used in CI/CD deploy pipeline to make sure that some set of resources is ready or done before proceeding deploy process. In this mode kubedog gives a reasonable error message and ensures to exit with non-zero error code if something wrong with the specified resources. By default, kubedog will fail fast giving user fast feedback about failed resources.
 
 ### More multitracker demos
 
@@ -330,7 +334,7 @@ Note that each resource have own `Feed` interface because callbacks set can be s
 
 `GetStatus` method can be called by any callback at any time to get a status of tracked resource.
 
-### Example of custom tracker
+### Example of a custom tracker
 
 For example, let’s create a simple tracker that prints events and status from pod `mypod` and exits in case of failure or ready state:
 
@@ -380,3 +384,7 @@ func main() {
   }
 }
 ```
+
+# Support
+
+You can ask for support in [werf CNCF Slack channel](https://cloud-native.slack.com/messages/CHY2THYUU), [werf chat in Telegram](https://t.me/werf_ru) or simply create an issue.
