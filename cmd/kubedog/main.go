@@ -68,7 +68,7 @@ func main() {
 	}
 
 	init := func() {
-		err := kube.Init(kube.InitOptions{KubeContext: kubeContext, KubeConfig: kubeConfig})
+		err := kube.Init(kube.InitOptions{kube.KubeConfigOptions{Context: kubeContext, ConfigPath: kubeConfig}})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
 			os.Exit(1)
