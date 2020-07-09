@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 
@@ -26,60 +27,81 @@ const (
 )
 
 var (
-	Kubernetes       kubernetes.Interface
-	DynamicClient    dynamic.Interface
-	DefaultNamespace string
-	Context          string
+	Kubernetes, Client kubernetes.Interface
+	DynamicClient      dynamic.Interface
+	DefaultNamespace   string
+	Context            string
 )
 
 type InitOptions struct {
-	KubeContext string
-	KubeConfig  string
+	KubeConfigOptions
 }
 
 func Init(opts InitOptions) error {
-	var err error
-	var config *rest.Config
+	config, err := GetKubeConfig(opts.KubeConfigOptions)
+	if err != nil {
+		return err
+	}
 
+	if config != nil {
+		clientset, err := kubernetes.NewForConfig(config.Config)
+		if err != nil {
+			return err
+		}
+		Kubernetes = clientset
+		Client = clientset
+
+		dynamicClient, err := dynamic.NewForConfig(config.Config)
+		if err != nil {
+			return err
+		}
+		DynamicClient = dynamicClient
+	}
+
+	return nil
+}
+
+type KubeConfigOptions struct {
+	Context          string
+	ConfigPath       string
+	ConfigDataBase64 string
+}
+
+type KubeConfig struct {
+	Config           *rest.Config
+	Context          string
+	DefaultNamespace string
+}
+
+func GetKubeConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 	// Try to load from kubeconfig in flags or from ~/.kube/config
-	config, outOfClusterErr := getOutOfClusterConfig(opts.KubeContext, opts.KubeConfig)
+	config, outOfClusterErr := getOutOfClusterConfig(opts.Context, opts.ConfigPath, opts.ConfigDataBase64)
 
 	if config == nil {
 		if hasInClusterConfig() {
 			// Try to configure as inCluster
-			config, err = getInClusterConfig()
-			if err != nil {
-				if opts.KubeConfig != "" || opts.KubeContext != "" {
+			if config, err := getInClusterConfig(); err != nil {
+				if opts.ConfigPath != "" || opts.Context != "" || opts.ConfigDataBase64 != "" {
 					if outOfClusterErr != nil {
-						return fmt.Errorf("out-of-cluster config error: %v, in-cluster config error: %v", outOfClusterErr, err)
+						return nil, fmt.Errorf("out-of-cluster config error: %v, in-cluster config error: %v", outOfClusterErr, err)
 					}
 				} else {
-					return err
+					return nil, err
 				}
+			} else if config != nil {
+				return config, nil
 			}
 		} else {
 			// if not in cluster return outOfCluster error
 			if outOfClusterErr != nil {
-				return outOfClusterErr
+				return nil, outOfClusterErr
 			}
 		}
+
+		return nil, nil
 	}
 
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-	Kubernetes = clientset
-
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-	DynamicClient = dynamicClient
-
-	clientset.Discovery()
-
-	return nil
+	return config, outOfClusterErr
 }
 
 type GetAllContextsClientsOptions struct {
@@ -112,35 +134,41 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) (map[string]kubern
 	return nil, nil
 }
 
-func makeOutOfClusterClientConfigError(kubeConfig, kubeContext string, err error) error {
+func makeOutOfClusterClientConfigError(configPath, context string, err error) error {
 	baseErrMsg := fmt.Sprintf("out-of-cluster configuration problem")
 
-	if kubeConfig != "" {
-		baseErrMsg += fmt.Sprintf(", custom kube config path is %q", kubeConfig)
+	if configPath != "" {
+		baseErrMsg += fmt.Sprintf(", custom kube config path is %q", configPath)
 	}
 
-	if kubeContext != "" {
-		baseErrMsg += fmt.Sprintf(", custom kube context is %q", kubeContext)
+	if context != "" {
+		baseErrMsg += fmt.Sprintf(", custom kube context is %q", context)
 	}
 
 	return fmt.Errorf("%s: %s", baseErrMsg, err)
 }
 
-func getClientConfig(context string, kubeconfig string) clientcmd.ClientConfig {
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
-
+func getClientConfig(context string, configPath string, configData []byte) (clientcmd.ClientConfig, error) {
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
-
 	if context != "" {
 		overrides.CurrentContext = context
 	}
 
-	if kubeconfig != "" {
-		rules.ExplicitPath = kubeconfig
+	if configData != nil {
+		if config, err := clientcmd.Load(configData); err != nil {
+			return nil, fmt.Errorf("unable to load config data: %s", err)
+		} else {
+			return clientcmd.NewDefaultClientConfig(*config, overrides), nil
+		}
 	}
 
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides)
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
+	if configPath != "" {
+		rules.ExplicitPath = configPath
+	}
+
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides), nil
 }
 
 func hasInClusterConfig() bool {
@@ -149,44 +177,68 @@ func hasInClusterConfig() bool {
 	return token && ns
 }
 
-func getOutOfClusterConfig(contextName string, configPath string) (config *rest.Config, err error) {
-	clientConfig := getClientConfig(contextName, configPath)
+func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeConfig, error) {
+	res := &KubeConfig{}
 
-	ns, _, err := clientConfig.Namespace()
+	var configData []byte
+	if configDataBase64 != "" {
+		if data, err := base64.StdEncoding.DecodeString(configDataBase64); err != nil {
+			return nil, fmt.Errorf("unable to decode base64 config data: %s", err)
+		} else {
+			configData = data
+		}
+	}
+
+	clientConfig, err := getClientConfig(context, configPath, configData)
 	if err != nil {
+		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
+	}
+
+	if ns, _, err := clientConfig.Namespace(); err != nil {
 		return nil, fmt.Errorf("cannot determine default kubernetes namespace: %s", err)
-	}
-	DefaultNamespace = ns
-
-	config, err = clientConfig.ClientConfig()
-	if err != nil {
-		return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
-	}
-
-	rc, err := clientConfig.RawConfig()
-	if err != nil {
-		return nil, fmt.Errorf("cannot get raw kubernetes config: %s", err)
-	}
-
-	if contextName != "" {
-		Context = contextName
 	} else {
-		Context = rc.CurrentContext
+		res.DefaultNamespace = ns
 	}
 
-	return
+	if config, err := clientConfig.ClientConfig(); err != nil {
+		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
+	} else if config == nil {
+		return nil, nil
+	} else {
+		res.Config = config
+	}
+
+	if context == "" {
+		if rc, err := clientConfig.RawConfig(); err != nil {
+			return nil, fmt.Errorf("cannot get raw kubernetes config: %s", err)
+		} else {
+			res.Context = rc.CurrentContext
+		}
+	} else {
+		res.Context = context
+	}
+
+	return res, nil
 }
 
 func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.Interface, error) {
 	contexts := make(map[string]kubernetes.Interface, 0)
 
-	rc, err := getClientConfig("", configPath).RawConfig()
+	clientConfig, err := getClientConfig("", configPath, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	rc, err := clientConfig.RawConfig()
 	if err != nil {
 		return nil, err
 	}
 
 	for contextName := range rc.Contexts {
-		clientConfig := getClientConfig(contextName, configPath)
+		clientConfig, err := getClientConfig(contextName, configPath, nil)
+		if err != nil {
+			return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
+		}
 
 		config, err := clientConfig.ClientConfig()
 		if err != nil {
@@ -204,19 +256,22 @@ func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.In
 	return contexts, nil
 }
 
-func getInClusterConfig() (config *rest.Config, err error) {
-	config, err = rest.InClusterConfig()
-	if err != nil {
+func getInClusterConfig() (*KubeConfig, error) {
+	res := &KubeConfig{}
+
+	if config, err := rest.InClusterConfig(); err != nil {
 		return nil, fmt.Errorf("in-cluster configuration problem: %s", err)
+	} else {
+		res.Config = config
 	}
 
-	data, err := ioutil.ReadFile(kubeNamespaceFilePath)
-	if err != nil {
+	if data, err := ioutil.ReadFile(kubeNamespaceFilePath); err != nil {
 		return nil, fmt.Errorf("in-cluster configuration problem: cannot determine default kubernetes namespace: error reading %s: %s", kubeNamespaceFilePath, err)
+	} else {
+		res.DefaultNamespace = string(data)
 	}
-	DefaultNamespace = string(data)
 
-	return
+	return res, nil
 }
 
 func getInClusterContextClient() (clientset kubernetes.Interface, err error) {
@@ -233,8 +288,8 @@ func getInClusterContextClient() (clientset kubernetes.Interface, err error) {
 	return
 }
 
-func GroupVersionResourceByKind(kind string) (schema.GroupVersionResource, error) {
-	lists, err := Kubernetes.Discovery().ServerPreferredResources()
+func GroupVersionResourceByKind(client kubernetes.Interface, kind string) (schema.GroupVersionResource, error) {
+	lists, err := client.Discovery().ServerPreferredResources()
 	if err != nil {
 		return schema.GroupVersionResource{}, err
 	}
