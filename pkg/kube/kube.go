@@ -148,7 +148,7 @@ func makeOutOfClusterClientConfigError(configPath, context string, err error) er
 	return fmt.Errorf("%s: %s", baseErrMsg, err)
 }
 
-func getClientConfig(context string, configPath string, configData []byte) (clientcmd.ClientConfig, error) {
+func GetClientConfig(context string, configPath string, configData []byte) (clientcmd.ClientConfig, error) {
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
 	if context != "" {
 		overrides.CurrentContext = context
@@ -189,7 +189,7 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeC
 		}
 	}
 
-	clientConfig, err := getClientConfig(context, configPath, configData)
+	clientConfig, err := GetClientConfig(context, configPath, configData)
 	if err != nil {
 		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
 	}
@@ -224,7 +224,7 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeC
 func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.Interface, error) {
 	contexts := make(map[string]kubernetes.Interface, 0)
 
-	clientConfig, err := getClientConfig("", configPath, nil)
+	clientConfig, err := GetClientConfig("", configPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.In
 	}
 
 	for contextName := range rc.Contexts {
-		clientConfig, err := getClientConfig(contextName, configPath, nil)
+		clientConfig, err := GetClientConfig(contextName, configPath, nil)
 		if err != nil {
 			return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
 		}
