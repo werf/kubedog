@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -35,10 +36,10 @@ func getDeploymentStatus(client kubernetes.Interface, prevObj *appsv1.Deployment
 	return strings.Join(msgs, "\n")
 }
 
-func getReplicaSetsStatus(client kubernetes.Interface, deployment *appsv1.Deployment) string {
+func getReplicaSetsStatus(ctx context.Context, client kubernetes.Interface, deployment *appsv1.Deployment) string {
 	msgs := []string{}
 
-	_, allOlds, newRs, err := utils.GetAllReplicaSets(deployment, client)
+	_, allOlds, newRs, err := utils.GetAllReplicaSets(ctx, deployment, client)
 	if err != nil {
 		msgs = append(msgs, fmt.Sprintf("waitForNewReplicaSet error: %v", err))
 	} else {

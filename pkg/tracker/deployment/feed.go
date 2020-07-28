@@ -50,13 +50,13 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	deploymentTracker := NewTracker(ctx, name, namespace, kube, opts)
+	deploymentTracker := NewTracker(name, namespace, kube, opts)
 
 	go func() {
 		if debug.Debug() {
 			fmt.Printf("  goroutine: start deploy/%s tracker\n", name)
 		}
-		err := deploymentTracker.Track()
+		err := deploymentTracker.Track(ctx)
 		if err != nil {
 			errorChan <- err
 		} else {

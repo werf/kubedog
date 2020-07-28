@@ -1,6 +1,7 @@
 package event
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -38,7 +39,6 @@ func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer
 			Kube:             trk.Kube,
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
-			Context:          trk.Context,
 		},
 		Resource:         resource,
 		Errors:           make(chan error, 0),
@@ -54,8 +54,8 @@ func (e *EventInformer) WithChannels(msgCh chan string, failCh chan string, erro
 }
 
 // runEventsInformer watch for StatefulSet events
-func (e *EventInformer) Run() {
-	e.handleInitialEvents()
+func (e *EventInformer) Run(ctx context.Context) {
+	e.handleInitialEvents(ctx)
 
 	client := e.Kube
 
@@ -66,10 +66,10 @@ func (e *EventInformer) Run() {
 
 	lwe := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.CoreV1().Events(e.Namespace).List(tweakEventListOptions(options))
+			return client.CoreV1().Events(e.Namespace).List(ctx, tweakEventListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.CoreV1().Events(e.Namespace).Watch(tweakEventListOptions(options))
+			return client.CoreV1().Events(e.Namespace).Watch(ctx, tweakEventListOptions(options))
 		},
 	}
 
@@ -77,7 +77,7 @@ func (e *EventInformer) Run() {
 		if debug.Debug() {
 			fmt.Printf("> %s run event informer\n", e.FullResourceName)
 		}
-		_, err := watchtools.UntilWithSync(e.Context, lwe, &corev1.Event{}, nil, func(ev watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(ctx, lwe, &corev1.Event{}, nil, func(ev watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    %s event: %#v\n", e.FullResourceName, ev.Type)
 			}
@@ -127,8 +127,8 @@ func (e *EventInformer) Run() {
 }
 
 // handleInitialEvents saves uids of existed k8s events to ignore watch.Added events on them
-func (e *EventInformer) handleInitialEvents() {
-	evList, err := utils.ListEventsForObject(e.Kube, e.Resource)
+func (e *EventInformer) handleInitialEvents(ctx context.Context) {
+	evList, err := utils.ListEventsForObject(ctx, e.Kube, e.Resource)
 	if err != nil {
 		fmt.Printf("list event error: %v\n", err)
 		return

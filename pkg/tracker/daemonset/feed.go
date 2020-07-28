@@ -50,13 +50,13 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	daemonSetTracker := NewTracker(ctx, name, namespace, kube, opts)
+	daemonSetTracker := NewTracker(name, namespace, kube, opts)
 
 	go func() {
 		if debug.Debug() {
 			fmt.Printf("  goroutine: start DaemonSet/%s tracker\n", name)
 		}
-		err := daemonSetTracker.Track()
+		err := daemonSetTracker.Track(ctx)
 		if err != nil {
 			errorChan <- err
 		} else {

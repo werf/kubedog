@@ -50,13 +50,13 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	stsTracker := NewTracker(ctx, name, namespace, kube, opts)
+	stsTracker := NewTracker(name, namespace, kube, opts)
 
 	go func() {
 		if debug.Debug() {
 			fmt.Printf("  goroutine: start statefulset/%s tracker\n", name)
 		}
-		err := stsTracker.Track()
+		err := stsTracker.Track(ctx)
 		if err != nil {
 			errorChan <- err
 		} else {

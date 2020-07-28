@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -123,9 +124,9 @@ func Revision(obj runtime.Object) (int64, error) {
 type rsListFunc func(string, metav1.ListOptions) ([]*appsv1.ReplicaSet, error)
 
 // rsListFromClient returns an rsListFunc that wraps the given client.
-func rsListFromClient(c kubernetes.Interface) rsListFunc {
+func rsListFromClient(ctx context.Context, c kubernetes.Interface) rsListFunc {
 	return func(namespace string, options metav1.ListOptions) ([]*appsv1.ReplicaSet, error) {
-		rsList, err := c.AppsV1().ReplicaSets(namespace).List(options)
+		rsList, err := c.AppsV1().ReplicaSets(namespace).List(ctx, options)
 		if err != nil {
 			return nil, err
 		}
@@ -140,8 +141,8 @@ func rsListFromClient(c kubernetes.Interface) rsListFunc {
 // GetAllReplicaSets returns the old and new replica sets targeted by the given Deployment. It gets PodList and ReplicaSetList from client interface.
 // Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
 // The third returned value is the new replica set, and it may be nil if it doesn't exist yet.
-func GetAllReplicaSets(deployment *appsv1.Deployment, c kubernetes.Interface) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet, *appsv1.ReplicaSet, error) {
-	rsList, err := ListReplicaSets(deployment, rsListFromClient(c))
+func GetAllReplicaSets(ctx context.Context, deployment *appsv1.Deployment, c kubernetes.Interface) ([]*appsv1.ReplicaSet, []*appsv1.ReplicaSet, *appsv1.ReplicaSet, error) {
+	rsList, err := ListReplicaSets(deployment, rsListFromClient(ctx, c))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -296,9 +297,9 @@ func GetControllerOf(controllee metav1.Object) *metav1.OwnerReference {
 type PodListFunc func(string, metav1.ListOptions) (*corev1.PodList, error)
 
 // PodListFromClient returns an PodListFunc that wraps the given client.
-func PodListFromClient(c kubernetes.Interface) PodListFunc {
+func PodListFromClient(ctx context.Context, c kubernetes.Interface) PodListFunc {
 	return func(namespace string, options metav1.ListOptions) (*corev1.PodList, error) {
-		podList, err := c.CoreV1().Pods(namespace).List(options)
+		podList, err := c.CoreV1().Pods(namespace).List(ctx, options)
 		if err != nil {
 			return nil, err
 		}

@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,7 +30,6 @@ func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) 
 			Kube:             trk.Kube,
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
-			Context:          trk.Context,
 		},
 		Controller: controller,
 		PodAdded:   make(chan *corev1.Pod, 1),
@@ -43,7 +43,7 @@ func (p *PodsInformer) WithChannels(added chan *corev1.Pod, errors chan error) *
 	return p
 }
 
-func (p *PodsInformer) Run() {
+func (p *PodsInformer) Run(ctx context.Context) {
 	if debug.Debug() {
 		fmt.Printf("> PodsInformer.Run\n")
 	}
@@ -62,15 +62,15 @@ func (p *PodsInformer) Run() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(p.Namespace).List(tweakListOptions(options))
+			return client.CoreV1().Pods(p.Namespace).List(ctx, tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.CoreV1().Pods(p.Namespace).Watch(tweakListOptions(options))
+			return client.CoreV1().Pods(p.Namespace).Watch(ctx, tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(p.Context, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(ctx, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    %s pod event: %#v\n", p.FullResourceName, e.Type)
 			}

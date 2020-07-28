@@ -34,7 +34,6 @@ type Tracker struct {
 	Namespace        string
 	ResourceName     string
 	FullResourceName string // full resource name with resource kind (deploy/superapp)
-	Context          context.Context
 	LogsFromTime     time.Time
 
 	StatusGeneration uint64
