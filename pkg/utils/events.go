@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -76,11 +77,11 @@ func EventFieldSelectorFromResource(obj interface{}) string {
 	return field.AsSelector().String()
 }
 
-func ListEventsForObject(client kubernetes.Interface, obj interface{}) (*corev1.EventList, error) {
+func ListEventsForObject(ctx context.Context, client kubernetes.Interface, obj interface{}) (*corev1.EventList, error) {
 	options := metav1.ListOptions{
 		FieldSelector: EventFieldSelectorFromResource(obj),
 	}
-	evList, err := client.CoreV1().Events(ControllerAccessor(obj).Namespace()).List(options)
+	evList, err := client.CoreV1().Events(ControllerAccessor(obj).Namespace()).List(ctx, options)
 	if err != nil {
 		return nil, err
 	}

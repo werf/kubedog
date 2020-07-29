@@ -1,6 +1,7 @@
 package replicaset
 
 import (
+	"context"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -56,7 +57,6 @@ func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMeta
 			Kube:             trk.Kube,
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
-			Context:          trk.Context,
 		},
 		Controller:         controller,
 		ReplicaSetAdded:    make(chan *appsv1.ReplicaSet, 1),
@@ -77,7 +77,7 @@ func (r *ReplicaSetInformer) WithChannels(added chan *appsv1.ReplicaSet,
 	return r
 }
 
-func (r *ReplicaSetInformer) Run() {
+func (r *ReplicaSetInformer) Run(ctx context.Context) {
 	client := r.Kube
 
 	selector, err := metav1.LabelSelectorAsSelector(r.Controller.LabelSelector())
@@ -92,15 +92,15 @@ func (r *ReplicaSetInformer) Run() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.AppsV1().ReplicaSets(r.Namespace).List(tweakListOptions(options))
+			return client.AppsV1().ReplicaSets(r.Namespace).List(ctx, tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.AppsV1().ReplicaSets(r.Namespace).Watch(tweakListOptions(options))
+			return client.AppsV1().ReplicaSets(r.Namespace).Watch(ctx, tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(r.Context, lw, &appsv1.ReplicaSet{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(ctx, lw, &appsv1.ReplicaSet{}, nil, func(e watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    %s replica set event: %#v\n", r.FullResourceName, e.Type)
 			}

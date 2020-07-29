@@ -70,14 +70,13 @@ type Tracker struct {
 	donePodsRelay           chan map[string]pod.PodStatus
 }
 
-func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
 			Namespace:        namespace,
 			FullResourceName: fmt.Sprintf("ds/%s", name),
 			ResourceName:     name,
-			Context:          ctx,
 			LogsFromTime:     opts.LogsFromTime,
 		},
 
@@ -114,18 +113,18 @@ func NewTracker(ctx context.Context, name, namespace string, kube kubernetes.Int
 // watch is infinite by default
 // there is option StopOnAvailable — if true, watcher stops after DaemonSet has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
-func (d *Tracker) Track() error {
-	d.runDaemonSetInformer()
+func (d *Tracker) Track(ctx context.Context) error {
+	d.runDaemonSetInformer(ctx)
 
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			if err := d.handleDaemonSetState(object); err != nil {
+			if err := d.handleDaemonSetState(ctx, object); err != nil {
 				return err
 			}
 
 		case object := <-d.resourceModified:
-			if err := d.handleDaemonSetState(object); err != nil {
+			if err := d.handleDaemonSetState(ctx, object); err != nil {
 				return err
 			}
 
@@ -165,7 +164,7 @@ func (d *Tracker) Track() error {
 				}
 			}
 
-			err := d.runPodTracker(pod.Name)
+			err := d.runPodTracker(ctx, pod.Name)
 			if err != nil {
 				return err
 			}
@@ -192,7 +191,7 @@ func (d *Tracker) Track() error {
 			d.TrackedPodsNames = trackedPodsNames
 
 			if d.lastObject != nil {
-				if err := d.handleDaemonSetState(d.lastObject); err != nil {
+				if err := d.handleDaemonSetState(ctx, d.lastObject); err != nil {
 					return err
 				}
 			}
@@ -202,7 +201,7 @@ func (d *Tracker) Track() error {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				if err := d.handleDaemonSetState(d.lastObject); err != nil {
+				if err := d.handleDaemonSetState(ctx, d.lastObject); err != nil {
 					return err
 				}
 			}
@@ -229,11 +228,11 @@ func (d *Tracker) Track() error {
 				}
 			}
 
-		case <-d.Context.Done():
-			if d.Context.Err() == context.Canceled {
+		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
 				return nil
 			}
-			return d.Context.Err()
+			return ctx.Err()
 		case err := <-d.errors:
 			return err
 		}
@@ -257,7 +256,7 @@ func (d *Tracker) getNewPodsNames() []string {
 }
 
 // runDaemonSetInformer watch for DaemonSet events
-func (d *Tracker) runDaemonSetInformer() {
+func (d *Tracker) runDaemonSetInformer(ctx context.Context) {
 	client := d.Kube
 
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
@@ -266,15 +265,15 @@ func (d *Tracker) runDaemonSetInformer() {
 	}
 	lw := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(d.Namespace).List(tweakListOptions(options))
+			return client.AppsV1().DaemonSets(d.Namespace).List(ctx, tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.AppsV1().DaemonSets(d.Namespace).Watch(tweakListOptions(options))
+			return client.AppsV1().DaemonSets(d.Namespace).Watch(ctx, tweakListOptions(options))
 		},
 	}
 
 	go func() {
-		_, err := watchtools.UntilWithSync(d.Context, lw, &appsv1.DaemonSet{}, nil, func(e watch.Event) (bool, error) {
+		_, err := watchtools.UntilWithSync(ctx, lw, &appsv1.DaemonSet{}, nil, func(e watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    Daemonset/%s event: %#v\n", d.ResourceName, e.Type)
 			}
@@ -318,18 +317,18 @@ func (d *Tracker) runDaemonSetInformer() {
 }
 
 // runPodsInformer watch for DaemonSet Pods events
-func (d *Tracker) runPodsInformer(object *appsv1.DaemonSet) {
+func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.DaemonSet) {
 	podsInformer := pod.NewPodsInformer(&d.Tracker, utils.ControllerAccessor(object))
 	podsInformer.WithChannels(d.podAddedRelay, d.errors)
-	podsInformer.Run()
+	podsInformer.Run(ctx)
 }
 
-func (d *Tracker) runPodTracker(podName string) error {
+func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
 	errorChan := make(chan error, 0)
 	doneChan := make(chan struct{}, 0)
 
-	ctx, cancelPodCtx := context.WithCancel(d.Context)
-	podTracker := pod.NewTracker(ctx, podName, d.Namespace, d.Kube)
+	newCtx, cancelPodCtx := context.WithCancel(ctx)
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube)
 	if !d.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = d.LogsFromTime
 	}
@@ -340,7 +339,7 @@ func (d *Tracker) runPodTracker(podName string) error {
 			fmt.Printf("Starting DaemonSet's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, podTracker.ResourceName, podTracker.State)
 		}
 
-		err := podTracker.Start()
+		err := podTracker.Start(newCtx)
 		if err != nil {
 			errorChan <- err
 		} else {
@@ -395,7 +394,7 @@ func (d *Tracker) runPodTracker(podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleDaemonSetState(object *appsv1.DaemonSet) error {
+func (d *Tracker) handleDaemonSetState(ctx context.Context, object *appsv1.DaemonSet) error {
 	d.lastObject = object
 	d.StatusGeneration++
 
@@ -403,8 +402,8 @@ func (d *Tracker) handleDaemonSetState(object *appsv1.DaemonSet) error {
 
 	switch d.State {
 	case tracker.Initial:
-		d.runPodsInformer(object)
-		d.runEventsInformer(object)
+		d.runPodsInformer(ctx, object)
+		d.runEventsInformer(ctx, object)
 
 		if status.IsFailed {
 			d.State = tracker.ResourceFailed
@@ -445,8 +444,8 @@ func (d *Tracker) handleDaemonSetState(object *appsv1.DaemonSet) error {
 }
 
 // runEventsInformer watch for DaemonSet events
-func (d *Tracker) runEventsInformer(object *appsv1.DaemonSet) {
+func (d *Tracker) runEventsInformer(ctx context.Context, object *appsv1.DaemonSet) {
 	eventInformer := event.NewEventInformer(&d.Tracker, object)
 	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
-	eventInformer.Run()
+	eventInformer.Run(ctx)
 }
