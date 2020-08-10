@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/werf/logboek"
-
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/werf/logboek/pkg/types"
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/daemonset"
@@ -407,7 +407,7 @@ type multitracker struct {
 
 	displayCalled             bool
 	currentLogProcessHeader   string
-	currentLogProcessOptions  logboek.LevelLogProcessStartOptions
+	currentLogProcess         types.LogProcessInterface
 	serviceMessagesByResource map[string][]string
 }
 

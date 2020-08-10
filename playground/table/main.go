@@ -33,7 +33,7 @@ func main() {
 			t.Row("sts/mysql", "1/1", 1, "1 (-1)")
 			t.Row("ds/node-exporter", "1/1", 1, "1 (-1)")
 			t.Row("deploy/trickster", "1/1", 1, "1 (-1)")
-			_, _ = logboek.OutF(t.Render())
+			logboek.LogF(t.Render())
 
 			return nil
 		})
