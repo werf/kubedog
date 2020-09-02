@@ -8,10 +8,13 @@ import (
 
 	"github.com/fatih/color"
 
+	"github.com/werf/logboek"
+	"github.com/werf/logboek/pkg/style"
+	"github.com/werf/logboek/pkg/types"
+
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/utils"
-	"github.com/werf/logboek"
 )
 
 var (
@@ -64,35 +67,39 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec Multit
 	}
 
 	if len(showLines) > 0 {
-		mt.setLogProcess(fmt.Sprintf("%s/%s %s logs", resourceKind, spec.ResourceName, header), logboek.LevelLogProcessStartOptions{})
+		mt.setLogProcess(fmt.Sprintf("%s/%s %s logs", resourceKind, spec.ResourceName, header), func(options types.LogProcessOptionsInterface) {
+			options.WithoutElapsedTime()
+		})
 
 		for _, line := range showLines {
-			logboek.OutF("%s\n", line)
+			logboek.LogF("%s\n", line)
 		}
 	}
 }
 
-func (mt *multitracker) setLogProcess(header string, options logboek.LevelLogProcessStartOptions) {
+func (mt *multitracker) setLogProcess(header string, optionsFunc func(types.LogProcessOptionsInterface)) {
 	if mt.currentLogProcessHeader != header {
 		mt.resetLogProcess()
 
-		logboek.Default.LogProcessStart(header, options)
+		logProcess := logboek.Default().LogProcess(header)
+
+		if optionsFunc != nil {
+			logProcess.Options(optionsFunc)
+		}
+
+		logProcess.Start()
+
 		mt.currentLogProcessHeader = header
-		mt.currentLogProcessOptions = options
+		mt.currentLogProcess = logProcess
 	}
 }
 
 func (mt *multitracker) resetLogProcess() {
 	mt.displayCalled = true
 
-	if mt.currentLogProcessHeader != "" {
-		logboek.Default.LogProcessEnd(
-			logboek.LevelLogProcessEndOptions{
-				Style:                mt.currentLogProcessOptions.Style,
-				WithoutLogOptionalLn: false,
-				WithoutElapsedTime:   true,
-			},
-		)
+	if mt.currentLogProcess != nil {
+		mt.currentLogProcess.End()
+		mt.currentLogProcess = nil
 		mt.currentLogProcessHeader = ""
 	}
 }
@@ -105,12 +112,13 @@ func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec
 	if spec.ShowServiceMessages {
 		mt.setLogProcess(
 			fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName),
-			logboek.LevelLogProcessStartOptions{
-				Style: logboek.DetailsStyle(),
+			func(options types.LogProcessOptionsInterface) {
+				options.Style(style.Details())
+				options.WithoutElapsedTime()
 			},
 		)
 
-		logboek.Default.LogFDetails("%s\n", msg)
+		logboek.Default().LogFDetails("%s\n", msg)
 	}
 }
 
@@ -122,16 +130,19 @@ func (mt *multitracker) displayResourceEventF(resourceKind string, spec Multitra
 	if spec.ShowServiceMessages {
 		mt.setLogProcess(
 			fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName),
-			logboek.LevelLogProcessStartOptions{Style: logboek.DetailsStyle()},
+			func(options types.LogProcessOptionsInterface) {
+				options.Style(style.Details())
+				options.WithoutElapsedTime()
+			},
 		)
 
-		logboek.Default.LogFDetails("%s\n", msg)
+		logboek.Default().LogFDetails("%s\n", msg)
 	}
 }
 
 func (mt *multitracker) displayResourceErrorF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.LogWarnF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
+	logboek.Warn().LogF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
 }
 
 func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
@@ -177,20 +188,16 @@ func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec
 
 		logboek.LogOptionalLn()
 
-		_ = logboek.Default.LogBlock(
-			fmt.Sprintf("Failed resource %s/%s service messages", resourceKind, spec.ResourceName),
-			logboek.LevelLogBlockOptions{
-				WithoutLogOptionalLn: true,
-				Style:                logboek.DetailsStyle(),
-			},
-			func() error {
+		logboek.Default().LogBlock("Failed resource %s/%s service messages", resourceKind, spec.ResourceName).
+			Options(func(options types.LogBlockOptionsInterface) {
+				options.WithoutLogOptionalLn()
+				options.Style(style.Details())
+			}).
+			Do(func() {
 				for _, line := range lines {
-					logboek.Default.LogFDetails("%s\n", line)
+					logboek.Default().LogFDetails("%s\n", line)
 				}
-
-				return nil
-			},
-		)
+			})
 
 		logboek.LogOptionalLn()
 	}
@@ -198,12 +205,12 @@ func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec
 
 func (mt *multitracker) displayMultitrackServiceMessageF(format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.Default.LogFHighlight(format, a...)
+	logboek.Default().LogFHighlight(format, a...)
 }
 
 func (mt *multitracker) displayMultitrackErrorMessageF(format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.LogWarnF(format, a...)
+	logboek.Warn().LogF(format, a...)
 }
 
 func (mt *multitracker) displayStatusProgress() error {
@@ -220,14 +227,16 @@ func (mt *multitracker) displayStatusProgress() error {
 
 	caption := color.New(color.Bold).Sprint("Status progress")
 
-	_ = logboek.Default.LogBlock(caption, logboek.LevelLogBlockOptions{WithoutLogOptionalLn: true}, func() error {
-		mt.displayDeploymentsStatusProgress()
-		mt.displayDaemonSetsStatusProgress()
-		mt.displayStatefulSetsStatusProgress()
-		mt.displayJobsProgress()
-
-		return nil
-	})
+	logboek.Default().LogBlock(caption).
+		Options(func(options types.LogBlockOptionsInterface) {
+			options.WithoutLogOptionalLn()
+		}).
+		Do(func() {
+			mt.displayDeploymentsStatusProgress()
+			mt.displayDaemonSetsStatusProgress()
+			mt.displayStatefulSetsStatusProgress()
+			mt.displayJobsProgress()
+		})
 
 	logboek.LogOptionalLn()
 
@@ -236,7 +245,7 @@ func (mt *multitracker) displayStatusProgress() error {
 
 func (mt *multitracker) displayJobsProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.ContentWidth() - 1)
+	t.SetWidth(logboek.Streams().ContentWidth() - 1)
 	t.Header("JOB", "ACTIVE", "DURATION", "SUCCEEDED/FAILED")
 
 	resourcesNames := []string{}
@@ -290,13 +299,13 @@ func (mt *multitracker) displayJobsProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		_, _ = logboek.OutF(t.Render())
+		logboek.LogF(t.Render())
 	}
 }
 
 func (mt *multitracker) displayStatefulSetsStatusProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.ContentWidth() - 1)
+	t.SetWidth(logboek.Streams().ContentWidth() - 1)
 	t.Header("STATEFULSET", "REPLICAS", "READY", "UP-TO-DATE")
 
 	resourcesNames := []string{}
@@ -366,13 +375,13 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		_, _ = logboek.OutF(t.Render())
+		logboek.LogF(t.Render())
 	}
 }
 
 func (mt *multitracker) displayDaemonSetsStatusProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.ContentWidth() - 1)
+	t.SetWidth(logboek.Streams().ContentWidth() - 1)
 	t.Header("DAEMONSET", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
@@ -437,13 +446,13 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		_, _ = logboek.OutF(t.Render())
+		logboek.LogF(t.Render())
 	}
 }
 
 func (mt *multitracker) displayDeploymentsStatusProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.ContentWidth() - 1)
+	t.SetWidth(logboek.Streams().ContentWidth() - 1)
 	t.Header("DEPLOYMENT", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
@@ -507,7 +516,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		_, _ = logboek.OutF(t.Render())
+		logboek.LogF(t.Render())
 	}
 }
 

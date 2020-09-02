@@ -3,13 +3,15 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"strings"
+
+	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/acarl005/stripansi"
 
 	"github.com/werf/logboek"
+	"github.com/werf/logboek/pkg/types"
 )
 
 type Table struct {
@@ -178,7 +180,7 @@ func fitValue(field interface{}, columnWidth int) []string {
 
 	columnWidthWithoutSpaces := columnWidth - 1
 	value := fmt.Sprintf("%v", field)
-	result := logboek.FitText(value, logboek.FitTextOptions{Width: columnWidthWithoutSpaces})
+	result := logboek.FitText(value, types.FitTextOptions{Width: columnWidthWithoutSpaces})
 
 	for _, line := range strings.Split(result, "\n") {
 		lines = append(lines, padValue(line, columnWidth))
