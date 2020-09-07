@@ -108,9 +108,13 @@ type GetAllContextsClientsOptions struct {
 	KubeConfig string
 }
 
-const inClusterContextName = "inClusterContext"
+type ContextClient struct {
+	ContextName      string
+	ContextNamespace string
+	Client           kubernetes.Interface
+}
 
-func GetAllContextsClients(opts GetAllContextsClientsOptions) (map[string]kubernetes.Interface, error) {
+func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient, error) {
 	// Try to load contexts from kubeconfig in flags or from ~/.kube/config
 	var outOfClusterErr error
 	contexts, outOfClusterErr := getOutOfClusterContextsClients(opts.KubeConfig)
@@ -119,12 +123,12 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) (map[string]kubern
 		return contexts, nil
 	}
 	if hasInClusterConfig() {
-		clientset, err := getInClusterContextClient()
+		contextClient, err := getInClusterContextClient()
 		if err != nil {
 			return nil, err
 		}
 
-		return map[string]kubernetes.Interface{inClusterContextName: clientset}, nil
+		return []*ContextClient{contextClient}, nil
 	}
 	// if not in cluster return outOfCluster error
 	if outOfClusterErr != nil {
@@ -221,8 +225,8 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeC
 	return res, nil
 }
 
-func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.Interface, error) {
-	contexts := make(map[string]kubernetes.Interface, 0)
+func getOutOfClusterContextsClients(configPath string) ([]*ContextClient, error) {
+	res := make([]*ContextClient, 0)
 
 	clientConfig, err := GetClientConfig("", configPath, nil)
 	if err != nil {
@@ -234,7 +238,7 @@ func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.In
 		return nil, err
 	}
 
-	for contextName := range rc.Contexts {
+	for contextName, context := range rc.Contexts {
 		clientConfig, err := GetClientConfig(contextName, configPath, nil)
 		if err != nil {
 			return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
@@ -250,10 +254,14 @@ func getOutOfClusterContextsClients(configPath string) (map[string]kubernetes.In
 			return nil, err
 		}
 
-		contexts[contextName] = clientset
+		res = append(res, &ContextClient{
+			ContextName:      contextName,
+			ContextNamespace: context.Namespace,
+			Client:           clientset,
+		})
 	}
 
-	return contexts, nil
+	return res, nil
 }
 
 func getInClusterConfig() (*KubeConfig, error) {
@@ -274,18 +282,22 @@ func getInClusterConfig() (*KubeConfig, error) {
 	return res, nil
 }
 
-func getInClusterContextClient() (clientset kubernetes.Interface, err error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("in-cluster configuration problem: %s", err)
-	}
-
-	clientset, err = kubernetes.NewForConfig(config)
+func getInClusterContextClient() (*ContextClient, error) {
+	kubeConfig, err := getInClusterConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	return
+	clientset, err := kubernetes.NewForConfig(kubeConfig.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ContextClient{
+		ContextName:      "inClusterContext",
+		ContextNamespace: kubeConfig.DefaultNamespace,
+		Client:           clientset,
+	}, nil
 }
 
 func GroupVersionResourceByKind(client kubernetes.Interface, kind string) (schema.GroupVersionResource, error) {
