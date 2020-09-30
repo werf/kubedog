@@ -8,10 +8,10 @@ import (
 )
 
 func main() {
-	_ = logboek.LogProcess("xxx", logboek.LogProcessOptions{}, func() error {
-		_ = logboek.LogProcess("1", logboek.LogProcessOptions{}, func() error {
+	_ = logboek.LogProcess("xxx").DoError(func() error {
+		_ = logboek.LogProcess("1").DoError(func() error {
 			t := utils.NewTable(.7, .1, .1, .1)
-			t.SetWidth(logboek.ContentWidth() - 1)
+			t.SetWidth(logboek.Streams().ContentWidth() - 1)
 			t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
 			t.Row("deploy/extended-monitoring", "1/1", 1, 1)
 			//t.Row("deploy/extended-monitoring", "1/1", 1, 1, color.RedString("Error: See the server log for details. BUILD FAILED (total time: 1 second)"), color.RedString("Error: An individual language user's deviations from standard language norms in grammar, pronunciation and orthography are sometimes referred to as errors"))

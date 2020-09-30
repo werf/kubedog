@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fatih/color"
-
 	"github.com/werf/logboek"
 	"github.com/werf/logboek/pkg/style"
 	"github.com/werf/logboek/pkg/types"
@@ -225,7 +223,7 @@ func (mt *multitracker) displayStatusProgress() error {
 		logboek.LogOptionalLn()
 	}
 
-	caption := color.New(color.Bold).Sprint("Status progress")
+	caption := utils.BoldString("Status progress")
 
 	logboek.Default().LogBlock(caption).
 		Options(func(options types.LogBlockOptionsInterface) {
@@ -290,7 +288,7 @@ func (mt *multitracker) displayJobsProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -366,7 +364,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -437,7 +435,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -507,7 +505,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += color.New(color.FgBlue).Sprintf("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -581,7 +579,7 @@ func formatResourceWarning(disableWarningColors bool, reason string) string {
 	if disableWarningColors {
 		return msg
 	}
-	return color.New(color.FgYellow).Sprintf("%s", msg)
+	return utils.YellowString("%s", msg)
 }
 
 func formatResourceError(disableWarningColors bool, reason string) string {
@@ -589,7 +587,7 @@ func formatResourceError(disableWarningColors bool, reason string) string {
 	if disableWarningColors {
 		return msg
 	}
-	return color.New(color.FgRed).Sprintf("%s", msg)
+	return utils.RedString("%s", msg)
 }
 
 func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool, isNew bool) string {
@@ -600,25 +598,25 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 	switch resourceFailMode {
 	case FailWholeDeployProcessImmediately:
 		if isReady {
-			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+			return utils.GreenString("%s", resourceCaption)
 		} else if isFailed {
-			return color.New(color.FgRed).Sprintf("%s", resourceCaption)
+			return utils.RedString("%s", resourceCaption)
 		} else {
-			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+			return utils.YellowString("%s", resourceCaption)
 		}
 
 	case IgnoreAndContinueDeployProcess:
 		if isReady {
-			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+			return utils.GreenString("%s", resourceCaption)
 		} else {
 			return resourceCaption
 		}
 
 	case HopeUntilEndOfDeployProcess:
 		if isReady {
-			return color.New(color.FgGreen).Sprintf("%s", resourceCaption)
+			return utils.GreenString("%s", resourceCaption)
 		} else {
-			return color.New(color.FgYellow).Sprintf("%s", resourceCaption)
+			return utils.YellowString("%s", resourceCaption)
 		}
 
 	default:
