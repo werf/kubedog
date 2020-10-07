@@ -48,9 +48,11 @@ Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.3.4/kubedog-windo
 * [Library usage: Trackers](doc/usage.md#library-usage-trackers)
 * [Library usage: Custom trackers](doc/usage.md#library-usage-custom-trackers)
 
-# Support
+# Community
 
-You can ask for support in [werf CNCF Slack channel](https://cloud-native.slack.com/messages/CHY2THYUU), [werf chat in Telegram](https://t.me/werf_ru) or simply create an issue.
+Please feel free to reach us via [Flant Open Source forums](https://community.flant.com/) (based on Discourse). They have a [special category](https://community.flant.com/c/werf/6) dedicated to werf & its subprojects.
+
+You're also welcome to follow [@werf_io](https://twitter.com/werf_io) to stay informed about all important news, articles, etc.
 
 # License
 
