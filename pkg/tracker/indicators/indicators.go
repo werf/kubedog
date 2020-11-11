@@ -3,7 +3,7 @@ package indicators
 import (
 	"fmt"
 
-	"github.com/fatih/color"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type FormatTableElemOptions struct {
@@ -46,7 +46,7 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		if !opts.IsResourceNew || opts.DisableWarningColors {
 			res += prevIndicator.Value
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%s", prevIndicator.Value)
+			res += utils.YellowString("%s", prevIndicator.Value)
 		}
 		res += " -> "
 	}
@@ -54,18 +54,18 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 	if !opts.IsResourceNew {
 		res += indicator.Value
 	} else if indicator.IsReady() {
-		res += color.New(color.FgGreen).Sprintf("%s", indicator.Value)
+		res += utils.GreenString("%s", indicator.Value)
 	} else if indicator.IsFailed() {
 		if opts.DisableWarningColors {
 			res += indicator.Value
 		} else {
-			res += color.New(color.FgRed).Sprintf("%s", indicator.Value)
+			res += utils.RedString("%s", indicator.Value)
 		}
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.Value
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%s", indicator.Value)
+			res += utils.YellowString("%s", indicator.Value)
 		}
 	}
 
@@ -98,24 +98,24 @@ func (indicator *Int32EqualConditionIndicator) FormatTableElem(prevIndicator *In
 
 	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
 		if prevIndicator.IsReady() {
-			res += color.New(color.FgGreen).Sprintf("%d", prevIndicator.Value)
+			res += utils.GreenString("%d", prevIndicator.Value)
 		} else {
 			if opts.DisableWarningColors {
 				res += fmt.Sprintf("%d", prevIndicator.Value)
 			} else {
-				res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+				res += utils.YellowString("%d", prevIndicator.Value)
 			}
 		}
 		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += color.New(color.FgGreen).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
+		res += utils.GreenString("%s", indicator.formatValue(opts.WithTargetValue))
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
+			res += utils.YellowString("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	}
 
@@ -148,24 +148,24 @@ func (indicator *Int64GreaterOrEqualConditionIndicator) FormatTableElem(prevIndi
 
 	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
 		if prevIndicator.IsReady() {
-			res += color.New(color.FgGreen).Sprintf("%d", prevIndicator.Value)
+			res += utils.GreenString("%d", prevIndicator.Value)
 		} else {
 			if opts.DisableWarningColors {
 				res += fmt.Sprintf("%d", prevIndicator.Value)
 			} else {
-				res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+				res += utils.YellowString("%d", prevIndicator.Value)
 			}
 		}
 		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += color.New(color.FgGreen).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
+		res += utils.GreenString("%s", indicator.formatValue(opts.WithTargetValue))
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%s", indicator.formatValue(opts.WithTargetValue))
+			res += utils.YellowString("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	}
 
@@ -197,18 +197,18 @@ func (indicator *Int32MultipleEqualConditionIndicator) FormatTableElem(prevIndic
 		if opts.DisableWarningColors {
 			res += fmt.Sprintf("%d", prevIndicator.Value)
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%d", prevIndicator.Value)
+			res += utils.YellowString("%d", prevIndicator.Value)
 		}
 		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += color.New(color.FgGreen).Sprintf("%d", indicator.Value)
+		res += utils.GreenString("%d", indicator.Value)
 	} else {
 		if opts.DisableWarningColors {
 			res += fmt.Sprintf("%d", indicator.Value)
 		} else {
-			res += color.New(color.FgYellow).Sprintf("%d", indicator.Value)
+			res += utils.YellowString("%d", indicator.Value)
 		}
 	}
 

@@ -74,12 +74,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := logboek.Init(); err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to init logs: %s\n", err)
-			os.Exit(1)
-		}
-
-		logboek.EnableLogColor()
+		logboek.Streams().EnableStyle()
 		if noColorVal := os.Getenv("KUBEDOG_NO_COLOR"); noColorVal != "" {
 			noColor := false
 			for _, val := range []string{"1", "on", "true"} {
@@ -90,7 +85,7 @@ func main() {
 			}
 
 			if noColor {
-				logboek.DisableLogColor()
+				logboek.Streams().DisableStyle()
 			}
 		}
 
@@ -101,7 +96,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			logboek.SetWidth(terminalWidth)
+			logboek.Streams().SetWidth(terminalWidth)
 		}
 
 	}
@@ -130,7 +125,7 @@ func main() {
 			init()
 
 			if outputPrefix != "" {
-				logboek.SetPrefix(outputPrefix, nil)
+				logboek.Streams().SetPrefix(outputPrefix)
 			}
 
 			specsInput, err := ioutil.ReadAll(os.Stdin)
