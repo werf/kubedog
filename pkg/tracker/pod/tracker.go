@@ -57,6 +57,7 @@ type Tracker struct {
 	tracker.Tracker
 
 	Added     chan PodStatus
+	Deleted   chan PodStatus
 	Succeeded chan PodStatus
 	Ready     chan PodStatus
 	Failed    chan FailedReport
@@ -98,6 +99,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface) *Tracker {
 		},
 
 		Added:     make(chan PodStatus, 1),
+		Deleted:   make(chan PodStatus, 0),
 		Succeeded: make(chan PodStatus, 0),
 		Ready:     make(chan PodStatus, 0),
 		Failed:    make(chan FailedReport, 0),
@@ -155,7 +157,7 @@ func (pod *Tracker) Start(ctx context.Context) error {
 				pod.ContainerTrackerStates[k] = tracker.ContainerTrackerDone
 			}
 
-			pod.Status <- status
+			pod.Deleted <- status
 
 		case reason := <-pod.objectFailed:
 			pod.State = tracker.ResourceFailed
