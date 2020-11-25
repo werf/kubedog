@@ -479,6 +479,9 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 			case status := <-podTracker.Succeeded:
 				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
 				cancelPodCtx()
+			case status := <-podTracker.Deleted:
+				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
+				cancelPodCtx()
 			case report := <-podTracker.Failed:
 				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: report.PodStatus}
 			case status := <-podTracker.Ready:

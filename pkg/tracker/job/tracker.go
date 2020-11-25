@@ -373,6 +373,9 @@ func (job *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 			case status := <-podTracker.Succeeded:
 				job.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
 				cancelPodCtx()
+			case status := <-podTracker.Deleted:
+				job.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
+				cancelPodCtx()
 			case status := <-podTracker.Ready:
 				job.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
 			case report := <-podTracker.Failed:
