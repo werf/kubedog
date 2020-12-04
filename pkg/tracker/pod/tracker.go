@@ -391,7 +391,7 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string) er
 	for {
 		select {
 		case <-ticker.C:
-			state := pod.ContainerTrackerStates[containerName]
+			state := pod.ContainerTrackerStates[containerName] // PANIC HERE
 
 			switch state {
 			case tracker.FollowingContainerLogs:
