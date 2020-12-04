@@ -2,13 +2,10 @@ package elimination
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
-
-	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/werf/logboek"
 
@@ -19,6 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/tools/cache"
 )
 
 type EliminationTrackerSpec struct {
@@ -129,32 +128,47 @@ func NewEliminationTracker(kubeDynamicClient dynamic.Interface, spec *Eliminatio
 }
 
 func (tracker *EliminationTracker) Track(ctx context.Context, opts EliminationTrackerOptions) error {
-	for {
-		var err error
-		var obj *unstructured.Unstructured
-
-		if tracker.Spec.Namespace == "" {
-			obj, err = tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Get(context.Background(), tracker.Spec.ResourceName, metav1.GetOptions{})
-		} else {
-			obj, err = tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).Get(context.Background(), tracker.Spec.ResourceName, metav1.GetOptions{})
-		}
-
-		if errors.IsNotFound(err) {
-			return nil
-		} else if err != nil {
-			return fmt.Errorf("error getting resource %s: %s", tracker.Spec.String(), err)
-		}
-
-		data, err := json.MarshalIndent(obj, "", "\t")
-		if err != nil {
-			return fmt.Errorf("resource %s json marshal failed: %s", tracker.Spec.String(), err)
-		}
-
-		tracker.ResourceStatus <- ResourceStatus{
-			Spec:         tracker.Spec,
-			ManifestJson: data,
-		}
-
-		time.Sleep(500 * time.Millisecond)
+	list, err := tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to get list of %q in the namespace %q: %s", tracker.Spec.GroupVersionResource, tracker.Spec.Namespace, err)
 	}
+
+	var found bool
+	for i := range list.Items {
+		logboek.Context(context.Background()).Debug().LogF("Check resource %q %q against %q!\n", tracker.Spec.GroupVersionResource, list.Items[i].GetName(), tracker.Spec.ResourceName)
+		if list.Items[i].GetName() == tracker.Spec.ResourceName {
+			logboek.Context(context.Background()).Debug().LogF("Found resource %q %q!\n", tracker.Spec.GroupVersionResource, tracker.Spec.ResourceName)
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+
+	informerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(tracker.KubeDynamicClient, 0, tracker.Spec.Namespace, nil)
+	informer := informerFactory.ForResource(tracker.Spec.GroupVersionResource)
+
+	stopCh := make(chan struct{})
+
+	handlers := cache.ResourceEventHandlerFuncs{
+		DeleteFunc: func(obj interface{}) {
+			u, ok := obj.(*unstructured.Unstructured)
+			if !ok {
+				return
+			}
+
+			if u.GetName() == tracker.Spec.ResourceName {
+				logboek.Context(context.Background()).Debug().LogF("Stopping informer for %q %q\n", tracker.Spec.GroupVersionResource, tracker.Spec.ResourceName)
+				close(stopCh)
+			}
+		},
+	}
+
+	informer.Informer().AddEventHandler(handlers)
+
+	logboek.Context(context.Background()).Debug().LogF("Starting informer for %q %q\n", tracker.Spec.GroupVersionResource, tracker.Spec.ResourceName)
+
+	informer.Informer().Run(stopCh)
+
+	return nil
 }
