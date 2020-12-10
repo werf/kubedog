@@ -130,7 +130,9 @@ func (e *EventInformer) Run(ctx context.Context) {
 func (e *EventInformer) handleInitialEvents(ctx context.Context) {
 	evList, err := utils.ListEventsForObject(ctx, e.Kube, e.Resource)
 	if err != nil {
-		fmt.Printf("list event error: %v\n", err)
+		if debug.Debug() {
+			fmt.Printf("list event error: %v\n", err)
+		}
 		return
 	}
 	if debug.Debug() {
