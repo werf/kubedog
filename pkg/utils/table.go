@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -180,7 +181,7 @@ func fitValue(field interface{}, columnWidth int) []string {
 
 	columnWidthWithoutSpaces := columnWidth - 1
 	value := fmt.Sprintf("%v", field)
-	result := logboek.FitText(value, types.FitTextOptions{Width: columnWidthWithoutSpaces})
+	result := logboek.Context(context.Background()).FitText(value, types.FitTextOptions{Width: columnWidthWithoutSpaces})
 
 	for _, line := range strings.Split(result, "\n") {
 		lines = append(lines, padValue(line, columnWidth))

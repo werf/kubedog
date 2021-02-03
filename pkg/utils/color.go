@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"context"
+
 	"github.com/gookit/color"
 
 	"github.com/werf/logboek"
@@ -27,5 +29,5 @@ func RedF(format string, a ...interface{}) string {
 }
 
 func styleF(style color.Style, format string, a ...interface{}) string {
-	return logboek.ColorizeF(style, format, a...)
+	return logboek.Context(context.Background()).ColorizeF(style, format, a...)
 }

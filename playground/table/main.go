@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/gookit/color"
 
 	"github.com/werf/logboek"
@@ -9,10 +11,10 @@ import (
 )
 
 func main() {
-	_ = logboek.LogProcess("xxx").DoError(func() error {
-		_ = logboek.LogProcess("1").DoError(func() error {
+	_ = logboek.Context(context.Background()).LogProcess("xxx").DoError(func() error {
+		_ = logboek.Context(context.Background()).LogProcess("1").DoError(func() error {
 			t := utils.NewTable(.7, .1, .1, .1)
-			t.SetWidth(logboek.Streams().ContentWidth() - 1)
+			t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 			t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
 			t.Row("deploy/extended-monitoring", "1/1", 1, 1)
 			//t.Row("deploy/extended-monitoring", "1/1", 1, 1, color.RedString("Error: See the server log for details. BUILD FAILED (total time: 1 second)"), color.RedString("Error: An individual language user's deviations from standard language norms in grammar, pronunciation and orthography are sometimes referred to as errors"))
@@ -34,7 +36,7 @@ func main() {
 			t.Row("sts/mysql", "1/1", 1, "1 (-1)")
 			t.Row("ds/node-exporter", "1/1", 1, "1 (-1)")
 			t.Row("deploy/trickster", "1/1", 1, "1 (-1)")
-			logboek.Log(t.Render())
+			logboek.Context(context.Background()).Log(t.Render())
 
 			return nil
 		})
