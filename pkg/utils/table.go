@@ -215,7 +215,7 @@ func (t *Table) getColumnsContentWidth(count int) []int {
 		sum += columnWidth
 	}
 
-	if w-sum > 0 {
+	if w-sum > 0 && len(result) > 0 {
 		result[len(result)-1] += w - sum
 	}
 
