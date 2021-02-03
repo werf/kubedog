@@ -223,7 +223,7 @@ func (mt *multitracker) displayStatusProgress() error {
 		logboek.LogOptionalLn()
 	}
 
-	caption := utils.BoldString("Status progress")
+	caption := utils.BoldF("Status progress")
 
 	logboek.Default().LogBlock(caption).
 		Options(func(options types.LogBlockOptionsInterface) {
@@ -288,7 +288,7 @@ func (mt *multitracker) displayJobsProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -297,7 +297,7 @@ func (mt *multitracker) displayJobsProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Log(t.Render())
 	}
 }
 
@@ -364,7 +364,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -373,7 +373,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Log(t.Render())
 	}
 }
 
@@ -435,7 +435,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -444,7 +444,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Log(t.Render())
 	}
 }
 
@@ -505,7 +505,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -514,7 +514,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Log(t.Render())
 	}
 }
 
@@ -579,7 +579,7 @@ func formatResourceWarning(disableWarningColors bool, reason string) string {
 	if disableWarningColors {
 		return msg
 	}
-	return utils.YellowString("%s", msg)
+	return utils.YellowF("%s", msg)
 }
 
 func formatResourceError(disableWarningColors bool, reason string) string {
@@ -587,7 +587,7 @@ func formatResourceError(disableWarningColors bool, reason string) string {
 	if disableWarningColors {
 		return msg
 	}
-	return utils.RedString("%s", msg)
+	return utils.RedF("%s", msg)
 }
 
 func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool, isNew bool) string {
@@ -598,25 +598,25 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 	switch resourceFailMode {
 	case FailWholeDeployProcessImmediately:
 		if isReady {
-			return utils.GreenString("%s", resourceCaption)
+			return utils.GreenF("%s", resourceCaption)
 		} else if isFailed {
-			return utils.RedString("%s", resourceCaption)
+			return utils.RedF("%s", resourceCaption)
 		} else {
-			return utils.YellowString("%s", resourceCaption)
+			return utils.YellowF("%s", resourceCaption)
 		}
 
 	case IgnoreAndContinueDeployProcess:
 		if isReady {
-			return utils.GreenString("%s", resourceCaption)
+			return utils.GreenF("%s", resourceCaption)
 		} else {
 			return resourceCaption
 		}
 
 	case HopeUntilEndOfDeployProcess:
 		if isReady {
-			return utils.GreenString("%s", resourceCaption)
+			return utils.GreenF("%s", resourceCaption)
 		} else {
-			return utils.YellowString("%s", resourceCaption)
+			return utils.YellowF("%s", resourceCaption)
 		}
 
 	default:

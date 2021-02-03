@@ -2,9 +2,9 @@ module github.com/werf/kubedog
 
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
-	github.com/fatih/color v1.9.0
+	github.com/gookit/color v1.3.5
 	github.com/spf13/cobra v1.0.0
-	github.com/werf/logboek v0.4.3
+	github.com/werf/logboek v0.5.0
 	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 	k8s.io/api v0.18.6
 	k8s.io/apimachinery v0.18.6
