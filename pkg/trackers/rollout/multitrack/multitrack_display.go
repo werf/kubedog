@@ -1,6 +1,7 @@
 package multitrack
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -70,7 +71,7 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec Multit
 		})
 
 		for _, line := range showLines {
-			logboek.LogF("%s\n", line)
+			logboek.Context(context.Background()).LogF("%s\n", line)
 		}
 	}
 }
@@ -79,7 +80,7 @@ func (mt *multitracker) setLogProcess(header string, optionsFunc func(types.LogP
 	if mt.currentLogProcessHeader != header {
 		mt.resetLogProcess()
 
-		logProcess := logboek.Default().LogProcess(header)
+		logProcess := logboek.Context(context.Background()).Default().LogProcess(header)
 
 		if optionsFunc != nil {
 			logProcess.Options(optionsFunc)
@@ -116,7 +117,7 @@ func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec
 			},
 		)
 
-		logboek.Default().LogFDetails("%s\n", msg)
+		logboek.Context(context.Background()).Default().LogFDetails("%s\n", msg)
 	}
 }
 
@@ -134,13 +135,13 @@ func (mt *multitracker) displayResourceEventF(resourceKind string, spec Multitra
 			},
 		)
 
-		logboek.Default().LogFDetails("%s\n", msg)
+		logboek.Context(context.Background()).Default().LogFDetails("%s\n", msg)
 	}
 }
 
 func (mt *multitracker) displayResourceErrorF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.Warn().LogF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
+	logboek.Context(context.Background()).Warn().LogF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
 }
 
 func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
@@ -184,31 +185,31 @@ func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec
 	if len(lines) > 0 {
 		mt.resetLogProcess()
 
-		logboek.LogOptionalLn()
+		logboek.Context(context.Background()).LogOptionalLn()
 
-		logboek.Default().LogBlock("Failed resource %s/%s service messages", resourceKind, spec.ResourceName).
+		logboek.Context(context.Background()).Default().LogBlock("Failed resource %s/%s service messages", resourceKind, spec.ResourceName).
 			Options(func(options types.LogBlockOptionsInterface) {
 				options.WithoutLogOptionalLn()
 				options.Style(style.Details())
 			}).
 			Do(func() {
 				for _, line := range lines {
-					logboek.Default().LogFDetails("%s\n", line)
+					logboek.Context(context.Background()).Default().LogFDetails("%s\n", line)
 				}
 			})
 
-		logboek.LogOptionalLn()
+		logboek.Context(context.Background()).LogOptionalLn()
 	}
 }
 
 func (mt *multitracker) displayMultitrackServiceMessageF(format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.Default().LogFHighlight(format, a...)
+	logboek.Context(context.Background()).Default().LogFHighlight(format, a...)
 }
 
 func (mt *multitracker) displayMultitrackErrorMessageF(format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.Warn().LogF(format, a...)
+	logboek.Context(context.Background()).Warn().LogF(format, a...)
 }
 
 func (mt *multitracker) displayStatusProgress() error {
@@ -220,12 +221,12 @@ func (mt *multitracker) displayStatusProgress() error {
 	mt.resetLogProcess()
 
 	if displayLn {
-		logboek.LogOptionalLn()
+		logboek.Context(context.Background()).LogOptionalLn()
 	}
 
-	caption := utils.BoldString("Status progress")
+	caption := utils.BoldF("Status progress")
 
-	logboek.Default().LogBlock(caption).
+	logboek.Context(context.Background()).Default().LogBlock(caption).
 		Options(func(options types.LogBlockOptionsInterface) {
 			options.WithoutLogOptionalLn()
 		}).
@@ -236,14 +237,14 @@ func (mt *multitracker) displayStatusProgress() error {
 			mt.displayJobsProgress()
 		})
 
-	logboek.LogOptionalLn()
+	logboek.Context(context.Background()).LogOptionalLn()
 
 	return nil
 }
 
 func (mt *multitracker) displayJobsProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.Streams().ContentWidth() - 1)
+	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 	t.Header("JOB", "ACTIVE", "DURATION", "SUCCEEDED/FAILED")
 
 	resourcesNames := []string{}
@@ -288,7 +289,7 @@ func (mt *multitracker) displayJobsProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -297,13 +298,13 @@ func (mt *multitracker) displayJobsProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
 
 func (mt *multitracker) displayStatefulSetsStatusProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.Streams().ContentWidth() - 1)
+	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 	t.Header("STATEFULSET", "REPLICAS", "READY", "UP-TO-DATE")
 
 	resourcesNames := []string{}
@@ -364,7 +365,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -373,13 +374,13 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
 
 func (mt *multitracker) displayDaemonSetsStatusProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.Streams().ContentWidth() - 1)
+	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 	t.Header("DAEMONSET", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
@@ -435,7 +436,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -444,13 +445,13 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
 
 func (mt *multitracker) displayDeploymentsStatusProgress() {
 	t := utils.NewTable(statusProgressTableRatio...)
-	t.SetWidth(logboek.Streams().ContentWidth() - 1)
+	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 	t.Header("DEPLOYMENT", "REPLICAS", "AVAILABLE", "UP-TO-DATE")
 
 	resourcesNames := []string{}
@@ -505,7 +506,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				extraMsg += "---\n"
-				extraMsg += utils.BlueString("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
+				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
 			st.Commit(extraMsg)
 		}
@@ -514,7 +515,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 	}
 
 	if len(resourcesNames) > 0 {
-		logboek.LogF(t.Render())
+		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
 
@@ -579,7 +580,7 @@ func formatResourceWarning(disableWarningColors bool, reason string) string {
 	if disableWarningColors {
 		return msg
 	}
-	return utils.YellowString("%s", msg)
+	return utils.YellowF("%s", msg)
 }
 
 func formatResourceError(disableWarningColors bool, reason string) string {
@@ -587,7 +588,7 @@ func formatResourceError(disableWarningColors bool, reason string) string {
 	if disableWarningColors {
 		return msg
 	}
-	return utils.RedString("%s", msg)
+	return utils.RedF("%s", msg)
 }
 
 func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool, isNew bool) string {
@@ -598,25 +599,25 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 	switch resourceFailMode {
 	case FailWholeDeployProcessImmediately:
 		if isReady {
-			return utils.GreenString("%s", resourceCaption)
+			return utils.GreenF("%s", resourceCaption)
 		} else if isFailed {
-			return utils.RedString("%s", resourceCaption)
+			return utils.RedF("%s", resourceCaption)
 		} else {
-			return utils.YellowString("%s", resourceCaption)
+			return utils.YellowF("%s", resourceCaption)
 		}
 
 	case IgnoreAndContinueDeployProcess:
 		if isReady {
-			return utils.GreenString("%s", resourceCaption)
+			return utils.GreenF("%s", resourceCaption)
 		} else {
 			return resourceCaption
 		}
 
 	case HopeUntilEndOfDeployProcess:
 		if isReady {
-			return utils.GreenString("%s", resourceCaption)
+			return utils.GreenF("%s", resourceCaption)
 		} else {
-			return utils.YellowString("%s", resourceCaption)
+			return utils.YellowF("%s", resourceCaption)
 		}
 
 	default:

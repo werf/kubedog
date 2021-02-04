@@ -46,7 +46,7 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		if !opts.IsResourceNew || opts.DisableWarningColors {
 			res += prevIndicator.Value
 		} else {
-			res += utils.YellowString("%s", prevIndicator.Value)
+			res += utils.YellowF("%s", prevIndicator.Value)
 		}
 		res += " -> "
 	}
@@ -54,18 +54,18 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 	if !opts.IsResourceNew {
 		res += indicator.Value
 	} else if indicator.IsReady() {
-		res += utils.GreenString("%s", indicator.Value)
+		res += utils.GreenF("%s", indicator.Value)
 	} else if indicator.IsFailed() {
 		if opts.DisableWarningColors {
 			res += indicator.Value
 		} else {
-			res += utils.RedString("%s", indicator.Value)
+			res += utils.RedF("%s", indicator.Value)
 		}
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.Value
 		} else {
-			res += utils.YellowString("%s", indicator.Value)
+			res += utils.YellowF("%s", indicator.Value)
 		}
 	}
 
@@ -98,24 +98,24 @@ func (indicator *Int32EqualConditionIndicator) FormatTableElem(prevIndicator *In
 
 	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
 		if prevIndicator.IsReady() {
-			res += utils.GreenString("%d", prevIndicator.Value)
+			res += utils.GreenF("%d", prevIndicator.Value)
 		} else {
 			if opts.DisableWarningColors {
 				res += fmt.Sprintf("%d", prevIndicator.Value)
 			} else {
-				res += utils.YellowString("%d", prevIndicator.Value)
+				res += utils.YellowF("%d", prevIndicator.Value)
 			}
 		}
 		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += utils.GreenString("%s", indicator.formatValue(opts.WithTargetValue))
+		res += utils.GreenF("%s", indicator.formatValue(opts.WithTargetValue))
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += utils.YellowString("%s", indicator.formatValue(opts.WithTargetValue))
+			res += utils.YellowF("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	}
 
@@ -148,24 +148,24 @@ func (indicator *Int64GreaterOrEqualConditionIndicator) FormatTableElem(prevIndi
 
 	if opts.ShowProgress && indicator.IsProgressing(prevIndicator) {
 		if prevIndicator.IsReady() {
-			res += utils.GreenString("%d", prevIndicator.Value)
+			res += utils.GreenF("%d", prevIndicator.Value)
 		} else {
 			if opts.DisableWarningColors {
 				res += fmt.Sprintf("%d", prevIndicator.Value)
 			} else {
-				res += utils.YellowString("%d", prevIndicator.Value)
+				res += utils.YellowF("%d", prevIndicator.Value)
 			}
 		}
 		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += utils.GreenString("%s", indicator.formatValue(opts.WithTargetValue))
+		res += utils.GreenF("%s", indicator.formatValue(opts.WithTargetValue))
 	} else {
 		if opts.DisableWarningColors {
 			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += utils.YellowString("%s", indicator.formatValue(opts.WithTargetValue))
+			res += utils.YellowF("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	}
 
@@ -197,18 +197,18 @@ func (indicator *Int32MultipleEqualConditionIndicator) FormatTableElem(prevIndic
 		if opts.DisableWarningColors {
 			res += fmt.Sprintf("%d", prevIndicator.Value)
 		} else {
-			res += utils.YellowString("%d", prevIndicator.Value)
+			res += utils.YellowF("%d", prevIndicator.Value)
 		}
 		res += "->"
 	}
 
 	if indicator.IsReady() {
-		res += utils.GreenString("%d", indicator.Value)
+		res += utils.GreenF("%d", indicator.Value)
 	} else {
 		if opts.DisableWarningColors {
 			res += fmt.Sprintf("%d", indicator.Value)
 		} else {
-			res += utils.YellowString("%d", indicator.Value)
+			res += utils.YellowF("%d", indicator.Value)
 		}
 	}
 

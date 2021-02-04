@@ -71,8 +71,8 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 						outputMux.Lock()
 						defer outputMux.Unlock()
 
-						logboek.Default().LogF("Resource status:\n%s\n---\n", resourceStatus.ManifestJson)
-						logboek.Default().LogOptionalLn()
+						logboek.Context(context.Background()).Default().LogF("Resource status:\n%s\n---\n", resourceStatus.ManifestJson)
+						logboek.Context(context.Background()).Default().LogOptionalLn()
 					}()
 				case <-ctx.Done():
 					return

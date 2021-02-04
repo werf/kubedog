@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -74,7 +75,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		logboek.Streams().EnableStyle()
+		logboek.Context(context.Background()).Streams().EnableStyle()
 		if noColorVal := os.Getenv("KUBEDOG_NO_COLOR"); noColorVal != "" {
 			noColor := false
 			for _, val := range []string{"1", "on", "true"} {
@@ -85,7 +86,7 @@ func main() {
 			}
 
 			if noColor {
-				logboek.Streams().DisableStyle()
+				logboek.Context(context.Background()).Streams().DisableStyle()
 			}
 		}
 
@@ -96,7 +97,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			logboek.Streams().SetWidth(terminalWidth)
+			logboek.Context(context.Background()).Streams().SetWidth(terminalWidth)
 		}
 
 	}
@@ -125,7 +126,7 @@ func main() {
 			init()
 
 			if outputPrefix != "" {
-				logboek.Streams().SetPrefix(outputPrefix)
+				logboek.Context(context.Background()).Streams().SetPrefix(outputPrefix)
 			}
 
 			specsInput, err := ioutil.ReadAll(os.Stdin)

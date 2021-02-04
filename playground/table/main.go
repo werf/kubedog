@@ -1,29 +1,32 @@
 package main
 
 import (
-	"github.com/fatih/color"
+	"context"
+
+	"github.com/gookit/color"
+
 	"github.com/werf/logboek"
 
 	"github.com/werf/kubedog/pkg/utils"
 )
 
 func main() {
-	_ = logboek.LogProcess("xxx").DoError(func() error {
-		_ = logboek.LogProcess("1").DoError(func() error {
+	_ = logboek.Context(context.Background()).LogProcess("xxx").DoError(func() error {
+		_ = logboek.Context(context.Background()).LogProcess("1").DoError(func() error {
 			t := utils.NewTable(.7, .1, .1, .1)
-			t.SetWidth(logboek.Streams().ContentWidth() - 1)
+			t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 			t.Header("NAME", "REPLICAS", "UP-TO-DATE", "AVAILABLE")
 			t.Row("deploy/extended-monitoring", "1/1", 1, 1)
 			//t.Row("deploy/extended-monitoring", "1/1", 1, 1, color.RedString("Error: See the server log for details. BUILD FAILED (total time: 1 second)"), color.RedString("Error: An individual language user's deviations from standard language norms in grammar, pronunciation and orthography are sometimes referred to as errors"))
 			st := t.SubTable(.3, .15, .3, .15, .1)
 			st.Header("NAME", "READY", "STATUS", "RESTARTS", "AGE")
 			st.Rows([][]interface{}{
-				{"654fc55df-5zs4m", "3/3", "Pulling", "0", "49m", color.RedString("pod/myapp-backend-cbdb856d7-bvplx Failed: Error: ImagePullBackOff"), color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found")},
-				{"654fc55df-hsm67", "3/3", color.GreenString("Running") + " -> " + color.RedString("Terminating"), "0", "49m"},
+				{"654fc55df-5zs4m", "3/3", "Pulling", "0", "49m", color.Red.Sprint("pod/myapp-backend-cbdb856d7-bvplx Failed: Error: ImagePullBackOff"), color.Red.Sprint("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found")},
+				{"654fc55df-hsm67", "3/3", color.Green.Sprint("Running") + " -> " + color.Red.Sprint("Terminating"), "0", "49m"},
 				{"654fc55df-fffff", "3/3", "Ready", "0", "49m"},
-				{"654fc55df-5zs4m", "3/3", "Pulling", "0", "49m", color.RedString("pod/myapp-backend-cbdb856d7-bvplx Failed: Error: ImagePullBackOff"), color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found")},
+				{"654fc55df-5zs4m", "3/3", "Pulling", "0", "49m", color.Red.Sprint("pod/myapp-backend-cbdb856d7-bvplx Failed: Error: ImagePullBackOff"), color.Red.Sprint("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found")},
 			}...)
-			st.Commit(color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found"), color.RedString("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found"))
+			st.Commit(color.Red.Sprint("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found"), color.Red.Sprint("pod/myapp-backend-cbdb856d7-b6ms8 Failed: Failed to pull image \"ubuntu:kaka\": rpc error: code Unknown desc = Error response from daemon: manifest for ubuntu:kaka not found"))
 			t.Row("deploy/grafana", "1/1", 1, 1)
 			t.Row("deploy/kube-state-metrics", "1/1", 1, 1)
 			t.Row("deploy/madison-proxy-0450d21f50d1e3f3b3131a07bcbcfe85ec02dd9758b7ee12968ee6eaee7057fc", "1/1", 1, 1)
@@ -33,7 +36,7 @@ func main() {
 			t.Row("sts/mysql", "1/1", 1, "1 (-1)")
 			t.Row("ds/node-exporter", "1/1", 1, "1 (-1)")
 			t.Row("deploy/trickster", "1/1", 1, "1 (-1)")
-			logboek.LogF(t.Render())
+			logboek.Context(context.Background()).Log(t.Render())
 
 			return nil
 		})
