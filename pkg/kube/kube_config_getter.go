@@ -45,7 +45,6 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 		if opts.Namespace != "" {
 			configFlags.Namespace = new(string)
 			*configFlags.Namespace = opts.Namespace
-			fmt.Printf("-- NewKubeConfigGetter namespace=%v\n", *configFlags.Namespace)
 		}
 
 		if opts.BearerToken != "" {
