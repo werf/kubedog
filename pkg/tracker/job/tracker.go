@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/werf/kubedog/pkg/utils"
@@ -292,7 +293,10 @@ func (job *Tracker) handleJobState(ctx context.Context, object *batchv1.Job) err
 	switch job.State {
 	case tracker.Initial:
 		job.runPodsInformer(ctx, object)
-		job.runEventsInformer(ctx, object)
+
+		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
+			job.runEventsInformer(ctx, object)
+		}
 
 		if status.IsFailed {
 			job.State = tracker.ResourceFailed

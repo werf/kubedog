@@ -224,7 +224,9 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 
 	switch pod.State {
 	case tracker.Initial:
-		pod.runEventsInformer(ctx)
+		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
+			pod.runEventsInformer(ctx)
+		}
 
 		if err := pod.runContainersTrackers(ctx, object); err != nil {
 			return fmt.Errorf("unable to start tracking pod/%s containers: %s", pod.ResourceName, err)
