@@ -3,6 +3,7 @@ package statefulset
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -409,7 +410,10 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 	switch d.State {
 	case tracker.Initial:
 		d.runPodsInformer(ctx, object)
-		d.runEventsInformer(ctx, object)
+
+		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
+			d.runEventsInformer(ctx, object)
+		}
 
 		if status.IsFailed {
 			d.State = tracker.ResourceFailed

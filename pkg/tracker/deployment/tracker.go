@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
@@ -523,7 +524,10 @@ func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Depl
 	case tracker.Initial:
 		d.runPodsInformer(ctx, object)
 		d.runReplicaSetsInformer(ctx, object)
-		d.runEventsInformer(ctx, object)
+
+		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
+			d.runEventsInformer(ctx, object)
+		}
 
 		if status.IsFailed {
 			d.State = tracker.ResourceFailed
