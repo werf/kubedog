@@ -22,10 +22,10 @@ go get github.com/werf/kubedog
 
 The latest release can be downloaded from [this page](https://bintray.com/flant/kubedog/kubedog/_latestVersion).
 
-### MacOS
+### macOS
 
 ```bash
-curl -L https://dl.bintray.com/flant/kubedog/v0.3.4/kubedog-darwin-amd64-v0.3.4 -o /tmp/kubedog
+curl -L https://dl.bintray.com/flant/kubedog/v0.4.0/kubedog-darwin-amd64-v0.4.0 -o /tmp/kubedog
 chmod +x /tmp/kubedog
 sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ```
@@ -33,14 +33,14 @@ sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ### Linux
 
 ```bash
-curl -L https://dl.bintray.com/flant/kubedog/v0.3.4/kubedog-linux-amd64-v0.3.4 -o /tmp/kubedog
+curl -L https://dl.bintray.com/flant/kubedog/v0.4.0/kubedog-linux-amd64-v0.4.0 -o /tmp/kubedog
 chmod +x /tmp/kubedog
 sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ```
 
 ### Windows
 
-Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.3.4/kubedog-windows-amd64-v0.3.4.exe).
+Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.4.0/kubedog-windows-amd64-v0.4.0.exe).
 
 # Using kubedog
 
@@ -50,7 +50,7 @@ Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.3.4/kubedog-windo
 
 # Community
 
-Please feel free to reach us via [Flant Open Source forums](https://community.flant.com/) (based on Discourse). They have a [special category](https://community.flant.com/c/werf/6) dedicated to werf & its subprojects.
+Please feel free to reach us via [project's Discussions](https://github.com/werf/kubedog/discussions) and [werf's Telegram group](https://t.me/werf_io) (there's [another one in Russian](https://t.me/werf_ru) as well).
 
 You're also welcome to follow [@werf_io](https://twitter.com/werf_io) to stay informed about all important news, articles, etc.
 
