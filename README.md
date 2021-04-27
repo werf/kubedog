@@ -20,12 +20,10 @@ go get github.com/werf/kubedog
 
 ## Install CLI
 
-The latest release can be downloaded from [this page](https://bintray.com/flant/kubedog/kubedog/_latestVersion).
-
 ### macOS
 
 ```bash
-curl -L https://dl.bintray.com/flant/kubedog/v0.4.0/kubedog-darwin-amd64-v0.4.0 -o /tmp/kubedog
+curl -L https://storage.yandexcloud.net/kubedog/targets/releases/v0.5.0/kubedog-darwin-amd64-v0.5.0 -o /tmp/kubedog
 chmod +x /tmp/kubedog
 sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ```
@@ -33,14 +31,14 @@ sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ### Linux
 
 ```bash
-curl -L https://dl.bintray.com/flant/kubedog/v0.4.0/kubedog-linux-amd64-v0.4.0 -o /tmp/kubedog
+curl -L https://storage.yandexcloud.net/kubedog/targets/releases/v0.5.0/kubedog-linux-amd64-v0.5.0 -o /tmp/kubedog
 chmod +x /tmp/kubedog
 sudo mv /tmp/kubedog /usr/local/bin/kubedog
 ```
 
 ### Windows
 
-Download [kubedog.exe](https://dl.bintray.com/flant/kubedog/v0.4.0/kubedog-windows-amd64-v0.4.0.exe).
+Download [kubedog.exe](https://storage.yandexcloud.net/kubedog/targets/releases/v0.5.0/kubedog-windows-amd64-v0.5.0.exe).
 
 # Using kubedog
 
