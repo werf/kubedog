@@ -20,5 +20,5 @@ docker run --rm \
     --volume ~/.ssh/known_hosts:/root/.ssh/known_hosts \
     --volume $(pwd):/kubedog \
     --workdir /kubedog \
-    flant/werf-builder:v1.3.0 \
+    golang:1.16 \
     bash -ec "set -e; source scripts/lib/release/build.sh && build_binaries $VERSION"
