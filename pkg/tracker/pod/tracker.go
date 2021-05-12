@@ -71,11 +71,12 @@ type Tracker struct {
 	// LastStatus contains latest known and actual resource status.
 	LastStatus PodStatus
 
-	State                           tracker.TrackerState
-	ContainerTrackerStates          map[string]tracker.TrackerState
-	ProcessedContainerLogTimestamps map[string]time.Time
-	TrackedContainers               []string
-	LogsFromTime                    time.Time
+	State                        tracker.TrackerState
+	ContainerTrackerStates       map[string]tracker.TrackerState
+	ContainerTrackerStateChanges map[string]chan tracker.TrackerState
+
+	TrackedContainers []string
+	LogsFromTime      time.Time
 
 	lastObject   *corev1.Pod
 	failedReason string
@@ -109,10 +110,10 @@ func NewTracker(name, namespace string, kube kubernetes.Interface) *Tracker {
 		ContainerError:    make(chan ContainerErrorReport, 0),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
-		State:                           tracker.Initial,
-		ContainerTrackerStates:          make(map[string]tracker.TrackerState),
-		ProcessedContainerLogTimestamps: make(map[string]time.Time),
-		LogsFromTime:                    time.Time{},
+		State:                        tracker.Initial,
+		ContainerTrackerStates:       make(map[string]tracker.TrackerState),
+		ContainerTrackerStateChanges: make(map[string]chan tracker.TrackerState),
+		LogsFromTime:                 time.Time{},
 
 		objectAdded:    make(chan *corev1.Pod, 0),
 		objectModified: make(chan *corev1.Pod, 0),
@@ -142,21 +143,28 @@ func (pod *Tracker) Start(ctx context.Context) error {
 			}
 
 		case <-pod.objectDeleted:
+			for containerName, ch := range pod.ContainerTrackerStateChanges {
+				oldState := pod.ContainerTrackerStates[containerName]
+				newState := tracker.ContainerTrackerDone
+
+				if oldState != newState {
+					pod.ContainerTrackerStates[containerName] = newState
+					ch <- newState
+
+					if debug.Debug() {
+						fmt.Printf("pod/%s container/%s state changed %v -> %v\n", pod.ResourceName, containerName, oldState, newState)
+					}
+				}
+			}
+
 			pod.State = tracker.ResourceDeleted
 			pod.lastObject = nil
+
+			pod.ContainerTrackerStateChanges = make(map[string]chan tracker.TrackerState)
 			pod.ContainerTrackerStates = make(map[string]tracker.TrackerState)
-			pod.ProcessedContainerLogTimestamps = make(map[string]time.Time)
+
 			status := PodStatus{}
 			pod.LastStatus = status
-
-			keys := []string{}
-			for k := range pod.ContainerTrackerStates {
-				keys = append(keys, k)
-			}
-			for _, k := range keys {
-				pod.ContainerTrackerStates[k] = tracker.ContainerTrackerDone
-			}
-
 			pod.Deleted <- status
 
 		case reason := <-pod.objectFailed:
@@ -198,7 +206,6 @@ func (pod *Tracker) Start(ctx context.Context) error {
 			return err
 		}
 	}
-
 }
 
 func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) error {
@@ -207,6 +214,17 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 
 	status := NewPodStatus(object, pod.StatusGeneration, pod.TrackedContainers, pod.State == tracker.ResourceFailed, pod.failedReason)
 	pod.LastStatus = status
+
+	switch pod.State {
+	case tracker.Initial:
+		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
+			pod.runEventsInformer(ctx)
+		}
+
+		if err := pod.runContainersTrackers(ctx, object); err != nil {
+			return fmt.Errorf("unable to start tracking pod/%s containers: %s", pod.ResourceName, err)
+		}
+	}
 
 	if err := pod.handleContainersState(object); err != nil {
 		return fmt.Errorf("unable to handle pod containers state: %s", err)
@@ -224,14 +242,6 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 
 	switch pod.State {
 	case tracker.Initial:
-		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
-			pod.runEventsInformer(ctx)
-		}
-
-		if err := pod.runContainersTrackers(ctx, object); err != nil {
-			return fmt.Errorf("unable to start tracking pod/%s containers: %s", pod.ResourceName, err)
-		}
-
 		if status.IsFailed {
 			pod.State = tracker.ResourceFailed
 			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
@@ -299,15 +309,17 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	}
 
 	for _, cs := range allContainerStatuses {
-		oldState := pod.ContainerTrackerStates[cs.Name]
-
 		if cs.State.Running != nil || cs.State.Terminated != nil {
-			pod.ContainerTrackerStates[cs.Name] = tracker.FollowingContainerLogs
-		}
+			oldState := pod.ContainerTrackerStates[cs.Name]
+			newState := tracker.FollowingContainerLogs
 
-		if debug.Debug() {
-			if oldState != pod.ContainerTrackerStates[cs.Name] {
-				fmt.Printf("pod/%s container/%s state changed %#v -> %#v\n", pod.ResourceName, cs.Name, oldState, pod.ContainerTrackerStates[cs.Name])
+			if oldState != newState {
+				pod.ContainerTrackerStates[cs.Name] = newState
+				pod.ContainerTrackerStateChanges[cs.Name] <- newState
+
+				if debug.Debug() {
+					fmt.Printf("pod/%s container/%s state changed %v -> %v\n", pod.ResourceName, cs.Name, oldState, newState)
+				}
 			}
 		}
 	}
@@ -386,15 +398,10 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 	return nil
 }
 
-func (pod *Tracker) trackContainer(ctx context.Context, containerName string) error {
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-
+func (pod *Tracker) trackContainer(ctx context.Context, containerName string, containerTrackerStateChanges chan tracker.TrackerState) error {
 	for {
 		select {
-		case <-ticker.C:
-			state := pod.ContainerTrackerStates[containerName] // PANIC HERE
-
+		case state := <-containerTrackerStateChanges:
 			switch state {
 			case tracker.FollowingContainerLogs:
 				err := pod.followContainerLogs(ctx, containerName)
@@ -404,11 +411,12 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string) er
 					}
 				}
 				return nil
-			case tracker.Initial:
+
 			case tracker.ContainerTrackerDone:
 				return nil
+
 			default:
-				return fmt.Errorf("unknown pod/%s container/%s tracker state %q", pod.ResourceName, containerName, state)
+				panic(fmt.Sprintf("unknown pod/%s container/%s tracker state %q", pod.ResourceName, containerName, state))
 			}
 
 		case <-ctx.Done():
@@ -428,7 +436,11 @@ func (pod *Tracker) runContainersTrackers(ctx context.Context, object *corev1.Po
 	for i := range allContainersNames {
 		containerName := allContainersNames[i]
 
+		containerTrackerStateChanges := make(chan tracker.TrackerState, 1)
+		pod.ContainerTrackerStateChanges[containerName] = containerTrackerStateChanges
+
 		pod.ContainerTrackerStates[containerName] = tracker.Initial
+
 		pod.TrackedContainers = append(pod.TrackedContainers, containerName)
 
 		newCtx, _ := context.WithCancel(ctx)
@@ -438,7 +450,7 @@ func (pod *Tracker) runContainersTrackers(ctx context.Context, object *corev1.Po
 				fmt.Printf("Starting to track Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
 			}
 
-			if err := pod.trackContainer(ctx, containerName); err != nil {
+			if err := pod.trackContainer(ctx, containerName, containerTrackerStateChanges); err != nil {
 				pod.errors <- err
 			}
 
