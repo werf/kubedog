@@ -2,10 +2,8 @@ package deployment
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
@@ -42,10 +40,6 @@ type PodErrorReport struct {
 
 type Tracker struct {
 	tracker.Tracker
-
-	DebugLastStatus  DeploymentStatus
-	DebugMessages    []string
-	DebugMessagesMux sync.Mutex
 
 	State             tracker.TrackerState
 	Conditions        []string
@@ -84,12 +78,6 @@ type Tracker struct {
 	podLogChunksRelay       chan map[string]*pod.ContainerLogChunk
 	podContainerErrorsRelay chan map[string]pod.ContainerErrorReport
 	donePodsRelay           chan map[string]pod.PodStatus
-}
-
-func (t *Tracker) DebugMessage(format string, a ...interface{}) {
-	t.DebugMessagesMux.Lock()
-	defer t.DebugMessagesMux.Unlock()
-	t.DebugMessages = append(t.DebugMessages, fmt.Sprintf(format, a...))
 }
 
 func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
@@ -142,27 +130,6 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 // there is option StopOnAvailable — if true, watcher stops after deployment has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
 func (d *Tracker) Track(ctx context.Context) (err error) {
-	defer func() {
-		d.DebugMessagesMux.Lock()
-		defer d.DebugMessagesMux.Unlock()
-
-		lastStatus := d.DebugLastStatus
-		lastStatusDump, lastStatusDumpErr := json.Marshal(lastStatus)
-		trackerDump, trackerDumpErr := json.Marshal(d)
-
-		if !lastStatus.IsReady && !lastStatus.IsFailed {
-			fmt.Printf("Last status (err=%v):\n%s\n---\n", lastStatusDumpErr, lastStatusDump)
-			fmt.Printf("Tracker (err=%v):\n%s\n---\n", trackerDumpErr, trackerDump)
-			fmt.Printf("Tracker.Track err =%v\n", err)
-
-			for _, msg := range d.DebugMessages {
-				fmt.Printf("[DEBUG] %s\n", msg)
-			}
-
-			panic(fmt.Sprintf("No status resoulution detected for deploy/%s when tracker exited", d.ResourceName))
-		}
-	}()
-
 	d.runDeploymentInformer(ctx)
 
 	for {
@@ -184,7 +151,6 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			d.podStatuses = make(map[string]pod.PodStatus)
 			d.rsNameByPod = make(map[string]string)
 			d.TrackedPodsNames = nil
-			d.DebugLastStatus = DeploymentStatus{}
 			d.Status <- DeploymentStatus{}
 
 		case reason := <-d.resourceFailed:
@@ -202,7 +168,6 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			} else {
 				status = DeploymentStatus{IsFailed: true, FailedReason: reason}
 			}
-			d.DebugLastStatus = status
 			d.Failed <- status
 
 		case rs := <-d.replicaSetAdded:
@@ -251,8 +216,6 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 					return err
 				}
 				status := NewDeploymentStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, newPodsNames)
-
-				d.DebugLastStatus = status
 
 				d.AddedPod <- PodAddedReport{
 					ReplicaSetPod: replicaset.ReplicaSetPod{
@@ -346,8 +309,6 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				}
 				status := NewDeploymentStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, newPodsNames)
 
-				d.DebugLastStatus = status
-
 				for podName, containerError := range podContainerErrors {
 					rsName, hasKey := d.rsNameByPod[podName]
 					if !hasKey {
@@ -377,15 +338,15 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 
 		case <-ctx.Done():
 			if ctx.Err() == context.Canceled {
-				d.DebugMessage("-- Deployment tracker: context cancelled, exiting")
 				return nil
 			}
 			return ctx.Err()
 		case err := <-d.errors:
-			d.DebugMessage("-- Deployment tracker: err=%v, exiting\n", err)
 			return err
 		}
 	}
+
+	return err
 }
 
 func (d *Tracker) getNewPodsNames() ([]string, error) {
@@ -427,7 +388,6 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) {
 
 	go func() {
 		_, err := watchtools.UntilWithSync(ctx, lw, &appsv1.Deployment{}, nil, func(e watch.Event) (bool, error) {
-			d.DebugMessage("    deploy/%s event: %#v\n", d.ResourceName, e.Type)
 			if debug.Debug() {
 				fmt.Printf("    deploy/%s event: %#v\n", d.ResourceName, e.Type)
 			}
@@ -451,7 +411,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) {
 				d.resourceDeleted <- object
 			case watch.Error:
 				err := fmt.Errorf("deployment error: %v", e.Object)
-				// d.errors <- err
+				//d.errors <- err
 				return true, err
 			}
 
@@ -459,15 +419,15 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) {
 		})
 
 		if err := tracker.AdaptInformerError(err); err != nil {
-			d.DebugMessages = append(d.DebugMessages, fmt.Sprintf("deploy/%s informer err=%v\n", d.ResourceName, err))
 			d.errors <- err
 		}
 
-		d.DebugMessage("      deploy/%s informer DONE, err=%v\n", d.ResourceName, err)
 		if debug.Debug() {
-			fmt.Printf("      deploy/%s informer DONE, err=%v\n", d.ResourceName, err)
+			fmt.Printf("      deploy/%s informer DONE\n", d.ResourceName)
 		}
 	}()
+
+	return
 }
 
 // runReplicaSetsInformer watch for deployment events
@@ -496,7 +456,6 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	d.TrackedPodsNames = append(d.TrackedPodsNames, podName)
 
 	go func() {
-		d.DebugMessage("Starting Deployment's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, podTracker.ResourceName, podTracker.State)
 		if debug.Debug() {
 			fmt.Printf("Starting Deployment's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, podTracker.ResourceName, podTracker.State)
 		}
@@ -508,7 +467,6 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 			doneChan <- struct{}{}
 		}
 
-		d.DebugMessage("Done Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, podTracker.ResourceName)
 		if debug.Debug() {
 			fmt.Printf("Done Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, podTracker.ResourceName)
 		}
@@ -561,8 +519,6 @@ func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Depl
 		return err
 	}
 	status := NewDeploymentStatus(object, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, newPodsNames)
-
-	d.DebugLastStatus = status
 
 	switch d.State {
 	case tracker.Initial:
