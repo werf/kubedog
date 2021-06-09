@@ -15,6 +15,7 @@ import (
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/daemonset"
+	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/deployment"
 	"github.com/werf/kubedog/pkg/tracker/job"
 	"github.com/werf/kubedog/pkg/tracker/statefulset"
@@ -43,9 +44,7 @@ const (
 //	EndOfDeploy       DeployCondition = "EndOfDeploy"
 //)
 
-var (
-	ErrFailWholeDeployProcessImmediately = errors.New("fail whole deploy process immediately")
-)
+var ErrFailWholeDeployProcessImmediately = errors.New("fail whole deploy process immediately")
 
 type MultitrackSpecs struct {
 	Deployments  []MultitrackSpec
@@ -69,7 +68,7 @@ type MultitrackSpec struct {
 	SkipLogs                  bool
 	SkipLogsForContainers     []string
 	ShowLogsOnlyForContainers []string
-	//ShowLogsUntil             DeployCondition TODO
+	// ShowLogsUntil             DeployCondition TODO
 
 	ShowServiceMessages bool
 }
@@ -190,9 +189,16 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 			}
 
 		case <-doneChan:
+			if debug.Debug() {
+				fmt.Printf("-- Multitrack doneChan signal received => exiting\n")
+			}
+
 			return nil
 
 		case err := <-errorChan:
+			if err == nil {
+				panic("unexpected nil error received through errorChan")
+			}
 			return err
 		}
 	}
@@ -283,6 +289,10 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 			mt.displayFailedTrackingResourcesServiceMessages()
 			errorChan <- mt.formatFailedTrackingResourcesError()
 		} else {
+			if debug.Debug() {
+				fmt.Printf("-- Multitrack send doneChan signal from workgroup wait goroutine\n")
+			}
+
 			doneChan <- struct{}{}
 		}
 	}()
@@ -309,33 +319,44 @@ func (mt *multitracker) applyTrackTerminationMode() error {
 	}
 
 	var contextsToStop []*multitrackerContext
+	var debugMsg []string
 
 	for name, ctx := range mt.DeploymentsContexts {
 		if shouldContinueTracking(name, mt.DeploymentsSpecs[name]) {
 			return nil
 		}
+		debugMsg = append(debugMsg, fmt.Sprintf("will stop context for deployment %q", name))
 		contextsToStop = append(contextsToStop, ctx)
 	}
 	for name, ctx := range mt.StatefulSetsContexts {
 		if shouldContinueTracking(name, mt.StatefulSetsSpecs[name]) {
 			return nil
 		}
+		debugMsg = append(debugMsg, fmt.Sprintf("will stop context for sts %q", name))
 		contextsToStop = append(contextsToStop, ctx)
 	}
 	for name, ctx := range mt.DaemonSetsContexts {
 		if shouldContinueTracking(name, mt.DaemonSetsSpecs[name]) {
 			return nil
 		}
+		debugMsg = append(debugMsg, fmt.Sprintf("will stop context for ds %q", name))
 		contextsToStop = append(contextsToStop, ctx)
 	}
 	for name, ctx := range mt.JobsContexts {
 		if shouldContinueTracking(name, mt.JobsSpecs[name]) {
 			return nil
 		}
+		debugMsg = append(debugMsg, fmt.Sprintf("will stop context for job %q", name))
 		contextsToStop = append(contextsToStop, ctx)
 	}
 
 	mt.isTerminating = true
+
+	if debug.Debug() {
+		for _, msg := range debugMsg {
+			fmt.Printf("-- applyTrackTerminationMode: %s\n", msg)
+		}
+	}
 
 	for _, ctx := range contextsToStop {
 		ctx.CancelFunc()
@@ -358,8 +379,6 @@ func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, mtCtx *
 		mt.displayFailedTrackingResourcesServiceMessages()
 		errorChan <- mt.formatFailedTrackingResourcesError()
 		mt.isFailed = true
-		return
-	} else if err == context.Canceled {
 		return
 	} else if err != nil {
 		// unknown error
