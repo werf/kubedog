@@ -157,6 +157,10 @@ func (pod *Tracker) Start(ctx context.Context) error {
 				pod.ContainerTrackerStates[k] = tracker.ContainerTrackerDone
 			}
 
+			if debug.Debug() {
+				fmt.Printf("Pod %q deleted status: %#v\n", pod.ResourceName, status)
+			}
+
 			pod.Deleted <- status
 
 		case reason := <-pod.objectFailed:
@@ -190,15 +194,22 @@ func (pod *Tracker) Start(ctx context.Context) error {
 			}
 
 		case <-ctx.Done():
+			if debug.Debug() {
+				fmt.Printf("pod tracker %s context done: %v\n", pod.ResourceName, ctx.Err())
+			}
+
 			if ctx.Err() == context.Canceled {
 				return nil
 			}
 			return ctx.Err()
 		case err := <-pod.errors:
+			if debug.Debug() {
+				fmt.Printf("pod tracker %s error received! err=%v\n", pod.ResourceName, err)
+			}
+
 			return err
 		}
 	}
-
 }
 
 func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) error {
@@ -378,6 +389,9 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 
 		select {
 		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return nil
+			}
 			return ctx.Err()
 		default:
 		}
@@ -412,6 +426,13 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string) er
 			}
 
 		case <-ctx.Done():
+			if debug.Debug() {
+				fmt.Printf("-- trackContainer context done -> %v\n", ctx.Err())
+			}
+
+			if ctx.Err() == context.Canceled {
+				return nil
+			}
 			return ctx.Err()
 		}
 	}

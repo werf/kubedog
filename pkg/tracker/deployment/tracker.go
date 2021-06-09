@@ -337,16 +337,22 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			}
 
 		case <-ctx.Done():
+			if debug.Debug() {
+				fmt.Printf("Deployment %q tracker context Done! -> ctx.Err() -> %v\n", d.ResourceName, ctx.Err())
+			}
+
 			if ctx.Err() == context.Canceled {
 				return nil
 			}
 			return ctx.Err()
 		case err := <-d.errors:
+			if debug.Debug() {
+				fmt.Printf("Deployment %q tracker error received! -> %v\n", d.ResourceName, err)
+			}
+
 			return err
 		}
 	}
-
-	return err
 }
 
 func (d *Tracker) getNewPodsNames() ([]string, error) {
@@ -411,7 +417,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) {
 				d.resourceDeleted <- object
 			case watch.Error:
 				err := fmt.Errorf("deployment error: %v", e.Object)
-				//d.errors <- err
+				// d.errors <- err
 				return true, err
 			}
 
@@ -426,8 +432,6 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) {
 			fmt.Printf("      deploy/%s informer DONE\n", d.ResourceName)
 		}
 	}()
-
-	return
 }
 
 // runReplicaSetsInformer watch for deployment events
@@ -498,6 +502,10 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 				d.podContainerErrorsRelay <- map[string]pod.ContainerErrorReport{podTracker.ResourceName: report}
 
 			case err := <-errorChan:
+				if debug.Debug() {
+					fmt.Printf("received pod %q error chan %v\n", podTracker.ResourceName, err)
+				}
+
 				d.errors <- err
 				return
 			case <-doneChan:
