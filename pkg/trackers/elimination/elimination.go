@@ -82,7 +82,7 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 	}
 
 	var errors []error
-	var pendingJobs = len(specs)
+	pendingJobs := len(specs)
 	for {
 		select {
 		case err := <-errorChan:
@@ -102,6 +102,9 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 				return nil
 			}
 		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return nil
+			}
 			return ctx.Err()
 		}
 	}
