@@ -10,9 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/spf13/cobra"
 	"k8s.io/klog"
+	klog_v2 "k8s.io/klog/v2"
 
+	"github.com/spf13/cobra"
 	"github.com/werf/logboek"
 
 	"github.com/werf/kubedog"
@@ -26,9 +27,6 @@ import (
 func main() {
 	// set flag.Parsed() for glog
 	flag.CommandLine.Parse([]string{})
-
-	klog.SetOutputBySeverity("INFO", ioutil.Discard)
-	klog.SetOutputBySeverity("WARNING", ioutil.Discard)
 
 	var namespace string
 	var timeoutSeconds int
@@ -69,6 +67,16 @@ func main() {
 	}
 
 	init := func() {
+		if err := SilenceKlog(context.Background()); err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to initialize klog: %s\n", err)
+			os.Exit(1)
+		}
+
+		if err := SilenceKlogV2(context.Background()); err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to initialize klog_v2: %s\n", err)
+			os.Exit(1)
+		}
+
 		err := kube.Init(kube.InitOptions{kube.KubeConfigOptions{Context: kubeContext, ConfigPath: kubeConfig}})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
@@ -99,7 +107,6 @@ func main() {
 
 			logboek.Context(context.Background()).Streams().SetWidth(terminalWidth)
 		}
-
 	}
 
 	rootCmd := &cobra.Command{Use: "kubedog"}
@@ -316,4 +323,50 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+}
+
+func SilenceKlogV2(ctx context.Context) error {
+	fs := flag.NewFlagSet("klog", flag.PanicOnError)
+	klog_v2.InitFlags(fs)
+
+	if err := fs.Set("logtostderr", "false"); err != nil {
+		return err
+	}
+	if err := fs.Set("alsologtostderr", "false"); err != nil {
+		return err
+	}
+	if err := fs.Set("stderrthreshold", "5"); err != nil {
+		return err
+	}
+
+	// Suppress info and warnings from client-go reflector
+	klog_v2.SetOutputBySeverity("INFO", ioutil.Discard)
+	klog_v2.SetOutputBySeverity("WARNING", ioutil.Discard)
+	klog_v2.SetOutputBySeverity("ERROR", ioutil.Discard)
+	klog_v2.SetOutputBySeverity("FATAL", logboek.Context(ctx).ErrStream())
+
+	return nil
+}
+
+func SilenceKlog(ctx context.Context) error {
+	fs := flag.NewFlagSet("klog", flag.PanicOnError)
+	klog.InitFlags(fs)
+
+	if err := fs.Set("logtostderr", "false"); err != nil {
+		return err
+	}
+	if err := fs.Set("alsologtostderr", "false"); err != nil {
+		return err
+	}
+	if err := fs.Set("stderrthreshold", "5"); err != nil {
+		return err
+	}
+
+	// Suppress info and warnings from client-go reflector
+	klog.SetOutputBySeverity("INFO", ioutil.Discard)
+	klog.SetOutputBySeverity("WARNING", ioutil.Discard)
+	klog.SetOutputBySeverity("ERROR", ioutil.Discard)
+	klog.SetOutputBySeverity("FATAL", logboek.Context(ctx).ErrStream())
+
+	return nil
 }
