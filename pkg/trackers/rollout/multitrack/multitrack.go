@@ -517,16 +517,25 @@ func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]
 }
 
 func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multitrackerResourceState, kind string, spec MultitrackSpec, reason string) error {
+	forceFailure := false
+	if strings.Contains(reason, "ErrImageNeverPull") {
+		forceFailure = true
+	}
+
 	switch spec.FailMode {
 	case FailWholeDeployProcessImmediately:
 		resourcesStates[spec.ResourceName].FailuresCount++
 
-		if resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
+		if !forceFailure && resourcesStates[spec.ResourceName].FailuresCount <= *spec.AllowFailuresCount {
 			mt.displayMultitrackServiceMessageF("%d/%d allowed errors occurred for %s/%s: continue tracking\n", resourcesStates[spec.ResourceName].FailuresCount, *spec.AllowFailuresCount, kind, spec.ResourceName)
 			return nil
 		}
 
-		mt.displayMultitrackServiceMessageF("Allowed failures count for %s/%s exceeded %d errors: stop tracking immediately!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+		if forceFailure {
+			mt.displayMultitrackServiceMessageF("Critical failure for %s/%s has been occurred: stop tracking immediately!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+		} else {
+			mt.displayMultitrackServiceMessageF("Allowed failures count for %s/%s exceeded %d errors: stop tracking immediately!\n", kind, spec.ResourceName, *spec.AllowFailuresCount)
+		}
 
 		resourcesStates[spec.ResourceName].Status = resourceFailed
 		resourcesStates[spec.ResourceName].FailedReason = reason
@@ -578,8 +587,6 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 	default:
 		panic(fmt.Sprintf("bad fail mode %#v for resource %s/%s", spec.FailMode, kind, spec.ResourceName))
 	}
-
-	return nil
 }
 
 func (mt *multitracker) getActiveResourcesNames() []string {

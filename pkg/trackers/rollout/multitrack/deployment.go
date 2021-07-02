@@ -2,6 +2,7 @@ package multitrack
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/werf/kubedog/pkg/tracker/deployment"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"

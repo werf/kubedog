@@ -152,7 +152,7 @@ func setContainersStatusesToPodStatus(status *PodStatus, pod *corev1.Pod) {
 	for _, cs := range allContainerStatuses {
 		if cs.State.Waiting != nil {
 			switch cs.State.Waiting.Reason {
-			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff":
+			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff", "ErrImageNeverPull":
 				if status.ContainersErrors == nil {
 					status.ContainersErrors = make(map[string]string)
 				}
