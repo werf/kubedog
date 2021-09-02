@@ -127,7 +127,7 @@ type MultitrackSpecs struct {
 	StatefulSets []MultitrackSpec
 	DaemonSets   []MultitrackSpec
 	Jobs         []MultitrackSpec
-  Canaries     []MultitrackSpec
+	Canaries     []MultitrackSpec
 }
 
 type MultitrackSpec struct {
