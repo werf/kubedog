@@ -20,10 +20,11 @@ Kubedog CLI utility is a tool that can be used to track what is going on with th
 
 **NOTE:** While kubedog includes a CLI, it provides a *minimal* interface to access library functions. CLI was created to check library features and for debug purposes. Currently, we have no plans on further improvement of CLI.
 
-There are 3 modes of resource tracking:
+There are 4 modes of resource tracking:
 * multitrack
 * follow
 * rollout
+* canary 
 
 The commands are `kubedog multitrack ...`, `kubedog follow ...` and `kubedog rollout track ...` respectively.
 
@@ -118,7 +119,7 @@ Multitrack(
 - `specs` — description of objects to track
 - `opts` — multitrack specific options
 
-`specs` argument describes what `Deployments`, `StatefulSets`, `DaemonSets` and `Jobs` to track using `MultitrackSpec` structure. `MultitrackSpec` allows to specify different modes of tracking per-resource (such as allowed failures count, log regexp and other):
+`specs` argument describes what `Deployments`, `StatefulSets`, `DaemonSets`, `Jobs` and `Canaries` to track using `MultitrackSpec` structure. `MultitrackSpec` allows to specify different modes of tracking per-resource (such as allowed failures count, log regexp and other):
 
 ```
 type MultitrackSpecs struct {
@@ -126,6 +127,7 @@ type MultitrackSpecs struct {
 	StatefulSets []MultitrackSpec
 	DaemonSets   []MultitrackSpec
 	Jobs         []MultitrackSpec
+	Canaries     []MultitrackSpec
 }
 
 type MultitrackSpec struct {
@@ -149,6 +151,12 @@ type MultitrackSpec struct {
 ```
 
 `Multitrack` function is a blocking call, which will return on error or when all resources are ready accordingly to the specified specs options.
+
+#### Canaries
+
+For now, we only support Canary resource from [Flagger](https://github.com/fluxcd/flagger).
+
+It will watch resource Canary while canary promotion is rolling and will break after a successful or failed result.
 
 ### Follow tracker (DEPRECATED)
 

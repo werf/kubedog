@@ -235,11 +235,41 @@ func (mt *multitracker) displayStatusProgress() error {
 			mt.displayDaemonSetsStatusProgress()
 			mt.displayStatefulSetsStatusProgress()
 			mt.displayJobsProgress()
+			mt.displayCanariesProgress()
 		})
 
 	logboek.Context(context.Background()).LogOptionalLn()
 
 	return nil
+}
+
+func (mt *multitracker) displayCanariesProgress() {
+	t := utils.NewTable(statusProgressTableRatio...)
+	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
+	t.Header("CANARY", "STATUS", "WEIGHT", "LASTUPDATE")
+
+	resourcesNames := []string{}
+	for name := range mt.CanariesSpecs {
+		resourcesNames = append(resourcesNames, name)
+	}
+	sort.Strings(resourcesNames)
+
+	for _, name := range resourcesNames {
+		status := mt.CanariesStatuses[name]
+
+		spec := mt.CanariesSpecs[name]
+		resource := formatResourceCaption(name, spec.FailMode, status.IsSucceeded, status.IsFailed, true)
+
+		if status.IsFailed {
+			t.Row(resource, status.FailedReason, status.CanaryWeight, status.LastTransitionTime)
+		} else {
+			t.Row(resource, status.CanaryStatus.Phase, status.CanaryWeight, status.LastTransitionTime)
+		}
+	}
+
+	if len(resourcesNames) > 0 {
+		logboek.Context(context.Background()).Log(t.Render())
+	}
 }
 
 func (mt *multitracker) displayJobsProgress() {
