@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -34,6 +35,8 @@ func main() {
 	var logsSince string
 	var kubeContext string
 	var kubeConfig string
+	var kubeConfigBase64 string
+	var kubeConfigPathMergeList []string
 	var outputPrefix string
 
 	makeTrackerOptions := func(mode string) tracker.Options {
@@ -77,7 +80,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		err := kube.Init(kube.InitOptions{kube.KubeConfigOptions{Context: kubeContext, ConfigPath: kubeConfig}})
+		err := kube.Init(kube.InitOptions{kube.KubeConfigOptions{Context: kubeContext, ConfigPath: kubeConfig, ConfigDataBase64: kubeConfigBase64, ConfigPathMergeList: kubeConfigPathMergeList}})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
 			os.Exit(1)
@@ -114,7 +117,19 @@ func main() {
 	rootCmd.PersistentFlags().IntVarP(&timeoutSeconds, "timeout", "t", -1, "Timeout of operation in seconds. 0 is wait forever. Default is 0.")
 	rootCmd.PersistentFlags().StringVarP(&logsSince, "logs-since", "", "now", "A duration like 30s, 5m, or 2h to start log records from the past. 'all' to show all logs and 'now' to display only new records (default).")
 	rootCmd.PersistentFlags().StringVarP(&kubeContext, "kube-context", "", os.Getenv("KUBEDOG_KUBE_CONTEXT"), "The name of the kubeconfig context to use (can be set with $KUBEDOG_KUBE_CONTEXT).")
-	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "", os.Getenv("KUBEDOG_KUBE_CONFIG"), "Path to the kubeconfig file (can be set with $KUBEDOG_KUBE_CONFIG).")
+	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "", "", "Path to the kubeconfig file (can be set with $KUBEDOG_KUBE_CONFIG or $KUBECONFIG).")
+	rootCmd.PersistentFlags().StringVarP(&kubeConfigBase64, "kube-config-base64", "", os.Getenv("KUBEDOG_KUBE_CONFIG_BASE64"), "Content of the kube config, base64-encoded (can be set with $KUBEDOG_KUBE_CONFIG_BASE64).")
+
+	for _, envVar := range []string{"KUBEDOG_KUBE_CONFIG", "KUBECONFIG"} {
+		if v := os.Getenv(envVar); v != "" {
+			for _, path := range filepath.SplitList(v) {
+				kubeConfigPathMergeList = append(kubeConfigPathMergeList, path)
+			}
+
+			break
+		}
+	}
+
 	rootCmd.PersistentFlags().StringVarP(&outputPrefix, "output-prefix", "", "", "Arbitrary string which will be prefixed to kubedog output.")
 
 	versionCmd := &cobra.Command{

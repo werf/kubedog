@@ -4,6 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -62,9 +65,10 @@ func Init(opts InitOptions) error {
 }
 
 type KubeConfigOptions struct {
-	Context          string
-	ConfigPath       string
-	ConfigDataBase64 string
+	Context             string
+	ConfigPath          string
+	ConfigDataBase64    string
+	ConfigPathMergeList []string
 }
 
 type KubeConfig struct {
@@ -75,7 +79,7 @@ type KubeConfig struct {
 
 func GetKubeConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 	// Try to load from kubeconfig in flags or from ~/.kube/config
-	config, outOfClusterErr := getOutOfClusterConfig(opts.Context, opts.ConfigPath, opts.ConfigDataBase64)
+	config, outOfClusterErr := getOutOfClusterConfig(opts.Context, opts.ConfigPath, opts.ConfigDataBase64, opts.ConfigPathMergeList)
 
 	if config == nil {
 		if hasInClusterConfig() {
@@ -105,7 +109,9 @@ func GetKubeConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 }
 
 type GetAllContextsClientsOptions struct {
-	KubeConfig string
+	ConfigPath          string
+	ConfigDataBase64    string
+	ConfigPathMergeList []string
 }
 
 type ContextClient struct {
@@ -117,7 +123,7 @@ type ContextClient struct {
 func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient, error) {
 	// Try to load contexts from kubeconfig in flags or from ~/.kube/config
 	var outOfClusterErr error
-	contexts, outOfClusterErr := getOutOfClusterContextsClients(opts.KubeConfig)
+	contexts, outOfClusterErr := getOutOfClusterContextsClients(opts.ConfigPath, opts.ConfigDataBase64, opts.ConfigPathMergeList)
 	// return if contexts are loaded successfully
 	if contexts != nil {
 		return contexts, nil
@@ -152,7 +158,7 @@ func makeOutOfClusterClientConfigError(configPath, context string, err error) er
 	return fmt.Errorf("%s: %s", baseErrMsg, err)
 }
 
-func GetClientConfig(context string, configPath string, configData []byte) (clientcmd.ClientConfig, error) {
+func GetClientConfig(context string, configPath string, configData []byte, configPathMergeList []string) (clientcmd.ClientConfig, error) {
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
 	if context != "" {
 		overrides.CurrentContext = context
@@ -163,6 +169,22 @@ func GetClientConfig(context string, configPath string, configData []byte) (clie
 			return nil, fmt.Errorf("unable to load config data: %s", err)
 		} else {
 			return clientcmd.NewDefaultClientConfig(*config, overrides), nil
+		}
+	}
+
+	oldEnvVar := os.Getenv(clientcmd.RecommendedConfigPathEnvVar)
+	defer func() {
+		os.Setenv(clientcmd.RecommendedConfigPathEnvVar, oldEnvVar)
+	}()
+
+	if len(configPathMergeList) > 0 {
+		configPathEnvVar := strings.Join(configPathMergeList, string(filepath.ListSeparator))
+		if err := os.Setenv(clientcmd.RecommendedConfigPathEnvVar, configPathEnvVar); err != nil {
+			return nil, fmt.Errorf("unable to set env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
+		}
+	} else {
+		if err := os.Unsetenv(clientcmd.RecommendedConfigPathEnvVar); err != nil {
+			return nil, fmt.Errorf("unable to unset env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
 		}
 	}
 
@@ -181,10 +203,9 @@ func hasInClusterConfig() bool {
 	return token && ns
 }
 
-func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeConfig, error) {
-	res := &KubeConfig{}
-
+func parseConfigDataBase64(configDataBase64 string) ([]byte, error) {
 	var configData []byte
+
 	if configDataBase64 != "" {
 		if data, err := base64.StdEncoding.DecodeString(configDataBase64); err != nil {
 			return nil, fmt.Errorf("unable to decode base64 config data: %s", err)
@@ -193,7 +214,18 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeC
 		}
 	}
 
-	clientConfig, err := GetClientConfig(context, configPath, configData)
+	return configData, nil
+}
+
+func getOutOfClusterConfig(context, configPath, configDataBase64 string, configPathMergeList []string) (*KubeConfig, error) {
+	res := &KubeConfig{}
+
+	configData, err := parseConfigDataBase64(configDataBase64)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse base64 config data: %s", err)
+	}
+
+	clientConfig, err := GetClientConfig(context, configPath, configData, configPathMergeList)
 	if err != nil {
 		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
 	}
@@ -225,10 +257,15 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string) (*KubeC
 	return res, nil
 }
 
-func getOutOfClusterContextsClients(configPath string) ([]*ContextClient, error) {
+func getOutOfClusterContextsClients(configPath, configDataBase64 string, configPathMergeList []string) ([]*ContextClient, error) {
 	res := make([]*ContextClient, 0)
 
-	clientConfig, err := GetClientConfig("", configPath, nil)
+	configData, err := parseConfigDataBase64(configDataBase64)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse base64 config data: %s", err)
+	}
+
+	clientConfig, err := GetClientConfig("", configPath, configData, configPathMergeList)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +276,7 @@ func getOutOfClusterContextsClients(configPath string) ([]*ContextClient, error)
 	}
 
 	for contextName, context := range rc.Contexts {
-		clientConfig, err := GetClientConfig(contextName, configPath, nil)
+		clientConfig, err := GetClientConfig(contextName, configPath, configData, configPathMergeList)
 		if err != nil {
 			return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
 		}
