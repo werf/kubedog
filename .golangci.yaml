@@ -1,0 +1,29 @@
+run:
+  timeout: 10m
+
+issues:
+  exclude:
+    - ST1005.*
+
+linters-settings:
+  gci:
+    local-prefixes: github.com/werf/kubedog
+  goimports:
+    local-prefixes: github.com/werf/kubedog
+  golint:
+    min-confidence: 0
+  errcheck:
+    ignore: fmt:.*,[rR]ead|[wW]rite|[cC]lose,io:Copy
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gci
+    - gocritic
+    - gofmt
+    # - goimports
+    - gofumpt
+    # - golint
+    - gosimple
+    - govet

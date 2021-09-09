@@ -1,0 +1,28 @@
+name: Lint
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.16
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install linter
+      run: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | BINARY=golangci-lint bash -s -- v1.38.0
+
+    - name: Lint
+      run: ${GITHUB_WORKSPACE}/bin/golangci-lint run ./...
