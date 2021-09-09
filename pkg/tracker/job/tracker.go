@@ -60,6 +60,8 @@ type Tracker struct {
 	failedReason string
 	podStatuses  map[string]pod.PodStatus
 
+	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
+
 	objectAdded    chan *batchv1.Job
 	objectModified chan *batchv1.Job
 	objectDeleted  chan *batchv1.Job
@@ -95,6 +97,8 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		PodError:    make(chan PodErrorReport, 0),
 
 		podStatuses: make(map[string]pod.PodStatus),
+
+		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
 		State: tracker.Initial,
 
@@ -352,7 +356,9 @@ func (job *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 	doneChan := make(chan struct{}, 0)
 
 	newCtx, cancelPodCtx := context.WithCancel(_ctx)
-	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube)
+	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube, pod.Options{
+		IgnoreReadinessProbeFailsByContainerName: job.ignoreReadinessProbeFailsByContainerName,
+	})
 	if !job.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = job.LogsFromTime
 	}

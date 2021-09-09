@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,6 +55,8 @@ type Tracker struct {
 	PodLogChunk chan *replicaset.ReplicaSetPodLogChunk
 	PodError    chan PodErrorReport
 
+	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
+
 	lastObject     *appsv1.DaemonSet
 	failedReason   string
 	podStatuses    map[string]pod.PodStatus
@@ -83,6 +86,8 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 
 		podStatuses:    make(map[string]pod.PodStatus),
 		podGenerations: make(map[string]string),
+
+		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
 		Added:  make(chan DaemonSetStatus, 1),
 		Ready:  make(chan DaemonSetStatus, 0),
@@ -334,7 +339,9 @@ func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
 	doneChan := make(chan struct{}, 0)
 
 	newCtx, cancelPodCtx := context.WithCancel(ctx)
-	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube)
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
+	})
 	if !d.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = d.LogsFromTime
 	}

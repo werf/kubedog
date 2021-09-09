@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
@@ -50,6 +51,8 @@ type Tracker struct {
 	failedReason     string
 	podStatuses      map[string]pod.PodStatus
 	rsNameByPod      map[string]string
+
+	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
 
 	TrackedPodsNames []string
 
@@ -104,6 +107,8 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		knownReplicaSets: make(map[string]*appsv1.ReplicaSet),
 		podStatuses:      make(map[string]pod.PodStatus),
 		rsNameByPod:      make(map[string]string),
+
+		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
 		errors:             make(chan error, 0),
 		resourceAdded:      make(chan *appsv1.Deployment, 1),
@@ -458,7 +463,9 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	doneChan := make(chan struct{}, 0)
 
 	newCtx, cancelPodCtx := context.WithCancel(_ctx)
-	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube)
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
+	})
 	if !d.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = d.LogsFromTime
 	}

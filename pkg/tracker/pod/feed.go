@@ -80,7 +80,9 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	pod := NewTracker(name, namespace, kube)
+	pod := NewTracker(name, namespace, kube, Options{
+		opts.IgnoreReadinessProbeFailsByContainerName,
+	})
 
 	go func() {
 		err := pod.Start(ctx)
