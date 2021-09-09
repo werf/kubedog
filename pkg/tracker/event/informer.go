@@ -23,7 +23,7 @@ type EventInformer struct {
 	tracker.Tracker
 	Resource interface{}
 	Messages chan string
-	Failures chan string
+	Failures chan interface{}
 	Errors   chan error
 
 	initialEventUids map[types.UID]bool
@@ -46,7 +46,7 @@ func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer
 	}
 }
 
-func (e *EventInformer) WithChannels(msgCh chan string, failCh chan string, errors chan error) *EventInformer {
+func (e *EventInformer) WithChannels(msgCh chan string, failCh chan interface{}, errors chan error) *EventInformer {
 	e.Messages = msgCh
 	e.Failures = failCh
 	e.Errors = errors

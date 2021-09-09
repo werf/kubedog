@@ -62,7 +62,7 @@ type Tracker struct {
 	resourceAdded    chan *appsv1.DaemonSet
 	resourceModified chan *appsv1.DaemonSet
 	resourceDeleted  chan *appsv1.DaemonSet
-	resourceFailed   chan string
+	resourceFailed   chan interface{}
 	errors           chan error
 
 	podAddedRelay           chan *corev1.Pod
@@ -97,7 +97,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		resourceAdded:    make(chan *appsv1.DaemonSet, 1),
 		resourceModified: make(chan *appsv1.DaemonSet, 1),
 		resourceDeleted:  make(chan *appsv1.DaemonSet, 1),
-		resourceFailed:   make(chan string, 1),
+		resourceFailed:   make(chan interface{}, 1),
 		errors:           make(chan error, 0),
 
 		podAddedRelay:           make(chan *corev1.Pod, 1),
@@ -137,18 +137,23 @@ func (d *Tracker) Track(ctx context.Context) error {
 			d.podGenerations = make(map[string]string)
 			d.Status <- DaemonSetStatus{}
 
-		case reason := <-d.resourceFailed:
-			d.State = tracker.ResourceFailed
-			d.failedReason = reason
+		case failure := <-d.resourceFailed:
+			switch reason := failure.(type) {
+			case string:
+				d.State = tracker.ResourceFailed
+				d.failedReason = reason
 
-			var status DaemonSetStatus
-			if d.lastObject != nil {
-				d.StatusGeneration++
-				status = NewDaemonSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
-			} else {
-				status = DaemonSetStatus{IsFailed: true, FailedReason: reason}
+				var status DaemonSetStatus
+				if d.lastObject != nil {
+					d.StatusGeneration++
+					status = NewDaemonSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, d.getNewPodsNames())
+				} else {
+					status = DaemonSetStatus{IsFailed: true, FailedReason: reason}
+				}
+				d.Failed <- status
+			default:
+				panic(fmt.Errorf("unexpected type %T", reason))
 			}
-			d.Failed <- status
 
 		case pod := <-d.podAddedRelay:
 			d.podGenerations[pod.Name] = pod.Labels["pod-template-generation"]

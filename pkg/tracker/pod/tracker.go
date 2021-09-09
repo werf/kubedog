@@ -84,7 +84,7 @@ type Tracker struct {
 	objectAdded    chan *corev1.Pod
 	objectModified chan *corev1.Pod
 	objectDeleted  chan *corev1.Pod
-	objectFailed   chan string
+	objectFailed   chan interface{}
 
 	containerDone chan string
 	errors        chan error
@@ -118,7 +118,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface) *Tracker {
 		objectAdded:    make(chan *corev1.Pod, 0),
 		objectModified: make(chan *corev1.Pod, 0),
 		objectDeleted:  make(chan *corev1.Pod, 0),
-		objectFailed:   make(chan string, 1),
+		objectFailed:   make(chan interface{}, 1),
 		errors:         make(chan error, 0),
 		containerDone:  make(chan string, 10),
 	}
@@ -172,20 +172,25 @@ func (pod *Tracker) Start(ctx context.Context) error {
 
 			pod.Deleted <- status
 
-		case reason := <-pod.objectFailed:
-			pod.State = tracker.ResourceFailed
-			pod.failedReason = reason
+		case failure := <-pod.objectFailed:
+			switch failure := failure.(type) {
+			case string:
+				pod.State = tracker.ResourceFailed
+				pod.failedReason = failure
 
-			var status PodStatus
-			if pod.lastObject != nil {
-				pod.StatusGeneration++
-				status = NewPodStatus(pod.lastObject, pod.StatusGeneration, pod.TrackedContainers, pod.State == tracker.ResourceFailed, pod.failedReason)
-			} else {
-				status = PodStatus{IsFailed: true, FailedReason: reason}
+				var status PodStatus
+				if pod.lastObject != nil {
+					pod.StatusGeneration++
+					status = NewPodStatus(pod.lastObject, pod.StatusGeneration, pod.TrackedContainers, pod.State == tracker.ResourceFailed, pod.failedReason)
+				} else {
+					status = PodStatus{IsFailed: true, FailedReason: failure}
+				}
+
+				pod.LastStatus = status
+				pod.Failed <- FailedReport{PodStatus: status, FailedReason: failure}
+			default:
+				panic(fmt.Errorf("unexpected type %T", failure))
 			}
-
-			pod.LastStatus = status
-			pod.Failed <- FailedReport{PodStatus: status, FailedReason: reason}
 
 		case containerName := <-pod.containerDone:
 			trackedContainers := make([]string, 0)
@@ -243,11 +248,11 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 		return fmt.Errorf("unable to handle pod containers state: %s", err)
 	}
 
-	for containerName, msg := range status.ContainersErrors {
+	for _, containerError := range status.ContainersErrors {
 		pod.ContainerError <- ContainerErrorReport{
 			ContainerError: ContainerError{
-				ContainerName: containerName,
-				Message:       msg,
+				ContainerName: containerError.ContainerName,
+				Message:       containerError.Message,
 			},
 			PodStatus: status,
 		}
