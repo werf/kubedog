@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
-
 	watchtools "k8s.io/client-go/tools/watch"
 
 	"github.com/werf/kubedog/pkg/tracker"
@@ -95,18 +94,18 @@ func (e *EventInformer) Run(ctx context.Context) {
 			switch ev.Type {
 			case watch.Added:
 				e.handleEvent(object)
-				//if debug.Debug() {
+				// if debug.Debug() {
 				//	fmt.Printf("> Event: %#v\n", object)
-				//}
+				// }
 			case watch.Modified:
 				e.handleEvent(object)
-				//if debug.Debug() {
+				// if debug.Debug() {
 				//	fmt.Printf("> Event: %#v\n", object)
-				//}
+				// }
 			case watch.Deleted:
-				//if debug.Debug() {
+				// if debug.Debug() {
 				//	fmt.Printf("> Event: %#v\n", object)
-				//}
+				// }
 			case watch.Error:
 				return true, fmt.Errorf("event watch error: %v", ev.Object)
 			}

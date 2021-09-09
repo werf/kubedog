@@ -38,13 +38,13 @@ const (
 	HopeUntilEndOfDeployProcess       FailMode = "HopeUntilEndOfDeployProcess"
 )
 
-//type DeployCondition string
+// type DeployCondition string
 //
-//const (
+// const (
 //	ControllerIsReady DeployCondition = "ControllerIsReady"
 //	PodIsReady        DeployCondition = "PodIsReady"
 //	EndOfDeploy       DeployCondition = "EndOfDeploy"
-//)
+// )
 
 var ErrFailWholeDeployProcessImmediately = errors.New("fail whole deploy process immediately")
 

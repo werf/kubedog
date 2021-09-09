@@ -314,7 +314,7 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) {
 				d.resourceDeleted <- object
 			case watch.Error:
 				err := fmt.Errorf("StatefulSet error: %v", e.Object)
-				//d.errors <- err
+				// d.errors <- err
 				return true, err
 			}
 
