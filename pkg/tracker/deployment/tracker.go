@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
@@ -51,6 +52,8 @@ type Tracker struct {
 	podStatuses      map[string]pod.PodStatus
 	rsNameByPod      map[string]string
 
+	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
+
 	TrackedPodsNames []string
 
 	Added  chan DeploymentStatus
@@ -67,7 +70,7 @@ type Tracker struct {
 	resourceAdded      chan *appsv1.Deployment
 	resourceModified   chan *appsv1.Deployment
 	resourceDeleted    chan *appsv1.Deployment
-	resourceFailed     chan string
+	resourceFailed     chan interface{}
 	replicaSetAdded    chan *appsv1.ReplicaSet
 	replicaSetModified chan *appsv1.ReplicaSet
 	replicaSetDeleted  chan *appsv1.ReplicaSet
@@ -105,11 +108,13 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		podStatuses:      make(map[string]pod.PodStatus),
 		rsNameByPod:      make(map[string]string),
 
+		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
+
 		errors:             make(chan error, 0),
 		resourceAdded:      make(chan *appsv1.Deployment, 1),
 		resourceModified:   make(chan *appsv1.Deployment, 1),
 		resourceDeleted:    make(chan *appsv1.Deployment, 1),
-		resourceFailed:     make(chan string, 1),
+		resourceFailed:     make(chan interface{}, 1),
 		replicaSetAdded:    make(chan *appsv1.ReplicaSet, 1),
 		replicaSetModified: make(chan *appsv1.ReplicaSet, 1),
 		replicaSetDeleted:  make(chan *appsv1.ReplicaSet, 1),
@@ -153,22 +158,27 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			d.TrackedPodsNames = nil
 			d.Status <- DeploymentStatus{}
 
-		case reason := <-d.resourceFailed:
-			d.State = tracker.ResourceFailed
-			d.failedReason = reason
+		case failure := <-d.resourceFailed:
+			switch failure := failure.(type) {
+			case string:
+				d.State = tracker.ResourceFailed
+				d.failedReason = failure
 
-			var status DeploymentStatus
-			if d.lastObject != nil {
-				d.StatusGeneration++
-				newPodsNames, err := d.getNewPodsNames()
-				if err != nil {
-					return err
+				var status DeploymentStatus
+				if d.lastObject != nil {
+					d.StatusGeneration++
+					newPodsNames, err := d.getNewPodsNames()
+					if err != nil {
+						return err
+					}
+					status = NewDeploymentStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, newPodsNames)
+				} else {
+					status = DeploymentStatus{IsFailed: true, FailedReason: failure}
 				}
-				status = NewDeploymentStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, d.podStatuses, newPodsNames)
-			} else {
-				status = DeploymentStatus{IsFailed: true, FailedReason: reason}
+				d.Failed <- status
+			default:
+				panic(fmt.Errorf("unexpected type %T", failure))
 			}
-			d.Failed <- status
 
 		case rs := <-d.replicaSetAdded:
 			d.knownReplicaSets[rs.Name] = rs
@@ -453,7 +463,9 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	doneChan := make(chan struct{}, 0)
 
 	newCtx, cancelPodCtx := context.WithCancel(_ctx)
-	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube)
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
+	})
 	if !d.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = d.LogsFromTime
 	}

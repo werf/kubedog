@@ -46,7 +46,7 @@ type Tracker struct {
 	objectAdded    chan *v1beta1.Canary
 	objectModified chan *v1beta1.Canary
 	objectDeleted  chan *v1beta1.Canary
-	objectFailed   chan string
+	objectFailed   chan interface{}
 }
 
 func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
@@ -71,7 +71,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		objectAdded:    make(chan *v1beta1.Canary, 0),
 		objectModified: make(chan *v1beta1.Canary, 0),
 		objectDeleted:  make(chan *v1beta1.Canary, 0),
-		objectFailed:   make(chan string, 1),
+		objectFailed:   make(chan interface{}, 1),
 		errors:         make(chan error, 0),
 	}
 }
@@ -93,14 +93,19 @@ func (canary *Tracker) Track(ctx context.Context) error {
 			if err := canary.handleCanaryState(ctx, object); err != nil {
 				return err
 			}
-		case reason := <-canary.objectFailed:
-			canary.State = tracker.ResourceFailed
-			canary.failedReason = reason
+		case failure := <-canary.objectFailed:
+			switch failure := failure.(type) {
+			case string:
+				canary.State = tracker.ResourceFailed
+				canary.failedReason = failure
 
-			var status CanaryStatus
+				var status CanaryStatus
 
-			status = CanaryStatus{IsFailed: true, FailedReason: reason}
-			canary.Failed <- status
+				status = CanaryStatus{IsFailed: true, FailedReason: failure}
+				canary.Failed <- status
+			default:
+				panic(fmt.Errorf("unexpected type %T", failure))
+			}
 		case <-ctx.Done():
 			if ctx.Err() == context.Canceled {
 				return nil

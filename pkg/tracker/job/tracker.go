@@ -60,10 +60,12 @@ type Tracker struct {
 	failedReason string
 	podStatuses  map[string]pod.PodStatus
 
+	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
+
 	objectAdded    chan *batchv1.Job
 	objectModified chan *batchv1.Job
 	objectDeleted  chan *batchv1.Job
-	objectFailed   chan string
+	objectFailed   chan interface{}
 	errors         chan error
 
 	podAddedRelay chan *corev1.Pod
@@ -96,12 +98,14 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 
 		podStatuses: make(map[string]pod.PodStatus),
 
+		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
+
 		State: tracker.Initial,
 
 		objectAdded:    make(chan *batchv1.Job, 0),
 		objectModified: make(chan *batchv1.Job, 0),
 		objectDeleted:  make(chan *batchv1.Job, 0),
-		objectFailed:   make(chan string, 1),
+		objectFailed:   make(chan interface{}, 1),
 		errors:         make(chan error, 0),
 
 		podAddedRelay:           make(chan *corev1.Pod, 0),
@@ -131,18 +135,23 @@ func (job *Tracker) Track(ctx context.Context) error {
 				return err
 			}
 
-		case reason := <-job.objectFailed:
-			job.State = tracker.ResourceFailed
-			job.failedReason = reason
+		case failure := <-job.objectFailed:
+			switch failure := failure.(type) {
+			case string:
+				job.State = tracker.ResourceFailed
+				job.failedReason = failure
 
-			var status JobStatus
-			if job.lastObject != nil {
-				job.StatusGeneration++
-				status = NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
-			} else {
-				status = JobStatus{IsFailed: true, FailedReason: reason}
+				var status JobStatus
+				if job.lastObject != nil {
+					job.StatusGeneration++
+					status = NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
+				} else {
+					status = JobStatus{IsFailed: true, FailedReason: failure}
+				}
+				job.Failed <- status
+			default:
+				panic(fmt.Errorf("unexpected type %T", failure))
 			}
-			job.Failed <- status
 
 		case <-job.objectDeleted:
 			job.State = tracker.ResourceDeleted
@@ -347,7 +356,9 @@ func (job *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 	doneChan := make(chan struct{}, 0)
 
 	newCtx, cancelPodCtx := context.WithCancel(_ctx)
-	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube)
+	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube, pod.Options{
+		IgnoreReadinessProbeFailsByContainerName: job.ignoreReadinessProbeFailsByContainerName,
+	})
 	if !job.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = job.LogsFromTime
 	}

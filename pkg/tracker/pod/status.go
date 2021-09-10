@@ -25,7 +25,7 @@ type PodStatus struct {
 	IsSucceeded  bool
 	FailedReason string
 
-	ContainersErrors map[string]string
+	ContainersErrors []ContainerError
 }
 
 func NewPodStatus(pod *corev1.Pod, statusGeneration uint64, trackedContainers []string, isTrackerFailed bool, trackerFailedReason string) PodStatus {
@@ -154,10 +154,13 @@ func setContainersStatusesToPodStatus(status *PodStatus, pod *corev1.Pod) {
 			switch cs.State.Waiting.Reason {
 			case "ImagePullBackOff", "ErrImagePull", "CrashLoopBackOff", "ErrImageNeverPull":
 				if status.ContainersErrors == nil {
-					status.ContainersErrors = make(map[string]string)
+					status.ContainersErrors = []ContainerError{}
 				}
 
-				status.ContainersErrors[cs.Name] = fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message)
+				status.ContainersErrors = append(status.ContainersErrors, ContainerError{
+					ContainerName: cs.Name,
+					Message:       fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message),
+				})
 			}
 		}
 	}

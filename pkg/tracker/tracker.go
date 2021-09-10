@@ -40,9 +40,10 @@ type Tracker struct {
 }
 
 type Options struct {
-	ParentContext context.Context
-	Timeout       time.Duration
-	LogsFromTime  time.Time
+	ParentContext                            context.Context
+	Timeout                                  time.Duration
+	LogsFromTime                             time.Time
+	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 }
 
 type ResourceError struct {
