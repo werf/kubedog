@@ -12,7 +12,11 @@ go_build_v2() {
     chmod -R 0777 $RELEASE_BUILD_DIR/$VERSION
 
     for os in linux darwin windows ; do
-        for arch in amd64 ; do
+        for arch in amd64 arm64 ; do
+            if [ "$os" == "windows" ] && [ "$arch" == "arm64" ] ; then
+                continue
+            fi
+
             outputFile=$RELEASE_BUILD_DIR/$VERSION/$os-$arch/bin/kubedog
             if [ "$os" == "windows" ] ; then
                 outputFile=$outputFile.exe
