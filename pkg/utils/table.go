@@ -7,12 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"golang.org/x/crypto/ssh/terminal"
-
 	"github.com/acarl005/stripansi"
-
 	"github.com/werf/logboek"
 	"github.com/werf/logboek/pkg/types"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type Table struct {
@@ -231,11 +229,12 @@ func (t *Table) getWidth() int {
 	minWidth := 60
 
 	tw := terminalWidth()
-	if tw == 0 {
+	switch {
+	case tw == 0:
 		return defaultWidth
-	} else if tw < minWidth {
+	case tw < minWidth:
 		return minWidth
-	} else {
+	default:
 		return tw
 	}
 }
@@ -281,11 +280,12 @@ func (t *Table) Commit(extraColumns ...interface{}) {
 		}
 
 		var resultLine string
-		if line != "" && extraLine != "" {
+		switch {
+		case line != "" && extraLine != "":
 			resultLine += line + extraLine
-		} else if extraLine != "" {
+		case extraLine != "":
 			resultLine += padValue("", t.width) + extraLine
-		} else {
+		default:
 			resultLine += line + padValue("", t.width-len([]rune(line)))
 		}
 

@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	v1beta1 "github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
+	"github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
 	flaggerv1beta1 "github.com/fluxcd/flagger/pkg/client/clientset/versioned/typed/flagger/v1beta1"
-	"github.com/werf/kubedog/pkg/kube"
-	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,6 +14,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
+
+	"github.com/werf/kubedog/pkg/kube"
+	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/tracker/debug"
 )
 
 type FailedReport struct {
@@ -60,26 +61,24 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		},
 
 		Added:     make(chan CanaryStatus, 1),
-		Succeeded: make(chan CanaryStatus, 0),
-		Failed:    make(chan CanaryStatus, 0),
+		Succeeded: make(chan CanaryStatus),
+		Failed:    make(chan CanaryStatus),
 		Status:    make(chan CanaryStatus, 100),
 
 		EventMsg: make(chan string, 1),
 
 		State: tracker.Initial,
 
-		objectAdded:    make(chan *v1beta1.Canary, 0),
-		objectModified: make(chan *v1beta1.Canary, 0),
-		objectDeleted:  make(chan *v1beta1.Canary, 0),
+		objectAdded:    make(chan *v1beta1.Canary),
+		objectModified: make(chan *v1beta1.Canary),
+		objectDeleted:  make(chan *v1beta1.Canary),
 		objectFailed:   make(chan interface{}, 1),
-		errors:         make(chan error, 0),
+		errors:         make(chan error),
 	}
 }
 
 func (canary *Tracker) Track(ctx context.Context) error {
-	var err error
-
-	err = canary.runInformer(ctx)
+	err := canary.runInformer(ctx)
 	if err != nil {
 		return err
 	}
@@ -114,7 +113,6 @@ func (canary *Tracker) Track(ctx context.Context) error {
 		case err := <-canary.errors:
 			return err
 		}
-
 	}
 }
 
@@ -156,11 +154,12 @@ func (canary *Tracker) runInformer(ctx context.Context) error {
 				}
 			}
 
-			if e.Type == watch.Added {
+			switch e.Type {
+			case watch.Added:
 				canary.objectAdded <- object
-			} else if e.Type == watch.Modified {
+			case watch.Modified:
 				canary.objectModified <- object
-			} else if e.Type == watch.Deleted {
+			case watch.Deleted:
 				canary.objectDeleted <- object
 			}
 
@@ -187,24 +186,26 @@ func (canary *Tracker) handleCanaryState(ctx context.Context, object *v1beta1.Ca
 
 	switch canary.State {
 	case tracker.Initial:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			canary.State = tracker.ResourceFailed
 			canary.Failed <- status
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			canary.State = tracker.ResourceSucceeded
 			canary.Succeeded <- status
-		} else {
+		default:
 			canary.State = tracker.ResourceAdded
 			canary.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			canary.State = tracker.ResourceFailed
 			canary.Failed <- status
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			canary.State = tracker.ResourceSucceeded
 			canary.Succeeded <- status
-		} else {
+		default:
 			canary.Status <- status
 		}
 	case tracker.ResourceSucceeded:

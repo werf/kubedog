@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/werf/kubedog/pkg/tracker/debug"
 	appsv1 "k8s.io/api/apps/v1"
+
+	"github.com/werf/kubedog/pkg/tracker/debug"
 )
 
 func getDaemonSetStatus(obj *appsv1.DaemonSet) string {

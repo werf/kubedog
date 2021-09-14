@@ -26,9 +26,9 @@ const (
 	TimedOutReason = "ProgressDeadlineExceeded"
 )
 
-//func DeploymentCompleteAll(deployment *appsv1.Deployment) {
+// func DeploymentCompleteAll(deployment *appsv1.Deployment) {
 
-//}
+// }
 
 func equalSign(isEqual bool) string {
 	if isEqual {
@@ -62,8 +62,6 @@ func DeploymentProgressing(deployment *appsv1.Deployment, newStatus *appsv1.Depl
 		newStatus.AvailableReplicas > deployment.Status.AvailableReplicas
 }
 
-var nowFn = func() time.Time { return time.Now() }
-
 // DeploymentTimedOut considers a deployment to have timed out once its condition that reports progress
 // is older than progressDeadlineSeconds or a Progressing condition with a TimedOutReason reason already
 // exists.
@@ -87,7 +85,7 @@ func DeploymentTimedOut(deployment *appsv1.Deployment, newStatus *appsv1.Deploym
 	// progress or tried to create a replica set, or resumed a paused deployment and
 	// compare against progressDeadlineSeconds.
 	from := condition.LastUpdateTime
-	now := nowFn()
+	now := time.Now()
 	delta := time.Duration(*deployment.Spec.ProgressDeadlineSeconds) * time.Second
 	timedOut := from.Add(delta).Before(now)
 
@@ -287,7 +285,7 @@ func GetControllerOf(controllee metav1.Object) *metav1.OwnerReference {
 	ownerRefs := controllee.GetOwnerReferences()
 	for i := range ownerRefs {
 		owner := &ownerRefs[i]
-		if owner.Controller != nil && *owner.Controller == true {
+		if owner.Controller != nil && *owner.Controller {
 			return owner
 		}
 	}

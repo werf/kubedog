@@ -3,11 +3,11 @@ package deployment
 import (
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/utils"
-
-	appsv1 "k8s.io/api/apps/v1"
 )
 
 type DeploymentStatus struct {
@@ -104,7 +104,7 @@ processingPodsStatuses:
 	return res
 }
 
-// Status returns a message describing deployment status, and a bool value indicating if the status is considered done.
+// DeploymentRolloutStatus returns a message describing deployment status, and a bool value indicating if the status is considered done.
 func DeploymentRolloutStatus(deployment *appsv1.Deployment, revision int64) (string, bool, error) {
 	if revision > 0 {
 		deploymentRev, err := utils.Revision(deployment)
@@ -131,5 +131,5 @@ func DeploymentRolloutStatus(deployment *appsv1.Deployment, revision int64) (str
 		}
 		return fmt.Sprintf("deployment %q successfully rolled out\n", deployment.Name), true, nil
 	}
-	return fmt.Sprintf("Waiting for deployment spec update to be observed...\n"), false, nil
+	return "Waiting for deployment spec update to be observed...\n", false, nil
 }

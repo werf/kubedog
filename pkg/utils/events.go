@@ -3,9 +3,8 @@ package utils
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +27,7 @@ func (list SortableEvents) Less(i, j int) bool {
 	return list[i].LastTimestamp.Time.Before(list[j].LastTimestamp.Time)
 }
 
-// formatEventSource formats EventSource as a comma separated string excluding Host when empty
+// FormatEventSource formats EventSource as a comma separated string excluding Host when empty
 func FormatEventSource(es corev1.EventSource) string {
 	EventSourceString := []string{es.Component}
 	if len(es.Host) > 0 {
@@ -42,11 +41,11 @@ func DescribeEvents(el *corev1.EventList) {
 		fmt.Printf("Events:\t<none>\n")
 		return
 	}
-	//w.Flush()
+	// w.Flush()
 	sort.Sort(SortableEvents(el.Items))
-	//w.Write(LEVEL_0, "Events:\n  Type\tReason\tAge\tFrom\tMessage\n")
+	// w.Write(LEVEL_0, "Events:\n  Type\tReason\tAge\tFrom\tMessage\n")
 	fmt.Printf("Events:\n  Type\tReason\tAge\tFrom\tAction\tMessage\n")
-	//w.Write(LEVEL_1, "----\t------\t----\t----\t-------\n")
+	// w.Write(LEVEL_1, "----\t------\t----\t----\t-------\n")
 	fmt.Printf("----\t------\t----\t----\t-------\n")
 	for _, e := range el.Items {
 		var interval string
@@ -55,7 +54,7 @@ func DescribeEvents(el *corev1.EventList) {
 		} else {
 			interval = TranslateTimestampSince(e.FirstTimestamp)
 		}
-		//w.Write(LEVEL_1, "%v\t%v\t%s\t%v\t%v\n",
+		// w.Write(LEVEL_1, "%v\t%v\t%s\t%v\t%v\n",
 		fmt.Printf("%v\t%v\t%s\t%v\t%v\t%v\n",
 			e.Type,
 			e.Reason,
@@ -65,7 +64,6 @@ func DescribeEvents(el *corev1.EventList) {
 			strings.TrimSpace(e.Message),
 		)
 	}
-
 }
 
 func EventFieldSelectorFromResource(obj interface{}) string {

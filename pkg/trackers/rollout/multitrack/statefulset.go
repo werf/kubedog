@@ -3,9 +3,10 @@ package multitrack
 import (
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
 	"github.com/werf/kubedog/pkg/tracker/statefulset"
-	"k8s.io/client-go/kubernetes"
 )
 
 func (mt *multitracker) TrackStatefulSet(kube kubernetes.Interface, spec MultitrackSpec, opts MultitrackOptions) error {

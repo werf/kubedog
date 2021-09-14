@@ -3,9 +3,10 @@ package multitrack
 import (
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/werf/kubedog/pkg/tracker/job"
 	"github.com/werf/kubedog/pkg/tracker/pod"
-	"k8s.io/client-go/kubernetes"
 )
 
 func (mt *multitracker) TrackJob(kube kubernetes.Interface, spec MultitrackSpec, opts MultitrackOptions) error {

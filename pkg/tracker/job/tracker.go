@@ -6,8 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/werf/kubedog/pkg/utils"
-
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +20,7 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
 	"github.com/werf/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type FailedReport struct {
@@ -87,14 +86,14 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		},
 
 		Added:     make(chan JobStatus, 1),
-		Succeeded: make(chan JobStatus, 0),
-		Failed:    make(chan JobStatus, 0),
+		Succeeded: make(chan JobStatus),
+		Failed:    make(chan JobStatus),
 		Status:    make(chan JobStatus, 100),
 
 		EventMsg:    make(chan string, 1),
 		AddedPod:    make(chan PodAddedReport, 10),
 		PodLogChunk: make(chan *pod.PodLogChunk, 1000),
-		PodError:    make(chan PodErrorReport, 0),
+		PodError:    make(chan PodErrorReport),
 
 		podStatuses: make(map[string]pod.PodStatus),
 
@@ -102,13 +101,13 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 
 		State: tracker.Initial,
 
-		objectAdded:    make(chan *batchv1.Job, 0),
-		objectModified: make(chan *batchv1.Job, 0),
-		objectDeleted:  make(chan *batchv1.Job, 0),
+		objectAdded:    make(chan *batchv1.Job),
+		objectModified: make(chan *batchv1.Job),
+		objectDeleted:  make(chan *batchv1.Job),
 		objectFailed:   make(chan interface{}, 1),
-		errors:         make(chan error, 0),
+		errors:         make(chan error),
 
-		podAddedRelay:           make(chan *corev1.Pod, 0),
+		podAddedRelay:           make(chan *corev1.Pod),
 		podStatusesRelay:        make(chan map[string]pod.PodStatus, 10),
 		podContainerErrorsRelay: make(chan map[string]pod.ContainerErrorReport, 10),
 		donePodsRelay:           make(chan map[string]pod.PodStatus, 10),
@@ -116,9 +115,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 }
 
 func (job *Tracker) Track(ctx context.Context) error {
-	var err error
-
-	err = job.runInformer(ctx)
+	err := job.runInformer(ctx)
 	if err != nil {
 		return err
 	}
@@ -144,7 +141,7 @@ func (job *Tracker) Track(ctx context.Context) error {
 				var status JobStatus
 				if job.lastObject != nil {
 					job.StatusGeneration++
-					status = NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
+					status = NewJobStatus(job.lastObject, job.StatusGeneration, job.State == tracker.ResourceFailed, job.failedReason, job.podStatuses, job.TrackedPodsNames)
 				} else {
 					status = JobStatus{IsFailed: true, FailedReason: failure}
 				}
@@ -162,7 +159,7 @@ func (job *Tracker) Track(ctx context.Context) error {
 		case pod := <-job.podAddedRelay:
 			if job.lastObject != nil {
 				job.StatusGeneration++
-				status := NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
+				status := NewJobStatus(job.lastObject, job.StatusGeneration, job.State == tracker.ResourceFailed, job.failedReason, job.podStatuses, job.TrackedPodsNames)
 				job.AddedPod <- PodAddedReport{
 					PodName:   pod.Name,
 					JobStatus: status,
@@ -216,7 +213,7 @@ func (job *Tracker) Track(ctx context.Context) error {
 			}
 			if job.lastObject != nil {
 				job.StatusGeneration++
-				status := NewJobStatus(job.lastObject, job.StatusGeneration, (job.State == tracker.ResourceFailed), job.failedReason, job.podStatuses, job.TrackedPodsNames)
+				status := NewJobStatus(job.lastObject, job.StatusGeneration, job.State == tracker.ResourceFailed, job.failedReason, job.podStatuses, job.TrackedPodsNames)
 
 				for podName, containerError := range podContainerErrors {
 					job.PodError <- PodErrorReport{
@@ -270,11 +267,12 @@ func (job *Tracker) runInformer(ctx context.Context) error {
 				}
 			}
 
-			if e.Type == watch.Added {
+			switch e.Type {
+			case watch.Added:
 				job.objectAdded <- object
-			} else if e.Type == watch.Modified {
+			case watch.Modified:
 				job.objectModified <- object
-			} else if e.Type == watch.Deleted {
+			case watch.Deleted:
 				job.objectDeleted <- object
 			}
 
@@ -307,36 +305,39 @@ func (job *Tracker) handleJobState(ctx context.Context, object *batchv1.Job) err
 			job.runEventsInformer(ctx, object)
 		}
 
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			job.State = tracker.ResourceFailed
 			job.Failed <- status
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			job.State = tracker.ResourceSucceeded
 			job.Succeeded <- status
-		} else {
+		default:
 			job.State = tracker.ResourceAdded
 			job.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			job.State = tracker.ResourceFailed
 			job.Failed <- status
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			job.State = tracker.ResourceSucceeded
 			job.Succeeded <- status
-		} else {
+		default:
 			job.Status <- status
 		}
 	case tracker.ResourceSucceeded:
 		job.Status <- status
 	case tracker.ResourceDeleted:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			job.State = tracker.ResourceFailed
 			job.Failed <- status
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			job.State = tracker.ResourceSucceeded
 			job.Succeeded <- status
-		} else {
+		default:
 			job.State = tracker.ResourceAdded
 			job.Added <- status
 		}
@@ -352,8 +353,8 @@ func (job *Tracker) runPodsInformer(ctx context.Context, object *batchv1.Job) {
 }
 
 func (job *Tracker) runPodTracker(_ctx context.Context, podName string) error {
-	errorChan := make(chan error, 0)
-	doneChan := make(chan struct{}, 0)
+	errorChan := make(chan error)
+	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancel(_ctx)
 	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube, pod.Options{

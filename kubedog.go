@@ -1,5 +1,3 @@
 package kubedog
 
-var (
-	Version = "dev"
-)
+var Version = "dev"

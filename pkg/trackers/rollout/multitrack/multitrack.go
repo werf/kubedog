@@ -9,15 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
-
 	"github.com/werf/logboek/pkg/types"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/canary"
 	"github.com/werf/kubedog/pkg/tracker/daemonset"
 	"github.com/werf/kubedog/pkg/tracker/debug"
-
 	"github.com/werf/kubedog/pkg/tracker/deployment"
 	"github.com/werf/kubedog/pkg/tracker/job"
 	"github.com/werf/kubedog/pkg/tracker/statefulset"
@@ -176,8 +174,8 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		serviceMessagesByResource: make(map[string][]string),
 	}
 
-	errorChan := make(chan error, 0)
-	doneChan := make(chan struct{}, 0)
+	errorChan := make(chan error)
+	doneChan := make(chan struct{})
 
 	var statusProgressChan <-chan time.Time
 
@@ -191,7 +189,7 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 		defer statusProgressTicker.Stop()
 		statusProgressChan = statusProgressTicker.C
 	} else {
-		statusProgressChan = make(chan time.Time, 0)
+		statusProgressChan = make(chan time.Time)
 	}
 
 	doDisplayStatusProgress := func() error {

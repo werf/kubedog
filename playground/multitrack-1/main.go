@@ -13,11 +13,11 @@ func main() {
 
 	err = multitrack.Multitrack(kube.Kubernetes, multitrack.MultitrackSpecs{
 		Deployments: []multitrack.MultitrackSpec{
-			multitrack.MultitrackSpec{ResourceName: "tiller-deploy", Namespace: "kube-system"},
-			multitrack.MultitrackSpec{ResourceName: "coredns", Namespace: "kube-system"},
+			{ResourceName: "tiller-deploy", Namespace: "kube-system"},
+			{ResourceName: "coredns", Namespace: "kube-system"},
 		},
 		Jobs: []multitrack.MultitrackSpec{
-			multitrack.MultitrackSpec{ResourceName: "myjob", Namespace: "myns"},
+			{ResourceName: "myjob", Namespace: "myns"},
 		},
 	}, multitrack.MultitrackOptions{})
 	if err != nil {

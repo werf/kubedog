@@ -27,24 +27,31 @@ type CommonControllerFeed struct {
 func (f *CommonControllerFeed) OnAdded(function func(bool) error) {
 	f.OnAddedFunc = function
 }
+
 func (f *CommonControllerFeed) OnReady(function func() error) {
 	f.OnReadyFunc = function
 }
+
 func (f *CommonControllerFeed) OnFailed(function func(string) error) {
 	f.OnFailedFunc = function
 }
+
 func (f *CommonControllerFeed) OnEventMsg(function func(string) error) {
 	f.OnEventMsgFunc = function
 }
+
 func (f *CommonControllerFeed) OnAddedReplicaSet(function func(replicaset.ReplicaSet) error) {
 	f.OnAddedReplicaSetFunc = function
 }
+
 func (f *CommonControllerFeed) OnAddedPod(function func(replicaset.ReplicaSetPod) error) {
 	f.OnAddedPodFunc = function
 }
+
 func (f *CommonControllerFeed) OnPodLogChunk(function func(*replicaset.ReplicaSetPodLogChunk) error) {
 	f.OnPodLogChunkFunc = function
 }
+
 func (f *CommonControllerFeed) OnPodError(function func(replicaset.ReplicaSetPodError) error) {
 	f.OnPodErrorFunc = function
 }
