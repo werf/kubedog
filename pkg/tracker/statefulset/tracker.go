@@ -87,14 +87,14 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		},
 
 		Added:  make(chan StatefulSetStatus, 1),
-		Ready:  make(chan StatefulSetStatus, 0),
-		Failed: make(chan StatefulSetStatus, 0),
+		Ready:  make(chan StatefulSetStatus),
+		Failed: make(chan StatefulSetStatus),
 		Status: make(chan StatefulSetStatus, 100),
 
 		EventMsg:    make(chan string, 1),
 		AddedPod:    make(chan PodAddedReport, 10),
 		PodLogChunk: make(chan *replicaset.ReplicaSetPodLogChunk, 1000),
-		PodError:    make(chan PodErrorReport, 0),
+		PodError:    make(chan PodErrorReport),
 
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
@@ -105,7 +105,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		resourceModified: make(chan *appsv1.StatefulSet, 1),
 		resourceDeleted:  make(chan *appsv1.StatefulSet, 1),
 		resourceFailed:   make(chan interface{}, 1),
-		errors:           make(chan error, 0),
+		errors:           make(chan error),
 
 		podAddedRelay:           make(chan *corev1.Pod, 1),
 		podStatusesRelay:        make(chan map[string]pod.PodStatus, 10),
@@ -148,7 +148,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 		case failure := <-d.resourceFailed:
 			switch failure := failure.(type) {
 			case string:
-				if strings.Index(failure, "The POST operation against Pod could not be completed at this time, please try again.") != -1 {
+				if strings.Contains(failure, "The POST operation against Pod could not be completed at this time, please try again.") {
 					// this is warning, not an error
 
 					if d.lastObject != nil {
@@ -163,7 +163,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 					var status StatefulSetStatus
 					if d.lastObject != nil {
 						d.StatusGeneration++
-						status = NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
+						status = NewStatefulSetStatus(d.lastObject, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
 					} else {
 						status = StatefulSetStatus{IsFailed: true, FailedReason: failure}
 					}
@@ -178,7 +178,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 
 			if d.lastObject != nil {
 				d.StatusGeneration++
-				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
+				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
 
 				d.AddedPod <- PodAddedReport{
 					ReplicaSetPod: replicaset.ReplicaSetPod{
@@ -247,7 +247,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			}
 			if d.lastObject != nil {
 				d.StatusGeneration++
-				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
+				status := NewStatefulSetStatus(d.lastObject, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, nil, d.podStatuses, d.getNewPodsNames())
 
 				for podName, containerError := range podContainerErrors {
 					d.PodError <- PodErrorReport{
@@ -273,8 +273,6 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			return err
 		}
 	}
-
-	return err
 }
 
 // runStatefulSetInformer watch for StatefulSet events
@@ -334,8 +332,6 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) {
 			fmt.Printf("      sts/%s informer DONE\n", d.ResourceName)
 		}
 	}()
-
-	return
 }
 
 // runPodsInformer watch for StatefulSet Pods events
@@ -346,12 +342,12 @@ func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.StatefulSe
 }
 
 func (d *Tracker) runPodTracker(_ctx context.Context, podName string) error {
-	errorChan := make(chan error, 0)
-	doneChan := make(chan struct{}, 0)
+	errorChan := make(chan error)
+	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancel(_ctx)
 	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
-		d.ignoreReadinessProbeFailsByContainerName,
+		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
 	if !d.LogsFromTime.IsZero() {
 		podTracker.LogsFromTime = d.LogsFromTime
@@ -417,7 +413,7 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 	d.lastObject = object
 	d.StatusGeneration++
 
-	status := NewStatefulSetStatus(object, d.StatusGeneration, (d.State == tracker.ResourceFailed), d.failedReason, warningMessages, d.podStatuses, d.getNewPodsNames())
+	status := NewStatefulSetStatus(object, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, warningMessages, d.podStatuses, d.getNewPodsNames())
 
 	switch d.State {
 	case tracker.Initial:
@@ -427,36 +423,39 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 			d.runEventsInformer(ctx, object)
 		}
 
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			d.State = tracker.ResourceFailed
 			d.Failed <- status
-		} else if status.IsReady {
+		case status.IsReady:
 			d.State = tracker.ResourceReady
 			d.Ready <- status
-		} else {
+		default:
 			d.State = tracker.ResourceAdded
 			d.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			d.State = tracker.ResourceFailed
 			d.Failed <- status
-		} else if status.IsReady {
+		case status.IsReady:
 			d.State = tracker.ResourceReady
 			d.Ready <- status
-		} else {
+		default:
 			d.Status <- status
 		}
 	case tracker.ResourceSucceeded:
 		d.Status <- status
 	case tracker.ResourceDeleted:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			d.State = tracker.ResourceFailed
 			d.Failed <- status
-		} else if status.IsReady {
+		case status.IsReady:
 			d.State = tracker.ResourceReady
 			d.Ready <- status
-		} else {
+		default:
 			d.State = tracker.ResourceAdded
 			d.Added <- status
 		}
@@ -475,7 +474,7 @@ func (d *Tracker) runEventsInformer(ctx context.Context, object *appsv1.Stateful
 func (d *Tracker) getNewPodsNames() []string {
 	res := []string{}
 
-	for podName, _ := range d.podStatuses {
+	for podName := range d.podStatuses {
 		if podRevision, hasKey := d.podRevisions[podName]; hasKey {
 			if d.lastObject != nil {
 				if d.lastObject.Status.UpdateRevision == podRevision {

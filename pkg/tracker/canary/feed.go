@@ -4,10 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/werf/kubedog/pkg/tracker"
 	"k8s.io/client-go/kubernetes"
-
 	watchtools "k8s.io/client-go/tools/watch"
+
+	"github.com/werf/kubedog/pkg/tracker"
 )
 
 type Feed interface {
@@ -39,22 +39,26 @@ type feed struct {
 func (f *feed) OnAdded(function func() error) {
 	f.OnAddedFunc = function
 }
+
 func (f *feed) OnSucceeded(function func() error) {
 	f.OnSucceededFunc = function
 }
+
 func (f *feed) OnFailed(function func(string) error) {
 	f.OnFailedFunc = function
 }
+
 func (f *feed) OnEventMsg(function func(string) error) {
 	f.OnEventMsgFunc = function
 }
+
 func (f *feed) OnStatus(function func(CanaryStatus) error) {
 	f.OnStatusFunc = function
 }
 
 func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
-	errorChan := make(chan error, 0)
-	doneChan := make(chan struct{}, 0)
+	errorChan := make(chan error)
+	doneChan := make(chan struct{})
 
 	parentContext := opts.ParentContext
 	if parentContext == nil {

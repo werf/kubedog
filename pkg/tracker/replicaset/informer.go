@@ -22,7 +22,7 @@ type ReplicaSet struct {
 	IsNew bool
 }
 
-// TODO add containers!
+// TODO: add containers!
 type ReplicaSetPod struct {
 	ReplicaSet ReplicaSet
 	Name       string
@@ -62,7 +62,7 @@ func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMeta
 		ReplicaSetAdded:    make(chan *appsv1.ReplicaSet, 1),
 		ReplicaSetModified: make(chan *appsv1.ReplicaSet, 1),
 		ReplicaSetDeleted:  make(chan *appsv1.ReplicaSet, 1),
-		Errors:             make(chan error, 0),
+		Errors:             make(chan error),
 	}
 }
 
@@ -135,6 +135,4 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) {
 			fmt.Printf("      %s replicaSets informer DONE\n", r.FullResourceName)
 		}
 	}()
-
-	return
 }

@@ -3,10 +3,10 @@ package statefulset
 import (
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
-
-	appsv1 "k8s.io/api/apps/v1"
 )
 
 type StatefulSetStatus struct {
@@ -143,7 +143,7 @@ processingPodsStatuses:
 	return res
 }
 
-// Status returns a message describing statefulset status, and a bool value indicating if the status is considered done.
+// StatefulSetRolloutStatus returns a message describing statefulset status, and a bool value indicating if the status is considered done.
 // A code from kubectl sources. Doesn't work well for OnDelete, downscale and partition: 0 case.
 // https://github.com/kubernetes/kubernetes/issues/72212
 // Now used only for debug purposes

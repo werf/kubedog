@@ -11,7 +11,6 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/pod"
 )
 
-// TrackJobTillDone
 func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := job.NewFeed()
 

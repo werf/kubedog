@@ -3,9 +3,10 @@ package daemonset
 import (
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
-	appsv1 "k8s.io/api/apps/v1"
 )
 
 type DaemonSetStatus struct {
@@ -99,7 +100,7 @@ processingPodsStatuses:
 	return res
 }
 
-// Status returns a message describing daemon set status, and a bool value indicating if the status is considered done.
+// DaemonSetRolloutStatus returns a message describing daemon set status, and a bool value indicating if the status is considered done.
 func DaemonSetRolloutStatus(daemon *appsv1.DaemonSet) (string, bool, error) {
 	if daemon.Spec.UpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
 		return "", true, fmt.Errorf("rollout status is only available for %s strategy type", appsv1.RollingUpdateDaemonSetStrategyType)
@@ -113,5 +114,5 @@ func DaemonSetRolloutStatus(daemon *appsv1.DaemonSet) (string, bool, error) {
 		}
 		return fmt.Sprintf("daemon set %q successfully rolled out\n", daemon.Name), true, nil
 	}
-	return fmt.Sprintf("Waiting for daemon set spec update to be observed...\n"), false, nil
+	return "Waiting for daemon set spec update to be observed...\n", false, nil
 }

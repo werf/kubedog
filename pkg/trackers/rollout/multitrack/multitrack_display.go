@@ -628,11 +628,12 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 
 	switch resourceFailMode {
 	case FailWholeDeployProcessImmediately:
-		if isReady {
+		switch {
+		case isReady:
 			return utils.GreenF("%s", resourceCaption)
-		} else if isFailed {
+		case isFailed:
 			return utils.RedF("%s", resourceCaption)
-		} else {
+		default:
 			return utils.YellowF("%s", resourceCaption)
 		}
 

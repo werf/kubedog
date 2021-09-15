@@ -32,11 +32,11 @@ func (indicator *StringEqualConditionIndicator) IsProgressing(prevIndicator *Str
 }
 
 func (indicator *StringEqualConditionIndicator) IsReady() bool {
-	return (indicator.Value == indicator.TargetValue)
+	return indicator.Value == indicator.TargetValue
 }
 
 func (indicator *StringEqualConditionIndicator) IsFailed() bool {
-	return (indicator.Value == indicator.FailedValue)
+	return indicator.Value == indicator.FailedValue
 }
 
 func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *StringEqualConditionIndicator, opts FormatTableElemOptions) string {
@@ -51,17 +51,18 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		res += " -> "
 	}
 
-	if !opts.IsResourceNew {
+	switch {
+	case !opts.IsResourceNew:
 		res += indicator.Value
-	} else if indicator.IsReady() {
+	case indicator.IsReady():
 		res += utils.GreenF("%s", indicator.Value)
-	} else if indicator.IsFailed() {
+	case indicator.IsFailed():
 		if opts.DisableWarningColors {
 			res += indicator.Value
 		} else {
 			res += utils.RedF("%s", indicator.Value)
 		}
-	} else {
+	default:
 		if opts.DisableWarningColors {
 			res += indicator.Value
 		} else {
@@ -90,7 +91,7 @@ func (indicator *Int32EqualConditionIndicator) IsProgressing(prevIndicator *Int3
 }
 
 func (indicator *Int32EqualConditionIndicator) IsReady() bool {
-	return (indicator.Value == indicator.TargetValue)
+	return indicator.Value == indicator.TargetValue
 }
 
 func (indicator *Int32EqualConditionIndicator) FormatTableElem(prevIndicator *Int32EqualConditionIndicator, opts FormatTableElemOptions) string {
@@ -132,7 +133,7 @@ func (indicator *Int64GreaterOrEqualConditionIndicator) IsProgressing(prevIndica
 }
 
 func (indicator *Int64GreaterOrEqualConditionIndicator) IsReady() bool {
-	return (indicator.Value >= indicator.TargetValue)
+	return indicator.Value >= indicator.TargetValue
 }
 
 func (indicator *Int64GreaterOrEqualConditionIndicator) formatValue(withTargetValue bool) string {

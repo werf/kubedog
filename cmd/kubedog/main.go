@@ -11,11 +11,10 @@ import (
 	"strconv"
 	"time"
 
-	"k8s.io/klog"
-	klog_v2 "k8s.io/klog/v2"
-
 	"github.com/spf13/cobra"
 	"github.com/werf/logboek"
+	"k8s.io/klog"
+	klog_v2 "k8s.io/klog/v2"
 
 	"github.com/werf/kubedog"
 	"github.com/werf/kubedog/pkg/kube"
@@ -27,7 +26,7 @@ import (
 
 func main() {
 	// set flag.Parsed() for glog
-	flag.CommandLine.Parse([]string{})
+	_ = flag.CommandLine.Parse([]string{})
 
 	var namespace string
 	var timeoutSeconds int
@@ -80,7 +79,14 @@ func main() {
 			os.Exit(1)
 		}
 
-		err := kube.Init(kube.InitOptions{kube.KubeConfigOptions{Context: kubeContext, ConfigPath: kubeConfig, ConfigDataBase64: kubeConfigBase64, ConfigPathMergeList: kubeConfigPathMergeList}})
+		err := kube.Init(kube.InitOptions{
+			KubeConfigOptions: kube.KubeConfigOptions{
+				Context:             kubeContext,
+				ConfigPath:          kubeConfig,
+				ConfigDataBase64:    kubeConfigBase64,
+				ConfigPathMergeList: kubeConfigPathMergeList,
+			},
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Unable to initialize kube: %s\n", err)
 			os.Exit(1)
@@ -122,10 +128,7 @@ func main() {
 
 	for _, envVar := range []string{"KUBEDOG_KUBE_CONFIG", "KUBECONFIG"} {
 		if v := os.Getenv(envVar); v != "" {
-			for _, path := range filepath.SplitList(v) {
-				kubeConfigPathMergeList = append(kubeConfigPathMergeList, path)
-			}
-
+			kubeConfigPathMergeList = append(kubeConfigPathMergeList, filepath.SplitList(v)...)
 			break
 		}
 	}

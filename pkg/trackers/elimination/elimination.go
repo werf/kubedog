@@ -8,13 +8,9 @@ import (
 	"time"
 
 	"github.com/werf/logboek"
-
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
@@ -54,7 +50,7 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 	}
 
 	var outputMux sync.Mutex
-	errorChan := make(chan error, 0)
+	errorChan := make(chan error)
 
 	for _, spec := range specs {
 		tracker := NewEliminationTracker(kubeDynamicClient, spec)

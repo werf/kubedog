@@ -107,14 +107,14 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options)
 		},
 
 		Added:     make(chan PodStatus, 1),
-		Deleted:   make(chan PodStatus, 0),
-		Succeeded: make(chan PodStatus, 0),
-		Ready:     make(chan PodStatus, 0),
-		Failed:    make(chan FailedReport, 0),
+		Deleted:   make(chan PodStatus),
+		Succeeded: make(chan PodStatus),
+		Ready:     make(chan PodStatus),
+		Failed:    make(chan FailedReport),
 		Status:    make(chan PodStatus, 100),
 
 		EventMsg:          make(chan string, 1),
-		ContainerError:    make(chan ContainerErrorReport, 0),
+		ContainerError:    make(chan ContainerErrorReport),
 		ContainerLogChunk: make(chan *ContainerLogChunk, 1000),
 
 		State:                        tracker.Initial,
@@ -122,14 +122,14 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options)
 		ContainerTrackerStateChanges: make(map[string]chan tracker.TrackerState),
 		LogsFromTime:                 time.Time{},
 
-		readinessProbes:                          make(map[string]*ReadinessProbe, 0),
+		readinessProbes:                          make(map[string]*ReadinessProbe),
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
-		objectAdded:    make(chan *corev1.Pod, 0),
-		objectModified: make(chan *corev1.Pod, 0),
-		objectDeleted:  make(chan *corev1.Pod, 0),
+		objectAdded:    make(chan *corev1.Pod),
+		objectModified: make(chan *corev1.Pod),
+		objectDeleted:  make(chan *corev1.Pod),
 		objectFailed:   make(chan interface{}, 1),
-		errors:         make(chan error, 0),
+		errors:         make(chan error),
 		containerDone:  make(chan string, 10),
 	}
 }
@@ -326,55 +326,59 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 
 	switch pod.State {
 	case tracker.Initial:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			pod.State = tracker.ResourceFailed
 			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
-		} else if status.IsReady {
+		case status.IsReady:
 			pod.State = tracker.ResourceReady
 			pod.Ready <- status
-		} else {
+		default:
 			pod.State = tracker.ResourceAdded
 			pod.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			pod.State = tracker.ResourceFailed
 			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
-		} else if status.IsReady {
+		case status.IsReady:
 			pod.State = tracker.ResourceReady
 			pod.Ready <- status
-		} else {
+		default:
 			pod.Status <- status
 		}
 	case tracker.ResourceSucceeded:
 		pod.Status <- status
 	case tracker.ResourceReady:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			pod.State = tracker.ResourceFailed
 			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
-		} else {
+		default:
 			pod.Status <- status
 		}
 	case tracker.ResourceDeleted:
-		if status.IsFailed {
+		switch {
+		case status.IsFailed:
 			pod.State = tracker.ResourceFailed
 			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
-		} else if status.IsSucceeded {
+		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
-		} else if status.IsReady {
+		case status.IsReady:
 			pod.State = tracker.ResourceReady
 			pod.Ready <- status
-		} else {
+		default:
 			pod.State = tracker.ResourceAdded
 			pod.Added <- status
 		}
@@ -385,12 +389,8 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 
 func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	allContainerStatuses := make([]corev1.ContainerStatus, 0)
-	for _, cs := range object.Status.InitContainerStatuses {
-		allContainerStatuses = append(allContainerStatuses, cs)
-	}
-	for _, cs := range object.Status.ContainerStatuses {
-		allContainerStatuses = append(allContainerStatuses, cs)
-	}
+	allContainerStatuses = append(allContainerStatuses, object.Status.InitContainerStatuses...)
+	allContainerStatuses = append(allContainerStatuses, object.Status.ContainerStatuses...)
 
 	for _, cs := range allContainerStatuses {
 		if cs.State.Running != nil || cs.State.Terminated != nil {
@@ -537,7 +537,8 @@ func (pod *Tracker) runContainersTrackers(ctx context.Context, object *corev1.Po
 
 		pod.TrackedContainers = append(pod.TrackedContainers, containerName)
 
-		newCtx, _ := context.WithCancel(ctx)
+		newCtx, newCtxCancel := context.WithCancel(ctx)
+		_ = newCtxCancel
 
 		go func(ctx context.Context) {
 			if debug.Debug() {
@@ -589,14 +590,15 @@ func (pod *Tracker) runInformer(ctx context.Context) error {
 				}
 			}
 
-			if e.Type == watch.Added {
+			switch e.Type {
+			case watch.Added:
 				pod.objectAdded <- object
-			} else if e.Type == watch.Modified {
+			case watch.Modified:
 				pod.objectModified <- object
-			} else if e.Type == watch.Deleted {
+			case watch.Deleted:
 				pod.objectDeleted <- object
-			} else if e.Type == watch.Error {
-				pod.errors <- fmt.Errorf("Pod %s error: %v", pod.ResourceName, e.Object)
+			case watch.Error:
+				pod.errors <- fmt.Errorf("pod %s error: %v", pod.ResourceName, e.Object)
 			}
 
 			return false, nil

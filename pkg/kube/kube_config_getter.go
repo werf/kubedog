@@ -69,9 +69,7 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 
 		if opts.ImpersonateGroup != nil {
 			configFlags.ImpersonateGroup = new([]string)
-			for _, val := range opts.ImpersonateGroup {
-				*configFlags.ImpersonateGroup = append(*configFlags.ImpersonateGroup, val)
-			}
+			*configFlags.ImpersonateGroup = append(*configFlags.ImpersonateGroup, opts.ImpersonateGroup...)
 		}
 
 		configGetter = configFlags

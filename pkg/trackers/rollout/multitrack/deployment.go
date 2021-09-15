@@ -3,9 +3,10 @@ package multitrack
 import (
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/werf/kubedog/pkg/tracker/deployment"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
-	"k8s.io/client-go/kubernetes"
 )
 
 func (mt *multitracker) TrackDeployment(kube kubernetes.Interface, spec MultitrackSpec, opts MultitrackOptions) error {

@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/werf/kubedog/pkg/utils"
-
-	"github.com/werf/kubedog/pkg/tracker/indicators"
-	"github.com/werf/kubedog/pkg/tracker/pod"
-
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
+
+	"github.com/werf/kubedog/pkg/tracker/indicators"
+	"github.com/werf/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type JobStatus struct {

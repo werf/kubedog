@@ -11,7 +11,6 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
 )
 
-// TrackDeploymentTillReady
 func TrackDeploymentTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := deployment.NewFeed()
 

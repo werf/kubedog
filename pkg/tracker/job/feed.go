@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"sync"
 
+	"k8s.io/client-go/kubernetes"
+	watchtools "k8s.io/client-go/tools/watch"
+
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/pod"
-	"k8s.io/client-go/kubernetes"
-
-	watchtools "k8s.io/client-go/tools/watch"
 )
 
 type Feed interface {
@@ -48,31 +48,38 @@ type feed struct {
 func (f *feed) OnAdded(function func() error) {
 	f.OnAddedFunc = function
 }
+
 func (f *feed) OnSucceeded(function func() error) {
 	f.OnSucceededFunc = function
 }
+
 func (f *feed) OnFailed(function func(string) error) {
 	f.OnFailedFunc = function
 }
+
 func (f *feed) OnEventMsg(function func(string) error) {
 	f.OnEventMsgFunc = function
 }
+
 func (f *feed) OnAddedPod(function func(string) error) {
 	f.OnAddedPodFunc = function
 }
+
 func (f *feed) OnPodLogChunk(function func(*pod.PodLogChunk) error) {
 	f.OnPodLogChunkFunc = function
 }
+
 func (f *feed) OnPodError(function func(pod.PodError) error) {
 	f.OnPodErrorFunc = function
 }
+
 func (f *feed) OnStatus(function func(JobStatus) error) {
 	f.OnStatusFunc = function
 }
 
 func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
-	errorChan := make(chan error, 0)
-	doneChan := make(chan struct{}, 0)
+	errorChan := make(chan error)
+	doneChan := make(chan struct{})
 
 	parentContext := opts.ParentContext
 	if parentContext == nil {

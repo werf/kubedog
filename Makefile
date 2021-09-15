@@ -15,6 +15,7 @@ GOSRC = $(shell find . -type f -name '*.go')
 
 fmt:
 	gofumpt -l -w .
+	gci -w -local github.com/werf/kubedog .
 
 lint:
 	GOOS=$(OS) GOARCH="$(GOARCH)" golangci-lint run ./...

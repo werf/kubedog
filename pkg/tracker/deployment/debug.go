@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
-
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/werf/kubedog/pkg/tracker/debug"
@@ -22,7 +21,7 @@ func getDeploymentStatus(client kubernetes.Interface, prevObj *appsv1.Deployment
 	for _, c := range newObj.Status.Conditions {
 		msgs = append(msgs, fmt.Sprintf("        - %s - %s - %s: \"%s\"", c.Type, c.Status, c.Reason, c.Message))
 	}
-	msgs = append(msgs, fmt.Sprintf("        cpl: %v, prg: %v, tim: %v,    gn: %d, ogn: %d, des: %d, rdy: %d, upd: %d, avl: %d, uav: %d",
+	msgs = append(msgs, fmt.Sprintf("        prg: %v, tim: %v,    gn: %d, ogn: %d, des: %d, rdy: %d, upd: %d, avl: %d, uav: %d",
 		debug.YesNo(utils.DeploymentProgressing(prevObj, &newObj.Status)),
 		debug.YesNo(utils.DeploymentTimedOut(prevObj, &newObj.Status)),
 		newObj.Generation,

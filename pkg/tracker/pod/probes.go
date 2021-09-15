@@ -5,8 +5,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/werf/kubedog/pkg/tracker/debug"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/werf/kubedog/pkg/tracker/debug"
 )
 
 type ReadinessProbe struct {
@@ -31,7 +32,7 @@ func NewReadinessProbe(readinessProbe, startupProbe *corev1.Probe, isStartedNow 
 
 func (p *ReadinessProbe) SetupStartedAtTime(isStartedNow *bool) {
 	var startedAtTime *time.Time
-	if isStartedNow != nil && *isStartedNow == true {
+	if isStartedNow != nil && *isStartedNow {
 		now := time.Now()
 		startedAtTime = &now
 	}

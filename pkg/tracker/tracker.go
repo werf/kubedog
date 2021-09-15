@@ -7,13 +7,10 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
-
 	"k8s.io/client-go/kubernetes"
 )
 
-var (
-	StopTrack = errors.New("stop tracking now")
-)
+var StopTrack = errors.New("stop tracking now")
 
 const (
 	Initial           TrackerState = ""

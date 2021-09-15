@@ -51,8 +51,8 @@ func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer
 			FullResourceName: trk.FullResourceName,
 		},
 		Resource:         resource,
-		Errors:           make(chan error, 0),
-		initialEventUids: make(map[types.UID]bool, 0),
+		Errors:           make(chan error),
+		initialEventUids: make(map[types.UID]bool),
 	}
 }
 
@@ -63,7 +63,7 @@ func (e *EventInformer) WithChannels(msgCh chan string, failCh chan interface{},
 	return e
 }
 
-// runEventsInformer watch for StatefulSet events
+// Run watch for StatefulSet events
 func (e *EventInformer) Run(ctx context.Context) {
 	e.handleInitialEvents(ctx)
 
@@ -132,8 +132,6 @@ func (e *EventInformer) Run(ctx context.Context) {
 			fmt.Printf("     %s event informer DONE\n", e.FullResourceName)
 		}
 	}()
-
-	return
 }
 
 // handleInitialEvents saves uids of existed k8s events to ignore watch.Added events on them

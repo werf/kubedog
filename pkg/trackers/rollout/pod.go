@@ -10,7 +10,6 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/pod"
 )
 
-// TrackPodTillReady
 func TrackPodTillReady(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
 	feed := pod.NewFeed()
 

@@ -16,7 +16,7 @@ import (
 	"github.com/werf/kubedog/pkg/utils"
 )
 
-// PodInformer monitor pod add events to use with controllers (Deployment, StatefulSet, DaemonSet)
+// PodsInformer monitor pod add events to use with controllers (Deployment, StatefulSet, DaemonSet)
 type PodsInformer struct {
 	tracker.Tracker
 	Controller utils.ControllerMetadata
@@ -33,7 +33,7 @@ func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) 
 		},
 		Controller: controller,
 		PodAdded:   make(chan *corev1.Pod, 1),
-		Errors:     make(chan error, 0),
+		Errors:     make(chan error),
 	}
 }
 
@@ -85,13 +85,8 @@ func (p *PodsInformer) Run(ctx context.Context) {
 				}
 			}
 
-			switch e.Type {
-			case watch.Added:
+			if e.Type == watch.Added {
 				p.PodAdded <- object
-				// case watch.Modified:
-				// 	d.resourceModified <- object
-				// case watch.Deleted:
-				// 	d.resourceDeleted <- object
 			}
 
 			return false, nil
@@ -105,6 +100,4 @@ func (p *PodsInformer) Run(ctx context.Context) {
 			fmt.Printf("      %s pods informer DONE\n", p.FullResourceName)
 		}
 	}()
-
-	return
 }

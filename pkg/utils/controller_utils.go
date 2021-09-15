@@ -32,15 +32,19 @@ type ReplicaSetControllerWrapper struct {
 func (w *ReplicaSetControllerWrapper) NewReplicaSetTemplate() corev1.PodTemplateSpec {
 	return w.replicaSetTemplate
 }
+
 func (w *ReplicaSetControllerWrapper) LabelSelector() *metav1.LabelSelector {
 	return w.labelSelector
 }
+
 func (w *ReplicaSetControllerWrapper) Namespace() string {
 	return w.metadata.GetNamespace()
 }
+
 func (w *ReplicaSetControllerWrapper) Name() string {
 	return w.metadata.GetName()
 }
+
 func (w *ReplicaSetControllerWrapper) UID() types.UID {
 	return w.metadata.GetUID()
 }

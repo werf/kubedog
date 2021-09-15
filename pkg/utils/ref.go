@@ -18,10 +18,9 @@ var (
 	ErrNoSelfLink = errors.New("selfLink was empty, can't make reference")
 )
 
-var scheme *runtime.Scheme = runtime.NewScheme()
+var scheme = runtime.NewScheme()
 
 func GetReference(obj runtime.Object) (*corev1.ObjectReference, error) {
-
 	if obj == nil {
 		return nil, ErrNilObject
 	}
@@ -92,5 +91,4 @@ func GetReference(obj runtime.Object) (*corev1.ObjectReference, error) {
 		UID:             objectMeta.GetUID(),
 		ResourceVersion: objectMeta.GetResourceVersion(),
 	}, nil
-
 }

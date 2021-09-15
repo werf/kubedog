@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"sync"
 
+	"k8s.io/client-go/kubernetes"
+	watchtools "k8s.io/client-go/tools/watch"
+
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/controller"
 	"github.com/werf/kubedog/pkg/tracker/debug"
-	"k8s.io/client-go/kubernetes"
-
-	watchtools "k8s.io/client-go/tools/watch"
 )
 
 type Feed interface {
@@ -40,8 +40,8 @@ func (f *feed) OnStatus(function func(StatefulSetStatus) error) {
 }
 
 func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {
-	errorChan := make(chan error, 0)
-	doneChan := make(chan bool, 0)
+	errorChan := make(chan error)
+	doneChan := make(chan bool)
 
 	parentContext := opts.ParentContext
 	if parentContext == nil {

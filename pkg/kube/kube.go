@@ -11,15 +11,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	// load auth plugins
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/exec"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // only required to authenticate against GKE clusters
+
+	// only required to authenticate against GKE clusters
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/openstack"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/werf/kubedog/pkg/utils"
 )
@@ -30,10 +32,11 @@ const (
 )
 
 var (
-	Kubernetes, Client kubernetes.Interface
-	DynamicClient      dynamic.Interface
-	DefaultNamespace   string
-	Context            string
+	Kubernetes       kubernetes.Interface
+	Client           kubernetes.Interface
+	DynamicClient    dynamic.Interface
+	DefaultNamespace string
+	Context          string
 )
 
 type InitOptions struct {
@@ -145,7 +148,7 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient,
 }
 
 func makeOutOfClusterClientConfigError(configPath, context string, err error) error {
-	baseErrMsg := fmt.Sprintf("out-of-cluster configuration problem")
+	baseErrMsg := "out-of-cluster configuration problem"
 
 	if configPath != "" {
 		baseErrMsg += fmt.Sprintf(", custom kube config path is %q", configPath)
@@ -182,10 +185,8 @@ func GetClientConfig(context string, configPath string, configData []byte, confi
 		if err := os.Setenv(clientcmd.RecommendedConfigPathEnvVar, configPathEnvVar); err != nil {
 			return nil, fmt.Errorf("unable to set env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
 		}
-	} else {
-		if err := os.Unsetenv(clientcmd.RecommendedConfigPathEnvVar); err != nil {
-			return nil, fmt.Errorf("unable to unset env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
-		}
+	} else if err := os.Unsetenv(clientcmd.RecommendedConfigPathEnvVar); err != nil {
+		return nil, fmt.Errorf("unable to unset env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
 	}
 
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
@@ -236,13 +237,14 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string, configP
 		res.DefaultNamespace = ns
 	}
 
-	if config, err := clientConfig.ClientConfig(); err != nil {
+	config, err := clientConfig.ClientConfig()
+	if err != nil {
 		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
-	} else if config == nil {
-		return nil, nil
-	} else {
-		res.Config = config
 	}
+	if config == nil {
+		return nil, nil
+	}
+	res.Config = config
 
 	if context == "" {
 		if rc, err := clientConfig.RawConfig(); err != nil {
