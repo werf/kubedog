@@ -162,8 +162,7 @@ Invoke-WebRequest -Uri "https://tuf.kubedog.werf.io/targets/releases/0.6.1/windo
 ## Usage
 
 * [CLI usage](doc/usage.md#cli-usage)
-* [Library usage: Trackers](doc/usage.md#library-usage-trackers)
-* [Library usage: Custom trackers](doc/usage.md#library-usage-custom-trackers)
+* [Library usage: Multitracker](doc/usage.md#Multitracker)
 
 ## Community
 
