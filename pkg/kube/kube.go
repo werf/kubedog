@@ -168,25 +168,25 @@ func GetClientConfig(context string, configPath string, configData []byte, confi
 	}
 
 	if configData != nil {
-		if config, err := clientcmd.Load(configData); err != nil {
+		config, err := clientcmd.Load(configData)
+
+		if err != nil {
 			return nil, fmt.Errorf("unable to load config data: %s", err)
-		} else {
-			return clientcmd.NewDefaultClientConfig(*config, overrides), nil
 		}
+
+		return clientcmd.NewDefaultClientConfig(*config, overrides), nil
 	}
 
-	oldEnvVar := os.Getenv(clientcmd.RecommendedConfigPathEnvVar)
-	defer func() {
-		os.Setenv(clientcmd.RecommendedConfigPathEnvVar, oldEnvVar)
-	}()
-
 	if len(configPathMergeList) > 0 {
+		oldEnvVar := os.Getenv(clientcmd.RecommendedConfigPathEnvVar)
+		defer func() {
+			os.Setenv(clientcmd.RecommendedConfigPathEnvVar, oldEnvVar)
+		}()
+
 		configPathEnvVar := strings.Join(configPathMergeList, string(filepath.ListSeparator))
 		if err := os.Setenv(clientcmd.RecommendedConfigPathEnvVar, configPathEnvVar); err != nil {
 			return nil, fmt.Errorf("unable to set env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
 		}
-	} else if err := os.Unsetenv(clientcmd.RecommendedConfigPathEnvVar); err != nil {
-		return nil, fmt.Errorf("unable to unset env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
 	}
 
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
