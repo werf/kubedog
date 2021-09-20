@@ -11,5 +11,6 @@ jobs:
     - uses: werf/third-party-release-please-action@werf
       with:
         release-type: go
+        token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 #        release-notes-header: ''
 #        release-notes-footer: ''
