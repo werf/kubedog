@@ -1,0 +1,16 @@
+name: Do release PR or GitHub release
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: werf/third-party-release-please-action@werf
+      with:
+        release-type: go
+        token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+#        release-notes-header: ''
+#        release-notes-footer: ''
