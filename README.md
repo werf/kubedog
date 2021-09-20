@@ -121,7 +121,7 @@ To allow automatic activation of `kubedog` binary for new PowerShell instances y
 ```powershell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 
-# Activate kubedog binary automatically during PowerSell initializations.
+# Activate kubedog binary automatically during PowerShell initializations.
 if (!(Test-Path "$profile")) {
   New-Item -Path "$profile" -Force
 }
