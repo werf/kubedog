@@ -135,7 +135,7 @@ Add-Content -Path "$profile" -Value '. $(trdl use kubedog 0 stable)'
 Execute in shell:
 ```shell
 curl -L "https://tuf.kubedog.werf.io/targets/releases/0.6.1/linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')/bin/kubedog" -o /tmp/kubedog
-install /tmp/kubedog /usr/local/bin/kubedog
+sudo install /tmp/kubedog /usr/local/bin/kubedog
 ```
 
 #### macOS
@@ -143,7 +143,7 @@ install /tmp/kubedog /usr/local/bin/kubedog
 Execute in shell:
 ```shell
 curl -L "https://tuf.kubedog.werf.io/targets/releases/0.6.1/darwin-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')/bin/kubedog" -o /tmp/kubedog
-install /tmp/kubedog /usr/local/bin/kubedog
+sudo install /tmp/kubedog /usr/local/bin/kubedog
 ```
 
 #### Windows
