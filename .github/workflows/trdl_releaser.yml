@@ -1,27 +1,23 @@
 name: Trdl releaser
 on:
-  push:
-    branches:
-    - main
+  create:
 
 jobs:
   release:
-    name: Perform release using trdl server
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    name: Perform kubedog release using trdl server
     runs-on: ubuntu-latest
     steps:
-
-    - uses: GoogleCloudPlatform/release-please-action@v2
-      id: release
-      with:
-        release-type: simple
-
+    - name: Prepare git info
+      id: git_info
+      run: |
+        echo ::set-output name=GIT_TAG::${GITHUB_REF#refs/tags/}
     - name: Release
       uses: werf/trdl-vault-actions/release@main
       with:
         vault-addr: ${{ secrets.TRDL_VAULT_ADDR }}
         project-name: kubedog
-        git-tag: ${{ steps.release.outputs.tag_name }}
+        git-tag: ${{ steps.git_info.outputs.GIT_TAG }}
         vault-auth-method: approle
         vault-role-id: ${{ secrets.TRDL_VAULT_ROLE_ID }}
         vault-secret-id: ${{ secrets.TRDL_VAULT_SECRET_ID }}
-      if: ${{ steps.release.outputs.release_created }}
