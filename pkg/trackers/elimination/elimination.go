@@ -2,7 +2,9 @@ package elimination
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -56,7 +58,21 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 		tracker := NewEliminationTracker(kubeDynamicClient, spec)
 
 		go func() {
-			errorChan <- tracker.Track(ctx, opts)
+			if debug() {
+				fmt.Printf("-- TrackUntilEliminated: start track %s\n", tracker.Spec.String())
+			}
+
+			err := tracker.Track(ctx, opts)
+
+			if debug() {
+				fmt.Printf("-- TrackUntilEliminated: stop track %s -> %v\n", tracker.Spec.String(), err)
+			}
+
+			errorChan <- err
+
+			if debug() {
+				fmt.Printf("-- TrackUntilEliminated: %s sent errorChan signal %v\n", tracker.Spec.String(), err)
+			}
 		}()
 
 		go func() {
@@ -82,6 +98,10 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 	for {
 		select {
 		case err := <-errorChan:
+			if debug() {
+				fmt.Printf("-- TrackUntilEliminated: received errorChan signal %v current pendingJobs=%d\n", err, pendingJobs)
+			}
+
 			pendingJobs--
 			if err != nil {
 				errors = append(errors, err)
@@ -95,6 +115,11 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 					}
 					return fmt.Errorf("%s", strings.Join(errorMsgs, "; "))
 				}
+
+				if debug() {
+					fmt.Printf("-- TrackUntilEliminated: no pending jobs: exiting\n")
+				}
+
 				return nil
 			}
 		case <-ctx.Done():
@@ -116,17 +141,24 @@ type EliminationTracker struct {
 	Spec              *EliminationTrackerSpec
 
 	ResourceStatus chan ResourceStatus
+
+	resourceEliminated chan struct{}
+	stopInformer       chan struct{}
 }
 
 func NewEliminationTracker(kubeDynamicClient dynamic.Interface, spec *EliminationTrackerSpec) *EliminationTracker {
 	return &EliminationTracker{
-		KubeDynamicClient: kubeDynamicClient,
-		Spec:              spec,
-		ResourceStatus:    make(chan ResourceStatus, 10),
+		KubeDynamicClient:  kubeDynamicClient,
+		Spec:               spec,
+		ResourceStatus:     make(chan ResourceStatus, 10),
+		stopInformer:       make(chan struct{}),
+		resourceEliminated: make(chan struct{}),
 	}
 }
 
 func (tracker *EliminationTracker) Track(ctx context.Context, opts EliminationTrackerOptions) error {
+	tracker.startInformer(ctx)
+
 	list, err := tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("unable to get list of %q in the namespace %q: %s", tracker.Spec.GroupVersionResource, tracker.Spec.Namespace, err)
@@ -134,40 +166,86 @@ func (tracker *EliminationTracker) Track(ctx context.Context, opts EliminationTr
 
 	var found bool
 	for i := range list.Items {
-		logboek.Context(context.Background()).Debug().LogF("Check resource %q %q against %q!\n", tracker.Spec.GroupVersionResource, list.Items[i].GetName(), tracker.Spec.ResourceName)
 		if list.Items[i].GetName() == tracker.Spec.ResourceName {
-			logboek.Context(context.Background()).Debug().LogF("Found resource %q %q!\n", tracker.Spec.GroupVersionResource, tracker.Spec.ResourceName)
 			found = true
+			break
 		}
 	}
-	if !found {
-		return nil
+
+	if found {
+		if debug() {
+			fmt.Printf("-- EliminationTracker: found resource %s: waiting for delete event\n", tracker.Spec.String())
+		}
+		<-tracker.resourceEliminated
+	} else {
+		if debug() {
+			fmt.Printf("-- EliminationTracker: not found resource %s: exiting\n", tracker.Spec.String())
+		}
+		close(tracker.stopInformer)
 	}
 
+	return nil
+}
+
+func (tracker *EliminationTracker) startInformer(ctx context.Context) {
 	informerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(tracker.KubeDynamicClient, 0, tracker.Spec.Namespace, nil)
 	informer := informerFactory.ForResource(tracker.Spec.GroupVersionResource)
 
-	stopCh := make(chan struct{})
-
 	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if debug() {
+				objDump, _ := json.MarshalIndent(obj, "", "  ")
+				fmt.Printf("Added object:\n%s\n---\n", objDump)
+			}
+		},
+		UpdateFunc: func(obj, newObj interface{}) {
+			if debug() {
+				objDump, _ := json.MarshalIndent(newObj, "", "  ")
+				fmt.Printf("Updated object:\n%s\n---\n", objDump)
+			}
+		},
 		DeleteFunc: func(obj interface{}) {
+			if debug() {
+				objDump, _ := json.MarshalIndent(obj, "", "  ")
+				fmt.Printf("Deleted object:\n%s\n---\n", objDump)
+			}
+
 			u, ok := obj.(*unstructured.Unstructured)
 			if !ok {
 				return
 			}
 
 			if u.GetName() == tracker.Spec.ResourceName {
-				logboek.Context(context.Background()).Debug().LogF("Stopping informer for %q %q\n", tracker.Spec.GroupVersionResource, tracker.Spec.ResourceName)
-				close(stopCh)
+				if debug() {
+					fmt.Printf("-- EliminationTracker: stopping informer for %s\n", tracker.Spec.String())
+				}
+
+				close(tracker.stopInformer)
+				close(tracker.resourceEliminated)
 			}
 		},
 	}
 
 	informer.Informer().AddEventHandler(handlers)
 
-	logboek.Context(context.Background()).Debug().LogF("Starting informer for %q %q\n", tracker.Spec.GroupVersionResource, tracker.Spec.ResourceName)
+	if debug() {
+		fmt.Printf("-- EliminationTracker: starting informer for %s\n", tracker.Spec.String())
+	}
 
-	informer.Informer().Run(stopCh)
+	go informer.Informer().Run(tracker.stopInformer)
 
-	return nil
+	for {
+		if informer.Informer().HasSynced() {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	if debug() {
+		fmt.Printf("-- EliminationTracker: informer for %s has been synced\n", tracker.Spec.String())
+	}
+}
+
+func debug() bool {
+	return os.Getenv("KUBEDOG_ELIMINATION_TRACKER_DEBUG") == "1"
 }
