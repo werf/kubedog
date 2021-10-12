@@ -169,7 +169,6 @@ func GetClientConfig(context string, configPath string, configData []byte, confi
 
 	if configData != nil {
 		config, err := clientcmd.Load(configData)
-
 		if err != nil {
 			return nil, fmt.Errorf("unable to load config data: %s", err)
 		}
