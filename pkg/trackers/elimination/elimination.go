@@ -9,12 +9,15 @@ import (
 	"sync"
 	"time"
 
+	watchtools "k8s.io/client-go/tools/watch"
+
 	"github.com/werf/logboek"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -59,19 +62,19 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 
 		go func() {
 			if debug() {
-				fmt.Printf("-- TrackUntilEliminated: start track %s\n", tracker.Spec.String())
+				fmt.Printf("[TrackUntilEliminated][%s] start track\n", tracker.Spec.String())
 			}
 
 			err := tracker.Track(ctx, opts)
 
 			if debug() {
-				fmt.Printf("-- TrackUntilEliminated: stop track %s -> %v\n", tracker.Spec.String(), err)
+				fmt.Printf("[TrackUntilEliminated][%s] stop track -> %v\n", tracker.Spec.String(), err)
 			}
 
 			errorChan <- err
 
 			if debug() {
-				fmt.Printf("-- TrackUntilEliminated: %s sent errorChan signal %v\n", tracker.Spec.String(), err)
+				fmt.Printf("[TrackUntilEliminated][%s] sent errorChan signal %v\n", tracker.Spec.String(), err)
 			}
 		}()
 
@@ -99,7 +102,7 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 		select {
 		case err := <-errorChan:
 			if debug() {
-				fmt.Printf("-- TrackUntilEliminated: received errorChan signal %v current pendingJobs=%d\n", err, pendingJobs)
+				fmt.Printf("[TrackUntilEliminated] received errorChan signal %v current pendingJobs=%d\n", err, pendingJobs)
 			}
 
 			pendingJobs--
@@ -117,7 +120,7 @@ func TrackUntilEliminated(ctx context.Context, kubeDynamicClient dynamic.Interfa
 				}
 
 				if debug() {
-					fmt.Printf("-- TrackUntilEliminated: no pending jobs: exiting\n")
+					fmt.Printf("[TrackUntilEliminated] no pending jobs: exiting\n")
 				}
 
 				return nil
@@ -157,93 +160,84 @@ func NewEliminationTracker(kubeDynamicClient dynamic.Interface, spec *Eliminatio
 }
 
 func (tracker *EliminationTracker) Track(ctx context.Context, opts EliminationTrackerOptions) error {
-	tracker.startInformer(ctx)
-
-	list, err := tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("unable to get list of %q in the namespace %q: %s", tracker.Spec.GroupVersionResource, tracker.Spec.Namespace, err)
+	listOpts := metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("metadata.name=%s", tracker.Spec.ResourceName),
 	}
 
-	var found bool
-	for i := range list.Items {
-		if list.Items[i].GetName() == tracker.Spec.ResourceName {
-			found = true
-			break
-		}
-	}
-
-	if found {
-		if debug() {
-			fmt.Printf("-- EliminationTracker: found resource %s: waiting for delete event\n", tracker.Spec.String())
-		}
-		<-tracker.resourceEliminated
-	} else {
-		if debug() {
-			fmt.Printf("-- EliminationTracker: not found resource %s: exiting\n", tracker.Spec.String())
-		}
-		close(tracker.stopInformer)
-	}
-
-	return nil
-}
-
-func (tracker *EliminationTracker) startInformer(ctx context.Context) {
-	informerFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(tracker.KubeDynamicClient, 0, tracker.Spec.Namespace, nil)
-	informer := informerFactory.ForResource(tracker.Spec.GroupVersionResource)
-
-	handlers := cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			if debug() {
-				objDump, _ := json.MarshalIndent(obj, "", "  ")
-				fmt.Printf("Added object:\n%s\n---\n", objDump)
-			}
+	lwe := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).List(ctx, listOpts)
 		},
-		UpdateFunc: func(obj, newObj interface{}) {
-			if debug() {
-				objDump, _ := json.MarshalIndent(newObj, "", "  ")
-				fmt.Printf("Updated object:\n%s\n---\n", objDump)
-			}
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).Watch(ctx, listOpts)
 		},
-		DeleteFunc: func(obj interface{}) {
-			if debug() {
-				objDump, _ := json.MarshalIndent(obj, "", "  ")
-				fmt.Printf("Deleted object:\n%s\n---\n", objDump)
-			}
+	}
 
-			u, ok := obj.(*unstructured.Unstructured)
-			if !ok {
-				return
-			}
+	_, err := watchtools.UntilWithSync(ctx, lwe, &unstructured.Unstructured{}, func(store cache.Store) (bool, error) {
+		objs := store.List()
+
+		if debug() {
+			fmt.Printf("[TrackUntilEliminated][%s] Precondition called with %d items in the list\n", tracker.Spec.String(), len(objs))
+		}
+
+		for _, obj := range objs {
+			u := obj.(*unstructured.Unstructured)
 
 			if u.GetName() == tracker.Spec.ResourceName {
 				if debug() {
-					fmt.Printf("-- EliminationTracker: stopping informer for %s\n", tracker.Spec.String())
+					fmt.Printf("[TrackUntilEliminated][%s] Found existing object: wait for deletion event\n", tracker.Spec.String())
 				}
-
-				close(tracker.stopInformer)
-				close(tracker.resourceEliminated)
+				return false, nil
 			}
-		},
-	}
-
-	informer.Informer().AddEventHandler(handlers)
-
-	if debug() {
-		fmt.Printf("-- EliminationTracker: starting informer for %s\n", tracker.Spec.String())
-	}
-
-	go informer.Informer().Run(tracker.stopInformer)
-
-	for {
-		if informer.Informer().HasSynced() {
-			break
 		}
-		time.Sleep(200 * time.Millisecond)
-	}
 
-	if debug() {
-		fmt.Printf("-- EliminationTracker: informer for %s has been synced\n", tracker.Spec.String())
-	}
+		if debug() {
+			fmt.Printf("[TrackUntilEliminated][%s] Not found existing object: stop tracking\n", tracker.Spec.String(), len(objs))
+		}
+		return true, nil
+	}, func(ev watch.Event) (bool, error) {
+		if debug() {
+			fmt.Printf("[TrackUntilEliminated][%s] event: %#v\n", tracker.Spec.String(), ev.Type)
+		}
+
+		obj := ev.Object
+
+		switch ev.Type {
+		case watch.Added:
+			if debug() {
+				objDump, _ := json.MarshalIndent(obj, "", "  ")
+				fmt.Printf("[TrackUntilEliminated][%s] Added object:\n%s\n---\n", tracker.Spec.String(), objDump)
+			}
+		case watch.Modified:
+			if debug() {
+				objDump, _ := json.MarshalIndent(obj, "", "  ")
+				fmt.Printf("[TrackUntilEliminated][%s] Updated object:\n%s\n---\n", tracker.Spec.String(), objDump)
+			}
+		case watch.Deleted:
+			if debug() {
+				objDump, _ := json.MarshalIndent(obj, "", "  ")
+				fmt.Printf("[TrackUntilEliminated][%s] Deleted object:\n%s\n---\n", tracker.Spec.String(), objDump)
+			}
+
+			u := obj.(*unstructured.Unstructured)
+
+			if u.GetName() == tracker.Spec.ResourceName {
+				close(tracker.resourceEliminated)
+				return true, nil
+			}
+
+		case watch.Error:
+			errData, err := json.Marshal(ev.Object)
+			if err != nil {
+				panic(err.Error())
+			}
+			return true, fmt.Errorf("%s watch error: %s", tracker.Spec.String(), errData)
+		}
+
+		return false, nil
+	})
+
+	return err
 }
 
 func debug() bool {
