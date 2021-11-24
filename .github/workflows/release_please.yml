@@ -12,5 +12,15 @@ jobs:
       with:
         release-type: go
         token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-#        release-notes-header: ''
-#        release-notes-footer: ''
+        # release-notes-header: ''
+        release-notes-footer: |
+          ## Installation
+          Recommended way to install `kubedog`: [https://github.com/werf/kubedog#with-trdl-recommended](https://github.com/werf/kubedog#with-trdl-recommended)
+
+          Alternatively, download `kubedog` binaries:
+          * [Linux amd64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/linux-amd64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/linux-amd64/bin/kubedog.sig))
+          * [Linux arm64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/linux-arm64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/linux-arm64/bin/kubedog.sig))
+          * [macOS amd64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/darwin-amd64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/darwin-amd64/bin/kubedog.sig))
+          * [macOS arm64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/darwin-arm64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/darwin-arm64/bin/kubedog.sig))
+          * [Windows amd64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/windows-amd64/bin/kubedog.exe) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/windows-amd64/bin/kubedog.exe.sig))
+          Verifying binaries: import [public PGP key](https://werf.io/kubedog.asc) for this release and verify binaries with the provided PGP signatures.
