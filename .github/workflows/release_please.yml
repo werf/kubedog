@@ -12,15 +12,21 @@ jobs:
       with:
         release-type: go
         token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-        # release-notes-header: ''
+        release-notes-header: "## Changelog"
         release-notes-footer: |
           ## Installation
-          Recommended way to install `kubedog`: [https://github.com/werf/kubedog#with-trdl-recommended](https://github.com/werf/kubedog#with-trdl-recommended)
+          To install `kubedog` we recommend following [these instructions](https://github.com/werf/kubedog#install-kubedog-cli).
 
-          Alternatively, download `kubedog` binaries:
+          Alternatively, you can download `kubedog` binaries from here:
           * [Linux amd64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/linux-amd64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/linux-amd64/bin/kubedog.sig))
           * [Linux arm64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/linux-arm64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/linux-arm64/bin/kubedog.sig))
           * [macOS amd64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/darwin-amd64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/darwin-amd64/bin/kubedog.sig))
           * [macOS arm64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/darwin-arm64/bin/kubedog) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/darwin-arm64/bin/kubedog.sig))
           * [Windows amd64](https://tuf.kubedog.werf.io/targets/releases/{{> version }}/windows-amd64/bin/kubedog.exe) ([PGP signature](https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/windows-amd64/bin/kubedog.exe.sig))
-          Verifying binaries: import [public PGP key](https://werf.io/kubedog.asc) for this release and verify binaries with the provided PGP signatures.
+
+          These binaries were signed with PGP and could be verified with the [kubedog PGP public key](https://werf.io/kubedog.asc). For example, `kubedog` binary can be downloaded and verified with `gpg` on Linux with these commands:
+          ```shell
+          curl -sSLO "https://tuf.kubedog.werf.io/targets/releases/{{> version }}/linux-amd64/bin/kubedog" -O "https://tuf.kubedog.werf.io/targets/signatures/{{> version }}/linux-amd64/bin/kubedog.sig"
+          curl -sSL https://werf.io/kubedog.asc | gpg --import
+          gpg --verify kubedog.sig kubedog
+          ```
