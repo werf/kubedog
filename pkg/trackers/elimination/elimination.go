@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	watchtools "k8s.io/client-go/tools/watch"
-
 	"github.com/werf/logboek"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
+	watchtools "k8s.io/client-go/tools/watch"
 )
 
 type EliminationTrackerSpec struct {
@@ -192,7 +191,7 @@ func (tracker *EliminationTracker) Track(ctx context.Context, opts EliminationTr
 		}
 
 		if debug() {
-			fmt.Printf("[TrackUntilEliminated][%s] Not found existing object: stop tracking\n", tracker.Spec.String(), len(objs))
+			fmt.Printf("[TrackUntilEliminated][%s][%d] Not found existing object: stop tracking\n", tracker.Spec.String(), len(objs))
 		}
 		return true, nil
 	}, func(ev watch.Event) (bool, error) {
