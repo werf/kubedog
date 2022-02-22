@@ -69,9 +69,7 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 
 		if opts.ImpersonateGroup != nil {
 			configFlags.ImpersonateGroup = new([]string)
-			for _, val := range opts.ImpersonateGroup {
-				*configFlags.ImpersonateGroup = append(*configFlags.ImpersonateGroup, val)
-			}
+			*configFlags.ImpersonateGroup = append(*configFlags.ImpersonateGroup, opts.ImpersonateGroup...)
 		}
 
 		configGetter = configFlags
@@ -136,6 +134,6 @@ func (getter *ClientGetterFromConfigData) getRawKubeConfigLoader() (clientcmd.Cl
 	if data, err := base64.StdEncoding.DecodeString(getter.ConfigDataBase64); err != nil {
 		return nil, fmt.Errorf("unable to decode base64 config data: %s", err)
 	} else {
-		return GetClientConfig(getter.Context, "", data)
+		return GetClientConfig(getter.Context, "", data, nil)
 	}
 }
