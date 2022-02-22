@@ -161,6 +161,14 @@ func makeOutOfClusterClientConfigError(configPath, context string, err error) er
 	return fmt.Errorf("%s: %s", baseErrMsg, err)
 }
 
+func setConfigPathMergeListEnvironment(configPathMergeList []string) error {
+	configPathEnvVar := strings.Join(configPathMergeList, string(filepath.ListSeparator))
+	if err := os.Setenv(clientcmd.RecommendedConfigPathEnvVar, configPathEnvVar); err != nil {
+		return fmt.Errorf("unable to set env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
+	}
+	return nil
+}
+
 func GetClientConfig(context string, configPath string, configData []byte, configPathMergeList []string) (clientcmd.ClientConfig, error) {
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
 	if context != "" {
@@ -177,14 +185,8 @@ func GetClientConfig(context string, configPath string, configData []byte, confi
 	}
 
 	if len(configPathMergeList) > 0 {
-		oldEnvVar := os.Getenv(clientcmd.RecommendedConfigPathEnvVar)
-		defer func() {
-			os.Setenv(clientcmd.RecommendedConfigPathEnvVar, oldEnvVar)
-		}()
-
-		configPathEnvVar := strings.Join(configPathMergeList, string(filepath.ListSeparator))
-		if err := os.Setenv(clientcmd.RecommendedConfigPathEnvVar, configPathEnvVar); err != nil {
-			return nil, fmt.Errorf("unable to set env var %q: %s", clientcmd.RecommendedConfigPathEnvVar, err)
+		if err := setConfigPathMergeListEnvironment(configPathMergeList); err != nil {
+			return nil, err
 		}
 	}
 
