@@ -36,6 +36,12 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 	} else {
 		configFlags := genericclioptions.NewConfigFlags(true)
 
+		if len(opts.ConfigPathMergeList) > 0 {
+			if err := setConfigPathMergeListEnvironment(opts.ConfigPathMergeList); err != nil {
+				return nil, err
+			}
+		}
+
 		configFlags.Context = new(string)
 		*configFlags.Context = opts.Context
 
