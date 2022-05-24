@@ -11,17 +11,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/werf/logboek"
 	"k8s.io/klog"
 	klog_v2 "k8s.io/klog/v2"
 
+	"github.com/spf13/cobra"
 	"github.com/werf/kubedog"
 	"github.com/werf/kubedog/pkg/kube"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/trackers/follow"
 	"github.com/werf/kubedog/pkg/trackers/rollout"
 	"github.com/werf/kubedog/pkg/trackers/rollout/multitrack"
+	"github.com/werf/logboek"
 )
 
 func main() {

@@ -11,13 +11,18 @@ endif
 
 GOSRC = $(shell find . -type f -name '*.go')
 .DEFAULT_GOAL := all
-.PHONY: fmt lint
 
+.PHONY: fmt
 fmt:
-	gofumpt -l -w .
-	gci -w -local github.com/werf/kubedog .
+	go mod tidy
+	gofmt -l -w .
 
+.PHONY: lint
 lint:
 	GOOS=$(OS) GOARCH="$(GOARCH)" golangci-lint run ./...
 
-all: fmt lint
+.PHONY: build
+build:
+	go install github.com/werf/kubedog/cmd/kubedog
+
+all: fmt lint build

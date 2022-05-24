@@ -107,8 +107,7 @@ func (p *ReadinessProbe) calculateRealInitialDelay() int32 {
 		// Another maximum possible time between container creation and readiness probe
 		// starting. Won't respect failed probe breaking chain of successful probes and
 		// vice versa.
-		startupProbeInitialDelay :=
-			// Between container creation and first startup probe there is a delay in the
+		startupProbeInitialDelay := // Between container creation and first startup probe there is a delay in the
 			// range of 0-"periodSeconds".
 			p.startupProbe.PeriodSeconds +
 				// Add initialDelaySeconds.

@@ -19,7 +19,7 @@ func TrackPodTillReady(name, namespace string, kube kubernetes.Interface, opts t
 	})
 	feed.OnSucceeded(func() error {
 		fmt.Fprintf(display.Out, "# po/%s succeeded\n", name)
-		return tracker.StopTrack
+		return tracker.ErrStopTrack
 	})
 	feed.OnFailed(func(reason string) error {
 		fmt.Fprintf(display.Out, "# po/%s failed: %s\n", name, reason)
@@ -27,7 +27,7 @@ func TrackPodTillReady(name, namespace string, kube kubernetes.Interface, opts t
 	})
 	feed.OnReady(func() error {
 		fmt.Fprintf(display.Out, "# po/%s become READY\n", name)
-		return tracker.StopTrack
+		return tracker.ErrStopTrack
 	})
 	feed.OnEventMsg(func(msg string) error {
 		fmt.Fprintf(display.Out, "# po/%s event: %s\n", name, msg)

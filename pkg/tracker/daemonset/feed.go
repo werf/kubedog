@@ -75,7 +75,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnAddedFunc != nil {
 				err := f.OnAddedFunc(status.IsReady)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -89,7 +89,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnReadyFunc != nil {
 				err := f.OnReadyFunc()
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -102,7 +102,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnFailedFunc != nil {
 				err := f.OnFailedFunc(status.FailedReason)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -113,7 +113,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 		case msg := <-daemonSetTracker.EventMsg:
 			if f.OnEventMsgFunc != nil {
 				err := f.OnEventMsgFunc(msg)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -126,7 +126,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnAddedPodFunc != nil {
 				err := f.OnAddedPodFunc(report.Pod)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -144,7 +144,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnPodLogChunkFunc != nil {
 				err := f.OnPodLogChunkFunc(chunk)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -157,7 +157,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnPodErrorFunc != nil {
 				err := f.OnPodErrorFunc(report.PodError)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {
@@ -170,7 +170,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 
 			if f.OnStatusFunc != nil {
 				err := f.OnStatusFunc(status)
-				if err == tracker.StopTrack {
+				if err == tracker.ErrStopTrack {
 					return nil
 				}
 				if err != nil {

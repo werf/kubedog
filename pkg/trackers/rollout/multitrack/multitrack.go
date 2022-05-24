@@ -290,7 +290,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	}
 
 	if err := mt.applyTrackTerminationMode(); err != nil {
-		errorChan <- fmt.Errorf("unable to apply termination mode: %s", err)
+		errorChan <- fmt.Errorf("unable to apply termination mode: %w", err)
 		return
 	}
 
@@ -419,13 +419,13 @@ func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, mtCtx *
 		return
 	} else if err != nil {
 		// unknown error
-		errorChan <- fmt.Errorf("%s/%s track failed: %s", kind, spec.ResourceName, err)
+		errorChan <- fmt.Errorf("%s/%s track failed: %w", kind, spec.ResourceName, err)
 		mt.isFailed = true
 		return
 	}
 
 	if err := mt.applyTrackTerminationMode(); err != nil {
-		errorChan <- fmt.Errorf("unable to apply termination mode: %s", err)
+		errorChan <- fmt.Errorf("unable to apply termination mode: %w", err)
 		mt.isFailed = true
 		return
 	}
@@ -562,7 +562,7 @@ func (mt *multitracker) formatFailedTrackingResourcesError() error {
 
 func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]*multitrackerResourceState, spec MultitrackSpec) error {
 	resourcesStates[spec.ResourceName].Status = resourceSucceeded
-	return tracker.StopTrack
+	return tracker.ErrStopTrack
 }
 
 func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multitrackerResourceState, kind string, spec MultitrackSpec, reason string) error {

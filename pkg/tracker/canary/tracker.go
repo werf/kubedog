@@ -167,7 +167,7 @@ func (canary *Tracker) runInformer(ctx context.Context) error {
 		})
 
 		if err != tracker.AdaptInformerError(err) {
-			canary.errors <- fmt.Errorf("canary informer error: %s", err)
+			canary.errors <- fmt.Errorf("canary informer error: %w", err)
 		}
 
 		if debug.Debug() {

@@ -20,7 +20,7 @@ func TrackJobTillDone(name, namespace string, kube kubernetes.Interface, opts tr
 	})
 	feed.OnSucceeded(func() error {
 		fmt.Fprintf(display.Out, "# job/%s succeeded\n", name)
-		return tracker.StopTrack
+		return tracker.ErrStopTrack
 	})
 	feed.OnFailed(func(reason string) error {
 		fmt.Fprintf(display.Out, "# job/%s FAIL: %s\n", name, reason)
