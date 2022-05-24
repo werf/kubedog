@@ -302,7 +302,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 		}
 
 		if err := pod.runContainersTrackers(ctx, object); err != nil {
-			return fmt.Errorf("unable to start tracking pod/%s containers: %s", pod.ResourceName, err)
+			return fmt.Errorf("unable to start tracking pod/%s containers: %w", pod.ResourceName, err)
 		}
 	default:
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
@@ -311,7 +311,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 	}
 
 	if err := pod.handleContainersState(object); err != nil {
-		return fmt.Errorf("unable to handle pod containers state: %s", err)
+		return fmt.Errorf("unable to handle pod containers state: %w", err)
 	}
 
 	for _, containerError := range status.ContainersErrors {
@@ -605,7 +605,7 @@ func (pod *Tracker) runInformer(ctx context.Context) error {
 		})
 
 		if err := tracker.AdaptInformerError(err); err != nil {
-			pod.errors <- fmt.Errorf("pod/%s informer error: %s", pod.ResourceName, err)
+			pod.errors <- fmt.Errorf("pod/%s informer error: %w", pod.ResourceName, err)
 		}
 
 		if debug.Debug() {

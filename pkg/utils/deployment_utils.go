@@ -26,26 +26,6 @@ const (
 	TimedOutReason = "ProgressDeadlineExceeded"
 )
 
-// func DeploymentCompleteAll(deployment *appsv1.Deployment) {
-
-// }
-
-func equalSign(isEqual bool) string {
-	if isEqual {
-		return "=="
-	} else {
-		return "!="
-	}
-}
-
-func greaterOrEqualSign(isGreaterOrEqual bool) string {
-	if isGreaterOrEqual {
-		return ">="
-	} else {
-		return "<"
-	}
-}
-
 // DeploymentProgressing reports progress for a deployment. Progress is estimated by comparing the
 // current with the new status of the deployment that the controller is observing. More specifically,
 // when new pods are scaled up or become available, or old pods are scaled down, then we consider the

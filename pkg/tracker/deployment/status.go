@@ -109,7 +109,7 @@ func DeploymentRolloutStatus(deployment *appsv1.Deployment, revision int64) (str
 	if revision > 0 {
 		deploymentRev, err := utils.Revision(deployment)
 		if err != nil {
-			return "", false, fmt.Errorf("cannot get the revision of deployment %q: %v", deployment.Name, err)
+			return "", false, fmt.Errorf("cannot get the revision of deployment %q: %w", deployment.Name, err)
 		}
 		if revision != deploymentRev {
 			return "", false, fmt.Errorf("desired revision (%d) is different from the running revision (%d)", revision, deploymentRev)

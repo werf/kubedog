@@ -280,7 +280,7 @@ func (job *Tracker) runInformer(ctx context.Context) error {
 		})
 
 		if err != tracker.AdaptInformerError(err) {
-			job.errors <- fmt.Errorf("job informer error: %s", err)
+			job.errors <- fmt.Errorf("job informer error: %w", err)
 		}
 
 		if debug.Debug() {

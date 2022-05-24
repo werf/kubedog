@@ -93,7 +93,7 @@ func (p *PodsInformer) Run(ctx context.Context) {
 		})
 
 		if err := tracker.AdaptInformerError(err); err != nil {
-			p.Errors <- fmt.Errorf("%s pods informer error: %s", p.FullResourceName, err)
+			p.Errors <- fmt.Errorf("%s pods informer error: %w", p.FullResourceName, err)
 		}
 
 		if debug.Debug() {

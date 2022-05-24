@@ -69,7 +69,8 @@ func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMeta
 func (r *ReplicaSetInformer) WithChannels(added chan *appsv1.ReplicaSet,
 	modified chan *appsv1.ReplicaSet,
 	deleted chan *appsv1.ReplicaSet,
-	errors chan error) *ReplicaSetInformer {
+	errors chan error,
+) *ReplicaSetInformer {
 	r.ReplicaSetAdded = added
 	r.ReplicaSetModified = modified
 	r.ReplicaSetDeleted = deleted

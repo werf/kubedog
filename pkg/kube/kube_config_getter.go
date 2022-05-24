@@ -29,7 +29,7 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 
 	if opts.ConfigDataBase64 != "" {
 		if getter, err := NewClientGetterFromConfigData(opts.Context, opts.ConfigDataBase64); err != nil {
-			return nil, fmt.Errorf("unable to create kube client getter (context=%q, config-data-base64=%q): %s", opts.Context, opts.ConfigPath, err)
+			return nil, fmt.Errorf("unable to create kube client getter (context=%q, config-data-base64=%q): %w", opts.Context, opts.ConfigPath, err)
 		} else {
 			configGetter = getter
 		}
@@ -138,7 +138,7 @@ func (getter *ClientGetterFromConfigData) ToRawKubeConfigLoader() clientcmd.Clie
 
 func (getter *ClientGetterFromConfigData) getRawKubeConfigLoader() (clientcmd.ClientConfig, error) {
 	if data, err := base64.StdEncoding.DecodeString(getter.ConfigDataBase64); err != nil {
-		return nil, fmt.Errorf("unable to decode base64 config data: %s", err)
+		return nil, fmt.Errorf("unable to decode base64 config data: %w", err)
 	} else {
 		return GetClientConfig(getter.Context, "", data, nil)
 	}

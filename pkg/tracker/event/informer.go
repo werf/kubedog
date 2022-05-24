@@ -125,7 +125,7 @@ func (e *EventInformer) Run(ctx context.Context) {
 		})
 
 		if err := tracker.AdaptInformerError(err); err != nil {
-			e.Errors <- fmt.Errorf("event informer for %s failed: %s", e.FullResourceName, err)
+			e.Errors <- fmt.Errorf("event informer for %s failed: %w", e.FullResourceName, err)
 		}
 
 		if debug.Debug() {

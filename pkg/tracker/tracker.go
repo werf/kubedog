@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-var StopTrack = errors.New("stop tracking now")
+var ErrStopTrack = errors.New("stop tracking now")
 
 const (
 	Initial           TrackerState = ""
