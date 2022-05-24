@@ -128,9 +128,10 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient,
 	var outOfClusterErr error
 	contexts, outOfClusterErr := getOutOfClusterContextsClients(opts.ConfigPath, opts.ConfigDataBase64, opts.ConfigPathMergeList)
 	// return if contexts are loaded successfully
-	if contexts != nil {
+	if len(contexts) > 0 {
 		return contexts, nil
 	}
+
 	if hasInClusterConfig() {
 		contextClient, err := getInClusterContextClient()
 		if err != nil {
@@ -261,7 +262,7 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string, configP
 }
 
 func getOutOfClusterContextsClients(configPath, configDataBase64 string, configPathMergeList []string) ([]*ContextClient, error) {
-	res := make([]*ContextClient, 0)
+	var res []*ContextClient
 
 	configData, err := parseConfigDataBase64(configDataBase64)
 	if err != nil {
