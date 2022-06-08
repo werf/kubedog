@@ -3,11 +3,14 @@ package kube
 import (
 	"encoding/base64"
 	"fmt"
+	"path/filepath"
+	"time"
+
+	diskcached "k8s.io/client-go/discovery/cached/disk"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
-	memory "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
@@ -113,12 +116,13 @@ func (getter *ClientGetterFromConfigData) ToDiscoveryClient() (discovery.CachedD
 		return nil, err
 	}
 
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, err
-	}
+	config.Burst = 100
 
-	return memory.NewMemCacheClient(discoveryClient), nil
+	cacheDir := defaultCacheDir
+	httpCacheDir := filepath.Join(cacheDir, "http")
+	discoveryCacheDir := computeDiscoverCacheDir(filepath.Join(cacheDir, "discovery"), config.Host)
+
+	return diskcached.NewCachedDiscoveryClientForConfig(config, discoveryCacheDir, httpCacheDir, time.Duration(10*time.Minute))
 }
 
 func (getter *ClientGetterFromConfigData) ToRESTMapper() (meta.RESTMapper, error) {
