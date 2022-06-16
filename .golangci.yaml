@@ -2,10 +2,17 @@ run:
   timeout: 10m
   skip-dirs:
     - playground
+    - doc
+    - scripts
 
 linters-settings:
+  gofumpt:
+    extra-rules: true
   gci:
-    local-prefixes: github.com/werf/
+    sections:
+      - standard
+      - default
+      - prefix(github.com/werf/)
   gocritic:
     disabled-checks:
       - ifElseChain
@@ -30,6 +37,7 @@ linters:
     - errname
     - errorlint
     - exportloopref
+    - gci
     - gocritic
     - gofumpt
     - misspell

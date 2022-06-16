@@ -15,7 +15,8 @@ GOSRC = $(shell find . -type f -name '*.go')
 .PHONY: fmt
 fmt:
 	go mod tidy
-	gofmt -l -w .
+	gci write -s Standard -s Default -s 'Prefix(github.com/werf)' pkg/ cmd/
+	gofumpt -extra -w cmd/ pkg/
 
 .PHONY: lint
 lint:

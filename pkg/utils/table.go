@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/acarl005/stripansi"
+	"golang.org/x/crypto/ssh/terminal"
+
 	"github.com/werf/logboek"
 	"github.com/werf/logboek/pkg/types"
-	"golang.org/x/crypto/ssh/terminal"
 )
 
 type Table struct {

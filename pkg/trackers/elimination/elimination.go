@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/werf/logboek"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,6 +17,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
+
+	"github.com/werf/logboek"
 )
 
 type EliminationTrackerSpec struct {
