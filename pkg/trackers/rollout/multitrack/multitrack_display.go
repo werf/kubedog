@@ -7,13 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/werf/logboek"
-	"github.com/werf/logboek/pkg/style"
-	"github.com/werf/logboek/pkg/types"
-
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/logboek"
+	"github.com/werf/logboek/pkg/style"
+	"github.com/werf/logboek/pkg/types"
 )
 
 var (
@@ -549,7 +548,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 	}
 }
 
-func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods map[string]pod.PodStatus, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
+func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
 	st := t.SubTable(statusProgressSubTableRatio...)
 	st.Header("POD", "READY", "RESTARTS", "STATUS")
 
@@ -621,7 +620,7 @@ func formatResourceError(disableWarningColors bool, reason string) string {
 	return utils.RedF("%s", msg)
 }
 
-func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady bool, isFailed bool, isNew bool) string {
+func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, isReady, isFailed, isNew bool) string {
 	if !isNew {
 		return resourceCaption
 	}

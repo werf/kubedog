@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/werf/logboek/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/werf/kubedog/pkg/tracker"
@@ -19,6 +18,7 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/deployment"
 	"github.com/werf/kubedog/pkg/tracker/job"
 	"github.com/werf/kubedog/pkg/tracker/statefulset"
+	"github.com/werf/logboek/pkg/types"
 )
 
 type TrackTerminationMode string

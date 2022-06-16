@@ -107,18 +107,16 @@ func (p *ReadinessProbe) calculateRealInitialDelay() int32 {
 		// Another maximum possible time between container creation and readiness probe
 		// starting. Won't respect failed probe breaking chain of successful probes and
 		// vice versa.
-		startupProbeInitialDelay := // Between container creation and first startup probe there is a delay in the
-			// range of 0-"periodSeconds".
-			p.startupProbe.PeriodSeconds +
-				// Add initialDelaySeconds.
-				p.startupProbe.InitialDelaySeconds +
-				// Calculate maximum time it might take to iterate over all success/failureThresholds.
-				(p.startupProbe.FailureThreshold+p.startupProbe.SuccessThreshold-1)*p.startupProbe.PeriodSeconds +
-				// Make sure last possible startup probe finished.
-				p.startupProbe.TimeoutSeconds +
-				// Add 1 extra periodSeconds to account for delay between last startup probe
-				// finished and first readiness probe started.
-				p.PeriodSeconds
+		startupProbeInitialDelay := p.startupProbe.PeriodSeconds + // Between container creation and first startup probe there is a delay in the range of 0-"periodSeconds".
+			// Add initialDelaySeconds.
+			p.startupProbe.InitialDelaySeconds +
+			// Calculate maximum time it might take to iterate over all success/failureThresholds.
+			(p.startupProbe.FailureThreshold+p.startupProbe.SuccessThreshold-1)*p.startupProbe.PeriodSeconds +
+			// Make sure last possible startup probe finished.
+			p.startupProbe.TimeoutSeconds +
+			// Add 1 extra periodSeconds to account for delay between last startup probe
+			// finished and first readiness probe started.
+			p.PeriodSeconds
 
 		if startupProbeInitialDelay > readinessProbeInitialDelay {
 			// If startup delay more than readiness delay, then we won't need to wait any

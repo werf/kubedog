@@ -166,7 +166,7 @@ func setConfigPathMergeListEnvironment(configPathMergeList []string) error {
 	return nil
 }
 
-func GetClientConfig(context string, configPath string, configData []byte, configPathMergeList []string) (clientcmd.ClientConfig, error) {
+func GetClientConfig(context, configPath string, configData []byte, configPathMergeList []string) (clientcmd.ClientConfig, error) {
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
 	if context != "" {
 		overrides.CurrentContext = context
