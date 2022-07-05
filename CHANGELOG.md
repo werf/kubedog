@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://www.github.com/werf/kubedog/compare/v0.6.4...v0.7.0) (2022-07-05)
+
+
+### Features
+
+* generic resources tracking ([ba88553](https://www.github.com/werf/kubedog/commit/ba88553162024253f8d00be930931ebca0975b07))
+
+
+### Bug Fixes
+
+* **kube:** do not use memcache discovery client for base64 kubeconfig ([d1cd71b](https://www.github.com/werf/kubedog/commit/d1cd71bd4f07f0913acb7c2bfdee72ba865cf9a0))
+* **kube:** fix GetAllContextsClients not working in in-cluster mode ([802c1b0](https://www.github.com/werf/kubedog/commit/802c1b0fd9afde8ca41eeee7719f0ddb0a4f9dfd))
+
 ### [0.6.4](https://www.github.com/werf/kubedog/compare/v0.6.3...v0.6.4) (2022-02-22)
 
 
