@@ -8,6 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 )
@@ -84,4 +85,33 @@ func ListEventsForObject(ctx context.Context, client kubernetes.Interface, obj i
 		return nil, err
 	}
 	return evList, nil
+}
+
+func EventFieldSelectorFromUnstructured(obj *unstructured.Unstructured) (field fields.Set, eventNs string) {
+	field = fields.Set{}
+	field["involvedObject.name"] = obj.GetName()
+	field["involvedObject.apiVersion"] = obj.GetAPIVersion()
+	field["involvedObject.kind"] = obj.GetKind()
+
+	if ns := obj.GetNamespace(); ns != "" {
+		field["involvedObject.namespace"] = ns
+		eventNs = ns
+	} else {
+		eventNs = metav1.NamespaceDefault
+	}
+
+	return field, eventNs
+}
+
+func ListEventsForUnstructured(ctx context.Context, client kubernetes.Interface, obj *unstructured.Unstructured) (*corev1.EventList, error) {
+	fieldsSet, eventsNs := EventFieldSelectorFromUnstructured(obj)
+
+	eventsList, err := client.CoreV1().Events(eventsNs).List(ctx, metav1.ListOptions{
+		FieldSelector: fieldsSet.AsSelector().String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error getting events list: %w", err)
+	}
+
+	return eventsList, nil
 }

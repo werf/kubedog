@@ -58,7 +58,7 @@ func ResourceErrorf(format string, a ...interface{}) error {
 }
 
 func AdaptInformerError(err error) error {
-	if err == wait.ErrWaitTimeout {
+	if errors.Is(err, wait.ErrWaitTimeout) {
 		return nil
 	}
 	return err

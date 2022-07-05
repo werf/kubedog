@@ -90,30 +90,30 @@ func (mt *multitracker) TrackDeployment(kube kubernetes.Interface, spec Multitra
 
 func (mt *multitracker) deploymentAdded(spec MultitrackSpec, feed deployment.Feed, isReady bool) error {
 	if isReady {
-		mt.displayResourceTrackerMessageF("deploy", spec, "appears to be READY")
+		mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, spec.ShowServiceMessages, "appears to be READY")
 
 		return mt.handleResourceReadyCondition(mt.TrackingDeployments, spec)
 	}
 
-	mt.displayResourceTrackerMessageF("deploy", spec, "added")
+	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, spec.ShowServiceMessages, "added")
 
 	return nil
 }
 
 func (mt *multitracker) deploymentReady(spec MultitrackSpec, feed deployment.Feed) error {
-	mt.displayResourceTrackerMessageF("deploy", spec, "become READY")
+	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, spec.ShowServiceMessages, "become READY")
 
 	return mt.handleResourceReadyCondition(mt.TrackingDeployments, spec)
 }
 
 func (mt *multitracker) deploymentFailed(spec MultitrackSpec, feed deployment.Feed, reason string) error {
-	mt.displayResourceErrorF("deploy", spec, "%s", reason)
+	mt.displayResourceErrorF("deploy", spec.ResourceName, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingDeployments, "deploy", spec, reason)
 }
 
 func (mt *multitracker) deploymentEventMsg(spec MultitrackSpec, feed deployment.Feed, msg string) error {
-	mt.displayResourceEventF("deploy", spec, "%s", msg)
+	mt.displayResourceEventF("deploy", spec.ResourceName, spec.ShowServiceMessages, "%s", msg)
 	return nil
 }
 
@@ -122,7 +122,7 @@ func (mt *multitracker) deploymentAddedReplicaSet(spec MultitrackSpec, feed depl
 		return nil
 	}
 
-	mt.displayResourceTrackerMessageF("deploy", spec, "rs/%s added", rs.Name)
+	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, spec.ShowServiceMessages, "rs/%s added", rs.Name)
 
 	return nil
 }
@@ -132,7 +132,7 @@ func (mt *multitracker) deploymentAddedPod(spec MultitrackSpec, feed deployment.
 		return nil
 	}
 
-	mt.displayResourceTrackerMessageF("deploy", spec, "po/%s added", pod.Name)
+	mt.displayResourceTrackerMessageF("deploy", spec.ResourceName, spec.ShowServiceMessages, "po/%s added", pod.Name)
 
 	return nil
 }
@@ -144,7 +144,7 @@ func (mt *multitracker) deploymentPodError(spec MultitrackSpec, feed deployment.
 
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
-	mt.displayResourceErrorF("deploy", spec, "%s", reason)
+	mt.displayResourceErrorF("deploy", spec.ResourceName, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingDeployments, "deploy", spec, reason)
 }

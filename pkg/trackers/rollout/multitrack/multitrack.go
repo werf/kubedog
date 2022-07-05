@@ -9,6 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/werf/kubedog/pkg/tracker"
@@ -18,6 +21,7 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/deployment"
 	"github.com/werf/kubedog/pkg/tracker/job"
 	"github.com/werf/kubedog/pkg/tracker/statefulset"
+	"github.com/werf/kubedog/pkg/trackers/rollout/multitrack/generic"
 	"github.com/werf/logboek/pkg/types"
 )
 
@@ -52,6 +56,7 @@ type MultitrackSpecs struct {
 	DaemonSets   []MultitrackSpec
 	Jobs         []MultitrackSpec
 	Canaries     []MultitrackSpec
+	Generics     []*generic.Spec
 }
 
 type MultitrackSpec struct {
@@ -78,6 +83,9 @@ type MultitrackSpec struct {
 
 type MultitrackOptions struct {
 	tracker.Options
+	DynamicClient        dynamic.Interface
+	DiscoveryClient      discovery.CachedDiscoveryInterface
+	Mapper               meta.RESTMapper
 	StatusProgressPeriod time.Duration
 }
 
@@ -120,8 +128,22 @@ func setDefaultSpecValues(spec *MultitrackSpec) {
 }
 
 func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts MultitrackOptions) error {
-	if len(specs.Deployments)+len(specs.StatefulSets)+len(specs.DaemonSets)+len(specs.Jobs)+len(specs.Canaries) == 0 {
+	if len(specs.Deployments)+len(specs.StatefulSets)+len(specs.DaemonSets)+len(specs.Jobs)+len(specs.Canaries)+len(specs.Generics) == 0 {
 		return nil
+	}
+
+	if len(specs.Generics) > 0 {
+		if opts.DynamicClient == nil {
+			return fmt.Errorf("dynamic K8s client should be specified if using GenericSpec")
+		}
+
+		if opts.DiscoveryClient == nil {
+			return fmt.Errorf("discovery K8s client should be specified if using GenericSpec")
+		}
+
+		if opts.Mapper == nil {
+			return fmt.Errorf("K8s resource mapper should be specified if using GenericSpec")
+		}
 	}
 
 	for i := range specs.Deployments {
@@ -138,6 +160,9 @@ func Multitrack(kube kubernetes.Interface, specs MultitrackSpecs, opts Multitrac
 	}
 	for i := range specs.Canaries {
 		setDefaultCanarySpecValues(&specs.Canaries[i])
+	}
+	for _, spec := range specs.Generics {
+		spec.Init()
 	}
 
 	mt := multitracker{
@@ -232,7 +257,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	for _, spec := range specs.Deployments {
 		mt.DeploymentsContexts[spec.ResourceName] = newMultitrackerContext(opts.ParentContext)
 		mt.DeploymentsSpecs[spec.ResourceName] = spec
-		mt.TrackingDeployments[spec.ResourceName] = newMultitrackerResourceState(spec)
+		mt.TrackingDeployments[spec.ResourceName] = newMultitrackerResourceState()
 
 		wg.Add(1)
 
@@ -244,7 +269,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	for _, spec := range specs.StatefulSets {
 		mt.StatefulSetsContexts[spec.ResourceName] = newMultitrackerContext(opts.ParentContext)
 		mt.StatefulSetsSpecs[spec.ResourceName] = spec
-		mt.TrackingStatefulSets[spec.ResourceName] = newMultitrackerResourceState(spec)
+		mt.TrackingStatefulSets[spec.ResourceName] = newMultitrackerResourceState()
 
 		wg.Add(1)
 
@@ -256,7 +281,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	for _, spec := range specs.DaemonSets {
 		mt.DaemonSetsContexts[spec.ResourceName] = newMultitrackerContext(opts.ParentContext)
 		mt.DaemonSetsSpecs[spec.ResourceName] = spec
-		mt.TrackingDaemonSets[spec.ResourceName] = newMultitrackerResourceState(spec)
+		mt.TrackingDaemonSets[spec.ResourceName] = newMultitrackerResourceState()
 
 		wg.Add(1)
 
@@ -268,7 +293,7 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	for _, spec := range specs.Jobs {
 		mt.JobsContexts[spec.ResourceName] = newMultitrackerContext(opts.ParentContext)
 		mt.JobsSpecs[spec.ResourceName] = spec
-		mt.TrackingJobs[spec.ResourceName] = newMultitrackerResourceState(spec)
+		mt.TrackingJobs[spec.ResourceName] = newMultitrackerResourceState()
 
 		wg.Add(1)
 
@@ -280,12 +305,23 @@ func (mt *multitracker) Start(kube kubernetes.Interface, specs MultitrackSpecs, 
 	for _, spec := range specs.Canaries {
 		mt.CanariesContexts[spec.ResourceName] = newMultitrackerContext(opts.ParentContext)
 		mt.CanariesSpecs[spec.ResourceName] = spec
-		mt.TrackingCanaries[spec.ResourceName] = newMultitrackerResourceState(spec)
+		mt.TrackingCanaries[spec.ResourceName] = newMultitrackerResourceState()
 
 		wg.Add(1)
 
 		go mt.runSpecTracker("canary", spec, mt.CanariesContexts[spec.ResourceName], &wg, mt.CanariesContexts, doneChan, errorChan, func(spec MultitrackSpec, mtCtx *multitrackerContext) error {
 			return mt.TrackCanary(kube, spec, newMultitrackOptions(mtCtx.Context, opts.Timeout, opts.StatusProgressPeriod, opts.LogsFromTime, spec.IgnoreReadinessProbeFailsByContainerName))
+		})
+	}
+
+	for _, spec := range specs.Generics {
+		res := generic.NewResource(opts.ParentContext, spec, kube, opts.DynamicClient, opts.DiscoveryClient, opts.Mapper)
+		mt.GenericResources = append(mt.GenericResources, res)
+
+		wg.Add(1)
+
+		go mt.runGenericSpecTracker(res, &wg, doneChan, errorChan, func() error {
+			return mt.TrackGeneric(res, spec.Timeout, *spec.NoActivityTimeout)
 		})
 	}
 
@@ -386,6 +422,11 @@ func (mt *multitracker) applyTrackTerminationMode() error {
 		}
 		contextsToStop = append(contextsToStop, ctx)
 	}
+	for _, res := range mt.GenericResources {
+		if res.Spec.TrackTerminationMode == generic.WaitUntilResourceReady {
+			return nil
+		}
+	}
 
 	mt.isTerminating = true
 
@@ -397,6 +438,12 @@ func (mt *multitracker) applyTrackTerminationMode() error {
 
 	for _, ctx := range contextsToStop {
 		ctx.CancelFunc()
+	}
+
+	for _, res := range mt.GenericResources {
+		if res.Context != nil {
+			res.Context.Cancel()
+		}
 	}
 
 	return nil
@@ -420,6 +467,35 @@ func (mt *multitracker) runSpecTracker(kind string, spec MultitrackSpec, mtCtx *
 	} else if err != nil {
 		// unknown error
 		errorChan <- fmt.Errorf("%s/%s track failed: %w", kind, spec.ResourceName, err)
+		mt.isFailed = true
+		return
+	}
+
+	if err := mt.applyTrackTerminationMode(); err != nil {
+		errorChan <- fmt.Errorf("unable to apply termination mode: %w", err)
+		mt.isFailed = true
+		return
+	}
+}
+
+func (mt *multitracker) runGenericSpecTracker(res *generic.Resource, wg *sync.WaitGroup, doneChan chan struct{}, errorChan chan error, trackerFunc func() error) {
+	defer wg.Done()
+
+	err := trackerFunc()
+
+	mt.mux.Lock()
+	defer mt.mux.Unlock()
+
+	res.Context = nil
+
+	if errors.Is(err, ErrFailWholeDeployProcessImmediately) {
+		mt.displayFailedTrackingResourcesServiceMessages()
+		errorChan <- mt.formatFailedTrackingResourcesError()
+		mt.isFailed = true
+		return
+	} else if err != nil {
+		// unknown error
+		errorChan <- fmt.Errorf("%s track failed: %w", res.Spec.ResourceID, err)
 		mt.isFailed = true
 		return
 	}
@@ -462,6 +538,8 @@ type multitracker struct {
 	CanariesStatuses     map[string]canary.CanaryStatus
 	PrevCanariesStatuses map[string]canary.CanaryStatus
 
+	GenericResources []*generic.Resource
+
 	mux sync.Mutex
 
 	isFailed      bool
@@ -503,7 +581,7 @@ type multitrackerResourceState struct {
 	FailuresCountAfterHoping int
 }
 
-func newMultitrackerResourceState(spec MultitrackSpec) *multitrackerResourceState {
+func newMultitrackerResourceState() *multitrackerResourceState {
 	return &multitrackerResourceState{Status: resourceActive}
 }
 
@@ -520,6 +598,13 @@ func (mt *multitracker) hasFailedTrackingResources() bool {
 			}
 		}
 	}
+
+	for _, res := range mt.GenericResources {
+		if res.State.ResourceState() == generic.ResourceStateFailed {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -556,12 +641,23 @@ func (mt *multitracker) formatFailedTrackingResourcesError() error {
 		}
 		msgParts = append(msgParts, fmt.Sprintf("canary/%s failed: %s", name, state.FailedReason))
 	}
+	for _, res := range mt.GenericResources {
+		if res.State.ResourceState() != generic.ResourceStateFailed {
+			continue
+		}
+		msgParts = append(msgParts, fmt.Sprintf("%s failed: %s", res.Spec.ResourceID, res.State.FailedReason()))
+	}
 
 	return fmt.Errorf("%s", strings.Join(msgParts, "\n"))
 }
 
 func (mt *multitracker) handleResourceReadyCondition(resourcesStates map[string]*multitrackerResourceState, spec MultitrackSpec) error {
 	resourcesStates[spec.ResourceName].Status = resourceSucceeded
+	return tracker.ErrStopTrack
+}
+
+func (mt *multitracker) handleGenericResourceReadyCondition(resource *generic.Resource) error {
+	resource.State.SetResourceState(generic.ResourceStateSucceeded)
 	return tracker.ErrStopTrack
 }
 
@@ -638,6 +734,78 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 	}
 }
 
+func (mt *multitracker) handleGenericResourceFailure(resource *generic.Resource, reason string) error {
+	forceFailure := false
+	if strings.Contains(reason, "ErrImageNeverPull") {
+		forceFailure = true
+	}
+
+	switch resource.Spec.FailMode {
+	case generic.FailWholeDeployProcessImmediately:
+		resource.State.BumpFailuresCount()
+
+		if !forceFailure && resource.State.FailuresCount() <= *resource.Spec.AllowFailuresCount {
+			mt.displayMultitrackServiceMessageF("%d/%d allowed errors occurred for %s: continue tracking\n", resource.State.FailuresCount(), *resource.Spec.AllowFailuresCount, resource.Spec.ResourceID)
+			return nil
+		}
+
+		if forceFailure {
+			mt.displayMultitrackServiceMessageF("Critical failure for %s has been occurred: stop tracking immediately!\n", resource.Spec.ResourceID)
+		} else {
+			mt.displayMultitrackServiceMessageF("Allowed failures count for %s exceeded %d errors: stop tracking immediately!\n", resource.Spec.ResourceID, *resource.Spec.AllowFailuresCount)
+		}
+
+		resource.State.SetResourceState(generic.ResourceStateFailed)
+		resource.State.SetFailedReason(reason)
+
+		return ErrFailWholeDeployProcessImmediately
+
+	case generic.HopeUntilEndOfDeployProcess:
+	handleResourceState:
+		switch resource.State.ResourceState() {
+		case generic.ResourceStateActive:
+			resource.State.SetResourceState(generic.ResourceStateHoping)
+			goto handleResourceState
+
+		case generic.ResourceStateHoping:
+			activeResources := mt.getGenericActiveResources()
+			if len(activeResources) > 0 {
+				mt.displayMultitrackServiceMessageF("Error occurred for %s, waiting until following resources are ready before counting errors (HopeUntilEndOfDeployProcess fail mode is active): %s\n", resource.Spec.ResourceID, strings.Join(activeResources, ", "))
+				return nil
+			}
+
+			resource.State.SetResourceState(generic.ResourceStateActiveAfterHoping)
+			goto handleResourceState
+
+		case generic.ResourceStateActiveAfterHoping:
+			resource.State.BumpFailuresCount()
+
+			if resource.State.FailuresCount() <= *resource.Spec.AllowFailuresCount {
+				mt.displayMultitrackServiceMessageF("%d/%d allowed errors occurred for %s: continue tracking\n", resource.State.FailuresCount(), *resource.Spec.AllowFailuresCount, resource.Spec.ResourceID)
+				return nil
+			}
+
+			mt.displayMultitrackServiceMessageF("Allowed failures count for %s exceeded %d errors: stop tracking immediately!\n", resource.Spec.ResourceID, *resource.Spec.AllowFailuresCount)
+
+			resource.State.SetResourceState(generic.ResourceStateFailed)
+			resource.State.SetFailedReason(reason)
+
+			return ErrFailWholeDeployProcessImmediately
+
+		default:
+			panic(fmt.Sprintf("%s tracker is in unexpected state %#v", resource.Spec.ResourceID, resource.State.ResourceState()))
+		}
+
+	case generic.IgnoreAndContinueDeployProcess:
+		resource.State.BumpFailuresCount()
+		mt.displayMultitrackServiceMessageF("%d errors occurred for %s\n", resource.State.FailuresCount(), resource.Spec.ResourceID)
+		return nil
+
+	default:
+		panic(fmt.Sprintf("bad fail mode %#v for resource %s", resource.Spec.FailMode, resource.Spec.ResourceID))
+	}
+}
+
 func (mt *multitracker) getActiveResourcesNames() []string {
 	activeResources := []string{}
 
@@ -659,6 +827,18 @@ func (mt *multitracker) getActiveResourcesNames() []string {
 	for name, state := range mt.TrackingJobs {
 		if state.Status == resourceActive {
 			activeResources = append(activeResources, fmt.Sprintf("job/%s", name))
+		}
+	}
+
+	return activeResources
+}
+
+func (mt *multitracker) getGenericActiveResources() []string {
+	activeResources := []string{}
+
+	for _, res := range mt.GenericResources {
+		if res.State.ResourceState() == generic.ResourceStateActive {
+			activeResources = append(activeResources, fmt.Sprint(res.Spec.ResourceID))
 		}
 	}
 

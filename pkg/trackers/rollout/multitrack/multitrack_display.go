@@ -9,6 +9,7 @@ import (
 
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
+	"github.com/werf/kubedog/pkg/trackers/rollout/multitrack/generic"
 	"github.com/werf/kubedog/pkg/utils"
 	"github.com/werf/logboek"
 	"github.com/werf/logboek/pkg/style"
@@ -102,14 +103,14 @@ func (mt *multitracker) resetLogProcess() {
 	}
 }
 
-func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
-	resource := fmt.Sprintf("%s/%s", resourceKind, spec.ResourceName)
+func (mt *multitracker) displayResourceTrackerMessageF(resourceKind, resourceName string, showServiceMessages bool, format string, a ...interface{}) {
+	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
 	msg := fmt.Sprintf(format, a...)
 	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
 
-	if spec.ShowServiceMessages {
+	if showServiceMessages {
 		mt.setLogProcess(
-			fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName),
+			fmt.Sprintf("%s/%s service messages", resourceKind, resourceName),
 			func(options types.LogProcessOptionsInterface) {
 				options.Style(style.Details())
 				options.WithoutElapsedTime()
@@ -120,14 +121,14 @@ func (mt *multitracker) displayResourceTrackerMessageF(resourceKind string, spec
 	}
 }
 
-func (mt *multitracker) displayResourceEventF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
-	resource := fmt.Sprintf("%s/%s", resourceKind, spec.ResourceName)
+func (mt *multitracker) displayResourceEventF(resourceKind, resourceName string, showServiceMessages bool, format string, a ...interface{}) {
+	resource := fmt.Sprintf("%s/%s", resourceKind, resourceName)
 	msg := fmt.Sprintf(fmt.Sprintf("event: %s", format), a...)
 	mt.serviceMessagesByResource[resource] = append(mt.serviceMessagesByResource[resource], msg)
 
-	if spec.ShowServiceMessages {
+	if showServiceMessages {
 		mt.setLogProcess(
-			fmt.Sprintf("%s/%s service messages", resourceKind, spec.ResourceName),
+			fmt.Sprintf("%s/%s service messages", resourceKind, resourceName),
 			func(options types.LogProcessOptionsInterface) {
 				options.Style(style.Details())
 				options.WithoutElapsedTime()
@@ -138,9 +139,9 @@ func (mt *multitracker) displayResourceEventF(resourceKind string, spec Multitra
 	}
 }
 
-func (mt *multitracker) displayResourceErrorF(resourceKind string, spec MultitrackSpec, format string, a ...interface{}) {
+func (mt *multitracker) displayResourceErrorF(resourceKind, resourceName, format string, a ...interface{}) {
 	mt.resetLogProcess()
-	logboek.Context(context.Background()).Warn().LogF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, spec.ResourceName, format), a...)
+	logboek.Context(context.Background()).Warn().LogF(fmt.Sprintf("%s/%s ERROR: %s\n", resourceKind, resourceName, format), a...)
 }
 
 func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
@@ -150,7 +151,7 @@ func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
 		}
 
 		spec := mt.DeploymentsSpecs[name]
-		mt.displayResourceServiceMessages("deploy", spec)
+		mt.displayResourceServiceMessages("deploy", spec.ResourceName)
 	}
 	for name, state := range mt.TrackingStatefulSets {
 		if state.Status != resourceFailed {
@@ -158,7 +159,7 @@ func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
 		}
 
 		spec := mt.StatefulSetsSpecs[name]
-		mt.displayResourceServiceMessages("sts", spec)
+		mt.displayResourceServiceMessages("sts", spec.ResourceName)
 	}
 	for name, state := range mt.TrackingDaemonSets {
 		if state.Status != resourceFailed {
@@ -166,7 +167,7 @@ func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
 		}
 
 		spec := mt.DaemonSetsSpecs[name]
-		mt.displayResourceServiceMessages("ds", spec)
+		mt.displayResourceServiceMessages("ds", spec.ResourceName)
 	}
 	for name, state := range mt.TrackingJobs {
 		if state.Status != resourceFailed {
@@ -174,19 +175,27 @@ func (mt *multitracker) displayFailedTrackingResourcesServiceMessages() {
 		}
 
 		spec := mt.JobsSpecs[name]
-		mt.displayResourceServiceMessages("job", spec)
+		mt.displayResourceServiceMessages("job", spec.ResourceName)
+	}
+
+	for _, res := range mt.GenericResources {
+		if res.State.ResourceState() != generic.ResourceStateFailed {
+			continue
+		}
+
+		mt.displayResourceServiceMessages(res.Spec.GroupVersionKindNamespaceString(), res.Spec.Name)
 	}
 }
 
-func (mt *multitracker) displayResourceServiceMessages(resourceKind string, spec MultitrackSpec) {
-	lines := mt.serviceMessagesByResource[fmt.Sprintf("%s/%s", resourceKind, spec.ResourceName)]
+func (mt *multitracker) displayResourceServiceMessages(resourceKind, resourceName string) {
+	lines := mt.serviceMessagesByResource[fmt.Sprintf("%s/%s", resourceKind, resourceName)]
 
 	if len(lines) > 0 {
 		mt.resetLogProcess()
 
 		logboek.Context(context.Background()).LogOptionalLn()
 
-		logboek.Context(context.Background()).Default().LogBlock("Failed resource %s/%s service messages", resourceKind, spec.ResourceName).
+		logboek.Context(context.Background()).Default().LogBlock("Failed resource %s/%s service messages", resourceKind, resourceName).
 			Options(func(options types.LogBlockOptionsInterface) {
 				options.WithoutLogOptionalLn()
 				options.Style(style.Details())
@@ -235,6 +244,7 @@ func (mt *multitracker) displayStatusProgress() error {
 			mt.displayStatefulSetsStatusProgress()
 			mt.displayJobsProgress()
 			mt.displayCanariesProgress()
+			mt.displayGenericsStatusProgress()
 		})
 
 	logboek.Context(context.Background()).LogOptionalLn()
@@ -548,6 +558,80 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 	}
 }
 
+func (mt *multitracker) displayGenericsStatusProgress() {
+	t := utils.NewTable([]float64{.40, .20, .20, .20}...)
+	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
+	t.Header("RESOURCE", "NAMESPACE", "CONDITION", "CURRENT / DESIRED CONDITION")
+
+	for _, resource := range mt.GenericResources {
+		var namespace string
+		if resource.Spec.Namespace != "" {
+			namespace = resource.Spec.Namespace
+		} else {
+			namespace = "-"
+		}
+
+		lastStatus := resource.State.LastStatus()
+		if lastStatus == nil {
+			resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.GroupVersionKindNameString(), resource.Spec.FailMode, false, false, true)
+			t.Row(resourceCaption, namespace, "-", "-")
+			continue
+		}
+
+		lastPrintedStatus := resource.State.LastPrintedStatus()
+
+		var showProgress bool
+		if lastPrintedStatus != nil {
+			showProgress = lastPrintedStatus.DiffersFrom(lastStatus)
+		} else {
+			showProgress = true
+		}
+
+		resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.GroupVersionKindNameString(), resource.Spec.FailMode, lastStatus.IsReady(), lastStatus.IsFailed(), true)
+
+		var lastPrintedStatusIndicator *indicators.StringEqualConditionIndicator
+		if lastPrintedStatus != nil {
+			lastPrintedStatusIndicator = lastPrintedStatus.Indicator
+		}
+
+		disableWarningColors := resource.Spec.FailMode == generic.IgnoreAndContinueDeployProcess
+
+		var currentAndDesiredState string
+		if lastStatus.Indicator != nil {
+			if lastStatus.IsFailed() && lastStatus.Indicator.FailedValue == "" {
+				currentAndDesiredState = "-"
+			} else {
+				currentAndDesiredState = lastStatus.Indicator.FormatTableElem(lastPrintedStatusIndicator, indicators.FormatTableElemOptions{
+					ShowProgress:         showProgress,
+					DisableWarningColors: disableWarningColors,
+					WithTargetValue:      true,
+				})
+			}
+		} else {
+			currentAndDesiredState = "-"
+		}
+
+		var humanConditionPath string
+		if lastStatus.HumanConditionPath() != "" {
+			humanConditionPath = lastStatus.HumanConditionPath()
+		} else {
+			humanConditionPath = "-"
+		}
+
+		if lastStatus.IsFailed() && lastStatus.FailureReason() != "" {
+			t.Row(resourceCaption, namespace, humanConditionPath, currentAndDesiredState, formatResourceError(disableWarningColors, lastStatus.FailureReason()))
+		} else {
+			t.Row(resourceCaption, namespace, humanConditionPath, currentAndDesiredState)
+		}
+
+		resource.State.SetLastPrintedStatus(lastStatus)
+	}
+
+	if len(mt.GenericResources) > 0 {
+		logboek.Context(context.Background()).Log(t.Render())
+	}
+}
+
 func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
 	st := t.SubTable(statusProgressSubTableRatio...)
 	st.Header("POD", "READY", "RESTARTS", "STATUS")
@@ -644,6 +728,41 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 		}
 
 	case HopeUntilEndOfDeployProcess:
+		if isReady {
+			return utils.GreenF("%s", resourceCaption)
+		} else {
+			return utils.YellowF("%s", resourceCaption)
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported resource fail mode '%s'", resourceFailMode))
+	}
+}
+
+func formatGenericResourceCaption(resourceCaption string, resourceFailMode generic.FailMode, isReady, isFailed, isNew bool) string {
+	if !isNew {
+		return resourceCaption
+	}
+
+	switch resourceFailMode {
+	case generic.FailWholeDeployProcessImmediately:
+		switch {
+		case isReady:
+			return utils.GreenF("%s", resourceCaption)
+		case isFailed:
+			return utils.RedF("%s", resourceCaption)
+		default:
+			return utils.YellowF("%s", resourceCaption)
+		}
+
+	case generic.IgnoreAndContinueDeployProcess:
+		if isReady {
+			return utils.GreenF("%s", resourceCaption)
+		} else {
+			return resourceCaption
+		}
+
+	case generic.HopeUntilEndOfDeployProcess:
 		if isReady {
 			return utils.GreenF("%s", resourceCaption)
 		} else {

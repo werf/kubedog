@@ -48,29 +48,37 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 		} else {
 			res += utils.YellowF("%s", prevIndicator.Value)
 		}
-		res += " -> "
+		res += "->"
 	}
 
 	switch {
 	case !opts.IsResourceNew:
-		res += indicator.Value
+		res += indicator.formatValue(opts.WithTargetValue)
 	case indicator.IsReady():
-		res += utils.GreenF("%s", indicator.Value)
+		res += utils.GreenF("%s", indicator.formatValue(opts.WithTargetValue))
 	case indicator.IsFailed():
 		if opts.DisableWarningColors {
-			res += indicator.Value
+			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += utils.RedF("%s", indicator.Value)
+			res += utils.RedF("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	default:
 		if opts.DisableWarningColors {
-			res += indicator.Value
+			res += indicator.formatValue(opts.WithTargetValue)
 		} else {
-			res += utils.YellowF("%s", indicator.Value)
+			res += utils.YellowF("%s", indicator.formatValue(opts.WithTargetValue))
 		}
 	}
 
 	return res
+}
+
+func (indicator *StringEqualConditionIndicator) formatValue(withTargetValue bool) string {
+	if withTargetValue {
+		return fmt.Sprintf("%s / %s", indicator.Value, indicator.TargetValue)
+	} else {
+		return fmt.Sprintf("%s", indicator.Value)
+	}
 }
 
 type Int32EqualConditionIndicator struct {
