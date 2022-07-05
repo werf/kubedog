@@ -7,8 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	diskcached "k8s.io/client-go/discovery/cached/disk"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
@@ -17,6 +21,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/openstack"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/werf/kubedog/pkg/utils"
@@ -28,11 +33,13 @@ const (
 )
 
 var (
-	Kubernetes       kubernetes.Interface
-	Client           kubernetes.Interface
-	DynamicClient    dynamic.Interface
-	DefaultNamespace string
-	Context          string
+	Kubernetes            kubernetes.Interface
+	Client                kubernetes.Interface
+	DynamicClient         dynamic.Interface
+	CachedDiscoveryClient discovery.CachedDiscoveryInterface
+	Mapper                meta.RESTMapper
+	DefaultNamespace      string
+	Context               string
 )
 
 type InitOptions struct {
@@ -58,6 +65,13 @@ func Init(opts InitOptions) error {
 			return err
 		}
 		DynamicClient = dynamicClient
+
+		CachedDiscoveryClient, err = cachedDiscoveryClient(*config.Config)
+		if err != nil {
+			return fmt.Errorf("error getting cached discovery client: %w", err)
+		}
+
+		Mapper = restMapper(&CachedDiscoveryClient)
 	}
 
 	return nil
@@ -371,4 +385,20 @@ func GroupVersionResourceByKind(client kubernetes.Interface, kind string) (schem
 	}
 
 	return schema.GroupVersionResource{}, fmt.Errorf("kind %s is not supported", kind)
+}
+
+func cachedDiscoveryClient(config rest.Config) (discovery.CachedDiscoveryInterface, error) {
+	config.Burst = 100
+
+	cacheDir := defaultCacheDir
+	httpCacheDir := filepath.Join(cacheDir, "http")
+	discoveryCacheDir := computeDiscoverCacheDir(filepath.Join(cacheDir, "discovery"), config.Host)
+
+	return diskcached.NewCachedDiscoveryClientForConfig(&config, discoveryCacheDir, httpCacheDir, time.Duration(10*time.Minute))
+}
+
+func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.RESTMapper {
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(*cachedDiscoveryClient)
+
+	return restmapper.NewShortcutExpander(mapper, *cachedDiscoveryClient)
 }

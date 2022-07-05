@@ -170,6 +170,9 @@ func main() {
 			multitrackOptions := multitrack.MultitrackOptions{
 				StatusProgressPeriod: time.Second * time.Duration(statusProgressPeriodSeconds),
 				Options:              makeTrackerOptions("track"),
+				DynamicClient:        kube.DynamicClient,
+				DiscoveryClient:      kube.CachedDiscoveryClient,
+				Mapper:               kube.Mapper,
 			}
 			err = multitrack.Multitrack(kube.Kubernetes, specs, multitrackOptions)
 			if err != nil {

@@ -90,46 +90,46 @@ func (mt *multitracker) TrackStatefulSet(kube kubernetes.Interface, spec Multitr
 
 func (mt *multitracker) statefulsetAdded(spec MultitrackSpec, feed statefulset.Feed, isReady bool) error {
 	if isReady {
-		mt.displayResourceTrackerMessageF("sts", spec, "appears to be READY")
+		mt.displayResourceTrackerMessageF("sts", spec.ResourceName, spec.ShowServiceMessages, "appears to be READY")
 
 		return mt.handleResourceReadyCondition(mt.TrackingStatefulSets, spec)
 	}
 
-	mt.displayResourceTrackerMessageF("sts", spec, "added")
+	mt.displayResourceTrackerMessageF("sts", spec.ResourceName, spec.ShowServiceMessages, "added")
 
 	return nil
 }
 
 func (mt *multitracker) statefulsetReady(spec MultitrackSpec, feed statefulset.Feed) error {
-	mt.displayResourceTrackerMessageF("sts", spec, "become READY")
+	mt.displayResourceTrackerMessageF("sts", spec.ResourceName, spec.ShowServiceMessages, "become READY")
 
 	return mt.handleResourceReadyCondition(mt.TrackingStatefulSets, spec)
 }
 
 func (mt *multitracker) statefulsetFailed(spec MultitrackSpec, feed statefulset.Feed, reason string) error {
-	mt.displayResourceErrorF("sts", spec, "%s", reason)
+	mt.displayResourceErrorF("sts", spec.ResourceName, "%s", reason)
 	return mt.handleResourceFailure(mt.TrackingStatefulSets, "sts", spec, reason)
 }
 
 func (mt *multitracker) statefulsetEventMsg(spec MultitrackSpec, feed statefulset.Feed, msg string) error {
-	mt.displayResourceEventF("sts", spec, "%s", msg)
+	mt.displayResourceEventF("sts", spec.ResourceName, spec.ShowServiceMessages, "%s", msg)
 	return nil
 }
 
 func (mt *multitracker) statefulsetAddedReplicaSet(spec MultitrackSpec, feed statefulset.Feed, rs replicaset.ReplicaSet) error {
-	mt.displayResourceTrackerMessageF("sts", spec, "rs/%s added", rs.Name)
+	mt.displayResourceTrackerMessageF("sts", spec.ResourceName, spec.ShowServiceMessages, "rs/%s added", rs.Name)
 	return nil
 }
 
 func (mt *multitracker) statefulsetAddedPod(spec MultitrackSpec, feed statefulset.Feed, pod replicaset.ReplicaSetPod) error {
-	mt.displayResourceTrackerMessageF("sts", spec, "po/%s added", pod.Name)
+	mt.displayResourceTrackerMessageF("sts", spec.ResourceName, spec.ShowServiceMessages, "po/%s added", pod.Name)
 	return nil
 }
 
 func (mt *multitracker) statefulsetPodError(spec MultitrackSpec, feed statefulset.Feed, podError replicaset.ReplicaSetPodError) error {
 	reason := fmt.Sprintf("po/%s container/%s: %s", podError.PodName, podError.ContainerName, podError.Message)
 
-	mt.displayResourceErrorF("sts", spec, "%s", reason)
+	mt.displayResourceErrorF("sts", spec.ResourceName, "%s", reason)
 
 	return mt.handleResourceFailure(mt.TrackingStatefulSets, "sts", spec, reason)
 }
