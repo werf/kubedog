@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.7.1](https://www.github.com/werf/kubedog/compare/v0.7.0...v0.7.1) (2022-07-06)
+
+
+### Bug Fixes
+
+* non-blocking mode doesn't work ([71e8826](https://www.github.com/werf/kubedog/commit/71e88261b930965dd473af7274b0ec3f9dd7e9ba))
+
 ## [0.7.0](https://www.github.com/werf/kubedog/compare/v0.6.4...v0.7.0) (2022-07-05)
 
 
