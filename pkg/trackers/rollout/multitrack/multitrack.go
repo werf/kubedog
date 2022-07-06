@@ -423,6 +423,10 @@ func (mt *multitracker) applyTrackTerminationMode() error {
 		contextsToStop = append(contextsToStop, ctx)
 	}
 	for _, res := range mt.GenericResources {
+		if res.Context == nil {
+			continue
+		}
+
 		if res.Spec.TrackTerminationMode == generic.WaitUntilResourceReady {
 			return nil
 		}
