@@ -119,7 +119,7 @@ Multitrack(
 - `specs` — description of objects to track
 - `opts` — multitrack specific options
 
-`specs` argument describes what `Deployments`, `StatefulSets`, `DaemonSets`, `Jobs` and `Canaries` to track using `MultitrackSpec` structure. `MultitrackSpec` allows to specify different modes of tracking per-resource (such as allowed failures count, log regexp and other):
+`specs` argument describes what `Deployments`, `StatefulSets`, `DaemonSets`, `Jobs`, `Canaries` and `Generics` to track using `MultitrackSpec` or `generic.Spec` structure. `MultitrackSpec` and `generic.Spec` allows to specify different modes of tracking per-resource (such as allowed failures count, log regexp and other):
 
 ```
 type MultitrackSpecs struct {
@@ -128,6 +128,7 @@ type MultitrackSpecs struct {
 	DaemonSets   []MultitrackSpec
 	Jobs         []MultitrackSpec
 	Canaries     []MultitrackSpec
+	Generics     []*generic.Spec
 }
 
 type MultitrackSpec struct {
@@ -147,6 +148,19 @@ type MultitrackSpec struct {
 	ShowLogsOnlyForContainers []string
 
 	ShowServiceMessages bool
+}
+
+type generic.Spec struct {
+	*resid.ResourceID
+
+	Timeout              time.Duration
+	NoActivityTimeout    *time.Duration
+	TrackTerminationMode TrackTerminationMode
+	FailMode             FailMode
+	AllowFailuresCount   *int
+	ShowServiceMessages  bool
+	HideEvents           bool
+	StatusProgressPeriod time.Duration
 }
 ```
 
