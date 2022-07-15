@@ -75,7 +75,7 @@ func (indicator *StringEqualConditionIndicator) FormatTableElem(prevIndicator *S
 
 func (indicator *StringEqualConditionIndicator) formatValue(withTargetValue bool) string {
 	if withTargetValue {
-		return fmt.Sprintf("%s / %s", indicator.Value, indicator.TargetValue)
+		return fmt.Sprintf("%s (%s)", indicator.Value, indicator.TargetValue)
 	} else {
 		return fmt.Sprintf("%s", indicator.Value)
 	}
