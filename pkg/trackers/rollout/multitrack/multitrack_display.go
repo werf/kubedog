@@ -575,9 +575,9 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 }
 
 func (mt *multitracker) displayGenericsStatusProgress() {
-	t := utils.NewTable([]float64{.40, .20, .20, .20}...)
+	t := utils.NewTable([]float64{.43, .14, .43}...)
 	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
-	t.Header("RESOURCE", "NAMESPACE", "CONDITION", "CURRENT / DESIRED CONDITION")
+	t.Header("RESOURCE", "NAMESPACE", "CONDITION: CURRENT (DESIRED)")
 
 	for _, resource := range mt.GenericResources {
 		var namespace string
@@ -589,7 +589,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 
 		lastStatus := resource.State.LastStatus()
 		if lastStatus == nil {
-			resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.GroupVersionKindNameString(), resource.Spec.FailMode, false, false, true)
+			resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.KindNameString(), resource.Spec.FailMode, false, false, true)
 			t.Row(resourceCaption, namespace, "-", "-")
 			continue
 		}
@@ -607,7 +607,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 			showProgress = true
 		}
 
-		resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.GroupVersionKindNameString(), resource.Spec.FailMode, lastStatus.IsReady(), lastStatus.IsFailed(), true)
+		resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.KindNameString(), resource.Spec.FailMode, lastStatus.IsReady(), lastStatus.IsFailed(), true)
 
 		var lastPrintedStatusIndicator *indicators.StringEqualConditionIndicator
 		if lastPrintedStatus != nil {
@@ -638,10 +638,12 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 			humanConditionPath = "-"
 		}
 
+		condition := fmt.Sprintf("%s: %s", humanConditionPath, currentAndDesiredState)
+
 		if lastStatus.IsFailed() && lastStatus.FailureReason() != "" {
-			t.Row(resourceCaption, namespace, humanConditionPath, currentAndDesiredState, formatResourceError(disableWarningColors, lastStatus.FailureReason()))
+			t.Row(resourceCaption, namespace, condition, formatResourceError(disableWarningColors, lastStatus.FailureReason()))
 		} else {
-			t.Row(resourceCaption, namespace, humanConditionPath, currentAndDesiredState)
+			t.Row(resourceCaption, namespace, condition)
 		}
 
 		resource.State.SetLastPrintedStatus(lastStatus)

@@ -51,6 +51,10 @@ func (r *ResourceID) GroupVersionKindNameString() string {
 	return strings.Join([]string{r.GroupVersionKindString(), r.Name}, "/")
 }
 
+func (r *ResourceID) KindNameString() string {
+	return strings.Join([]string{r.GroupVersionKind.Kind, r.Name}, "/")
+}
+
 func (r *ResourceID) GroupVersionKindNamespaceString() string {
 	var resultElems []string
 
