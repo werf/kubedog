@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://www.github.com/werf/kubedog/compare/v0.7.1...v0.8.0) (2022-07-15)
+
+
+### Features
+
+* show Ready resources only once ([322a781](https://www.github.com/werf/kubedog/commit/322a781e52bb75be2ab39c2bc22ff1ab091c39dd))
+
 ### [0.7.1](https://www.github.com/werf/kubedog/compare/v0.7.0...v0.7.1) (2022-07-06)
 
 
