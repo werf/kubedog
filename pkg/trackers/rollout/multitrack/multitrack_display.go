@@ -298,6 +298,10 @@ func (mt *multitracker) displayJobsProgress() {
 
 		spec := mt.JobsSpecs[name]
 
+		if stillSucceeded := prevStatus.IsSucceeded && status.IsSucceeded; stillSucceeded {
+			continue
+		}
+
 		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
 		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
 
@@ -357,6 +361,10 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 		status := mt.StatefulSetsStatuses[name]
 
 		spec := mt.StatefulSetsSpecs[name]
+
+		if stillDeployed := prevStatus.IsReady && status.IsReady; stillDeployed {
+			continue
+		}
 
 		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
 		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
@@ -434,6 +442,10 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 
 		spec := mt.DaemonSetsSpecs[name]
 
+		if stillDeployed := prevStatus.IsReady && status.IsReady; stillDeployed {
+			continue
+		}
+
 		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
 		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
 
@@ -503,6 +515,10 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 		prevStatus := mt.PrevDeploymentsStatuses[name]
 		status := mt.DeploymentsStatuses[name]
 		spec := mt.DeploymentsSpecs[name]
+
+		if stillDeployed := prevStatus.IsReady && status.IsReady; stillDeployed {
+			continue
+		}
 
 		showProgress := status.StatusGeneration > prevStatus.StatusGeneration
 		disableWarningColors := spec.FailMode == IgnoreAndContinueDeployProcess
@@ -579,6 +595,10 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 		}
 
 		lastPrintedStatus := resource.State.LastPrintedStatus()
+
+		if stillReady := lastPrintedStatus != nil && lastPrintedStatus.IsReady() && lastStatus.IsReady(); stillReady {
+			continue
+		}
 
 		var showProgress bool
 		if lastPrintedStatus != nil {
