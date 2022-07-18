@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://www.github.com/werf/kubedog/compare/v0.8.0...v0.9.0) (2022-07-18)
+
+
+### Features
+
+* improved Generic progress status ([5f68bca](https://www.github.com/werf/kubedog/commit/5f68bca131024ed5a5b791f3194f98e3304e5b16))
+
+
+### Bug Fixes
+
+* job duration stops changing ([4aa62c3](https://www.github.com/werf/kubedog/commit/4aa62c3bc21778b4fd2aff2c7b28432d54a3524c))
+
 ## [0.8.0](https://www.github.com/werf/kubedog/compare/v0.7.1...v0.8.0) (2022-07-15)
 
 
