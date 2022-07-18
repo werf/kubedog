@@ -1,5 +1,13 @@
 # Changelog
 
+### [0.9.1](https://www.github.com/werf/kubedog/compare/v0.9.0...v0.9.1) (2022-07-18)
+
+
+### Bug Fixes
+
+* increase noActivityTimeout from 1.5 to 4min ([00b49d8](https://www.github.com/werf/kubedog/commit/00b49d814dc0d807e374967fc19ce9d38c9dde28))
+* reword no activity error message ([e4b1302](https://www.github.com/werf/kubedog/commit/e4b13020cca2f0a175c51316945dd478b79d4d9a))
+
 ## [0.9.0](https://www.github.com/werf/kubedog/compare/v0.8.0...v0.9.0) (2022-07-18)
 
 
