@@ -46,7 +46,7 @@ func (s *Spec) Init() error {
 
 	if s.NoActivityTimeout == nil {
 		s.NoActivityTimeout = new(time.Duration)
-		*s.NoActivityTimeout = time.Duration(90 * time.Second)
+		*s.NoActivityTimeout = time.Duration(4 * time.Minute)
 	}
 
 	if s.TrackTerminationMode == "" {
