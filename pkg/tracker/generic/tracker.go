@@ -111,7 +111,7 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 		case event := <-eventWatcherCh:
 			t.handleEvent(event, eventCh, failedCh)
 		case <-time.After(noActivityTimeout):
-			failedCh <- NewFailedResourceStatus(fmt.Sprintf("marking resource as failed because no progress for %s", noActivityTimeout))
+			failedCh <- NewFailedResourceStatus(fmt.Sprintf("marking resource as failed because no activity for %s", noActivityTimeout))
 		case err := <-errCh:
 			if err != nil {
 				return err
