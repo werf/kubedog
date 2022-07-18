@@ -2,11 +2,9 @@ package job
 
 import (
 	"fmt"
-	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/duration"
 
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
@@ -19,7 +17,6 @@ type JobStatus struct {
 	StatusGeneration uint64
 
 	SucceededIndicator *indicators.Int32EqualConditionIndicator
-	Duration           string
 	Age                string
 
 	WaitingForMessages []string
@@ -44,14 +41,6 @@ func NewJobStatus(object *batchv1.Job, statusGeneration uint64, isTrackerFailed 
 		if v.StatusIndicator != nil {
 			v.StatusIndicator.TargetValue = "Completed"
 		}
-	}
-
-	switch {
-	case res.StartTime == nil:
-	case res.CompletionTime == nil:
-		res.Duration = duration.HumanDuration(time.Since(res.StartTime.Time))
-	default:
-		res.Duration = duration.HumanDuration(res.CompletionTime.Sub(res.StartTime.Time))
 	}
 
 	doCheckJobConditions := true

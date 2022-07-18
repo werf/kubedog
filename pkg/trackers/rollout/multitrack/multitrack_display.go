@@ -6,6 +6,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
+
+	dur "k8s.io/apimachinery/pkg/util/duration"
 
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
@@ -315,10 +318,19 @@ func (mt *multitracker) displayJobsProgress() {
 			})
 		}
 
+		var duration string
+		switch {
+		case status.JobStatus.StartTime == nil:
+		case status.JobStatus.CompletionTime == nil:
+			duration = dur.HumanDuration(time.Since(status.JobStatus.StartTime.Time))
+		default:
+			duration = dur.HumanDuration(status.JobStatus.CompletionTime.Sub(status.JobStatus.StartTime.Time))
+		}
+
 		if status.IsFailed {
-			t.Row(resource, status.Active, status.Duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"), formatResourceError(disableWarningColors, status.FailedReason))
+			t.Row(resource, status.Active, duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"), formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
-			t.Row(resource, status.Active, status.Duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"))
+			t.Row(resource, status.Active, duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"))
 		}
 
 		if len(status.Pods) > 0 {

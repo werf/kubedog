@@ -29,6 +29,6 @@ build:
 
 .PHONY: install
 install:
-	go build github.com/werf/kubedog/cmd/kubedog
+	go install github.com/werf/kubedog/cmd/kubedog
 
 all: fmt lint install
