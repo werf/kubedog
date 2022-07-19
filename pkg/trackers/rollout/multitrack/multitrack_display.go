@@ -591,6 +591,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 	t.Header("RESOURCE", "NAMESPACE", "CONDITION: CURRENT (DESIRED)")
 
+	var toBePrintedCount int
 	for _, resource := range mt.GenericResources {
 		var namespace string
 		if resource.Spec.Namespace != "" {
@@ -643,15 +644,14 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 			currentAndDesiredState = "-"
 		}
 
-		var humanConditionPath string
+		var condition string
 		if lastStatus.HumanConditionPath() != "" {
-			humanConditionPath = lastStatus.HumanConditionPath()
+			condition = fmt.Sprintf("%s: %s", lastStatus.HumanConditionPath() != "", currentAndDesiredState)
 		} else {
-			humanConditionPath = "-"
+			condition = "-"
 		}
 
-		condition := fmt.Sprintf("%s: %s", humanConditionPath, currentAndDesiredState)
-
+		toBePrintedCount++
 		if lastStatus.IsFailed() && lastStatus.FailureReason() != "" {
 			t.Row(resourceCaption, namespace, condition, formatResourceError(disableWarningColors, lastStatus.FailureReason()))
 		} else {
@@ -661,7 +661,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 		resource.State.SetLastPrintedStatus(lastStatus)
 	}
 
-	if len(mt.GenericResources) > 0 {
+	if toBePrintedCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
