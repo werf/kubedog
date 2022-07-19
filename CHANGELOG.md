@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.2](https://www.github.com/werf/kubedog/compare/v0.9.1...v0.9.2) (2022-07-19)
+
+
+### Bug Fixes
+
+* improve generic tracker output ([60602b0](https://www.github.com/werf/kubedog/commit/60602b05cc942cd27ef5354be15c2d744a2e5092))
+
 ### [0.9.1](https://www.github.com/werf/kubedog/compare/v0.9.0...v0.9.1) (2022-07-18)
 
 
