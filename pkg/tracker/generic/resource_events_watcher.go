@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,6 +20,7 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/resid"
 	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/logboek"
 )
 
 type ResourceEventsWatcher struct {
@@ -45,9 +47,32 @@ func NewResourceEventsWatcher(
 }
 
 func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1.Event) error {
-	i.generateResourceInitialEventsUIDs(ctx)
-
 	fieldsSet, eventsNs := utils.EventFieldSelectorFromUnstructured(i.object)
+
+	for _, verb := range []string{"list", "watch"} {
+		if response, err := i.client.AuthorizationV1().SelfSubjectAccessReviews().Create(
+			ctx,
+			&authorizationv1.SelfSubjectAccessReview{
+				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+					ResourceAttributes: &authorizationv1.ResourceAttributes{
+						Verb:      verb,
+						Namespace: eventsNs,
+						Resource:  "events",
+						Version:   "v1",
+					},
+				},
+			},
+			metav1.CreateOptions{},
+		); err != nil {
+			logboek.Context(context.Background()).Default().LogF("Won't track %q events: error checking %q access: %s\n", i.ResourceID, verb, err)
+			return nil
+		} else if !response.Status.Allowed {
+			logboek.Context(context.Background()).Default().LogF("Won't track %q events: no %q access.\n", i.ResourceID, verb)
+			return nil
+		}
+	}
+
+	i.generateResourceInitialEventsUIDs(ctx)
 
 	setOptionsFunc := func(options *metav1.ListOptions) {
 		options.FieldSelector = fieldsSet.AsSelector().String()
