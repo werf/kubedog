@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.3](https://www.github.com/werf/kubedog/compare/v0.9.2...v0.9.3) (2022-07-20)
+
+
+### Bug Fixes
+
+* Generic tracker hangs if no list/watch access ([946d650](https://www.github.com/werf/kubedog/commit/946d650746a249a92c0cdbc241958ecb519c8a88))
+
 ### [0.9.2](https://www.github.com/werf/kubedog/compare/v0.9.1...v0.9.2) (2022-07-19)
 
 
