@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.4](https://www.github.com/werf/kubedog/compare/v0.9.3...v0.9.4) (2022-07-21)
+
+
+### Bug Fixes
+
+* **generic-tracker:** improve logging + few possible fixes ([3524520](https://www.github.com/werf/kubedog/commit/352452071afd55b57ef721b8b271e9acc9849c75))
+
 ### [0.9.3](https://www.github.com/werf/kubedog/compare/v0.9.2...v0.9.3) (2022-07-20)
 
 
