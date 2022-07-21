@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -51,7 +52,7 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 	}
 
 	for _, verb := range []string{"list", "watch"} {
-		if response, err := w.client.AuthorizationV1().SelfSubjectAccessReviews().Create(
+		response, err := w.client.AuthorizationV1().SelfSubjectAccessReviews().Create(
 			ctx,
 			&authorizationv1.SelfSubjectAccessReview{
 				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
@@ -59,23 +60,33 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 						Verb:      verb,
 						Resource:  gvr.Resource,
 						Namespace: w.ResourceID.Namespace,
-						Group:     w.ResourceID.GroupVersionKind.Group,
-						Version:   w.ResourceID.GroupVersionKind.Version,
+						Group:     gvr.Group,
+						Version:   gvr.Version,
 						Name:      w.ResourceID.Name,
 					},
 				},
 			},
 			metav1.CreateOptions{},
-		); err != nil {
+		)
+
+		if debug.Debug() {
+			if err != nil {
+				fmt.Printf("SelfSubjectAccessReview error for %q: %+v\n", w.ResourceID, err)
+			} else {
+				fmt.Printf("SelfSubjectAccessReview for %q: %+v\n", w.ResourceID, response)
+			}
+		}
+
+		if err != nil {
 			logboek.Context(context.Background()).Warn().LogF("Won't track %q: error checking %q access: %s\n", w.ResourceID, verb, err)
 			return nil
-		} else if !response.Status.Allowed {
+		} else if !response.Status.Allowed || response.Status.Denied {
 			logboek.Context(context.Background()).Warn().LogF("Won't track %q: no %q access.\n", w.ResourceID, verb)
 			return nil
 		}
 	}
 
-	resClient, err := w.resourceClient()
+	resClient, err := w.resourceClient(gvr)
 	if err != nil {
 		return fmt.Errorf("error getting resource client: %w", err)
 	}
@@ -93,6 +104,10 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 			setOptionsFunc(&options)
 			return resClient.Watch(ctx, options)
 		},
+	}
+
+	if debug.Debug() {
+		fmt.Printf("      %s resource watcher STARTED\n", w.ResourceID)
 	}
 
 	_, err = watchtools.UntilWithSync(ctx, listWatch, &unstructured.Unstructured{}, nil,
@@ -123,12 +138,7 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 	return tracker.AdaptInformerError(err)
 }
 
-func (w *ResourceStateWatcher) resourceClient() (dynamic.ResourceInterface, error) {
-	gvr, err := w.ResourceID.GroupVersionResource(w.mapper)
-	if err != nil {
-		return nil, fmt.Errorf("error getting GroupVersionResource: %w", err)
-	}
-
+func (w *ResourceStateWatcher) resourceClient(gvr *schema.GroupVersionResource) (dynamic.ResourceInterface, error) {
 	resClient := w.dynamicClient.Resource(*gvr)
 
 	if namespaced, err := w.ResourceID.Namespaced(w.mapper); err != nil {
