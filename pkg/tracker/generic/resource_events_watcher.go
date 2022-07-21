@@ -50,7 +50,7 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 	fieldsSet, eventsNs := utils.EventFieldSelectorFromUnstructured(i.object)
 
 	for _, verb := range []string{"list", "watch"} {
-		if response, err := i.client.AuthorizationV1().SelfSubjectAccessReviews().Create(
+		response, err := i.client.AuthorizationV1().SelfSubjectAccessReviews().Create(
 			ctx,
 			&authorizationv1.SelfSubjectAccessReview{
 				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
@@ -63,10 +63,20 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 				},
 			},
 			metav1.CreateOptions{},
-		); err != nil {
+		)
+
+		if debug.Debug() {
+			if err != nil {
+				fmt.Printf("SelfSubjectAccessReview error for %q: %+v\n", i.ResourceID, err)
+			} else {
+				fmt.Printf("SelfSubjectAccessReview for %q: %+v\n", i.ResourceID, response)
+			}
+		}
+
+		if err != nil {
 			logboek.Context(context.Background()).Default().LogF("Won't track %q events: error checking %q access: %s\n", i.ResourceID, verb, err)
 			return nil
-		} else if !response.Status.Allowed {
+		} else if !response.Status.Allowed || response.Status.Denied {
 			logboek.Context(context.Background()).Default().LogF("Won't track %q events: no %q access.\n", i.ResourceID, verb)
 			return nil
 		}
