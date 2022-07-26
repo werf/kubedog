@@ -627,7 +627,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 		if lastStatus == nil {
 			resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.KindNameString(), resource.Spec.FailMode, false, false, true)
 			tableChangesCount++
-			t.Row(resourceCaption, namespace, "-", "-")
+			t.Row(resourceCaption, namespace, "-")
 			continue
 		}
 
@@ -670,7 +670,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 
 		var condition string
 		if lastStatus.HumanConditionPath() != "" {
-			condition = fmt.Sprintf("%s: %s", lastStatus.HumanConditionPath() != "", currentAndDesiredState)
+			condition = fmt.Sprintf("%s: %s", lastStatus.HumanConditionPath(), currentAndDesiredState)
 		} else {
 			condition = "-"
 		}
