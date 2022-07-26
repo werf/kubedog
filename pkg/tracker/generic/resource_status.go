@@ -32,6 +32,12 @@ func NewResourceStatus(object *unstructured.Unstructured) (*ResourceStatus, erro
 	}, nil
 }
 
+func NewSucceededResourceStatus() *ResourceStatus {
+	return &ResourceStatus{
+		isReady: true,
+	}
+}
+
 func NewFailedResourceStatus(failureReason string) *ResourceStatus {
 	return &ResourceStatus{
 		isFailed:      true,
