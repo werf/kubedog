@@ -346,7 +346,7 @@ func (mt *multitracker) displayJobsProgress() {
 			}
 
 			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, newPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			tableChangesCount = tableChangesCount + podTableChangesCount
+			tableChangesCount += podTableChangesCount
 
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
@@ -432,7 +432,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 
 		if len(status.Pods) > 0 {
 			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			tableChangesCount = tableChangesCount + podTableChangesCount
+			tableChangesCount += podTableChangesCount
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				tableChangesCount++
@@ -512,7 +512,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 
 		if len(status.Pods) > 0 {
 			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			tableChangesCount = tableChangesCount + podTableChangesCount
+			tableChangesCount += podTableChangesCount
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				tableChangesCount++
@@ -591,7 +591,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 
 		if len(status.Pods) > 0 {
 			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
-			tableChangesCount = tableChangesCount + podTableChangesCount
+			tableChangesCount += podTableChangesCount
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
 				tableChangesCount++

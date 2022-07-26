@@ -29,7 +29,7 @@ func (e UnrecoverableWatchError) Unwrap() error {
 }
 
 type SetWatchErrorHandlerOptions struct {
-	FatalWatchErr *UnrecoverableWatchError // If unrecoverable watch error occured it will be saved here.
+	FatalWatchErr *UnrecoverableWatchError // If unrecoverable watch error occurred it will be saved here.
 }
 
 func SetWatchErrorHandler(cancelFn context.CancelFunc, resName string, setWatchErrorHandler func(handler cache.WatchErrorHandler) error, opts SetWatchErrorHandlerOptions) error {
