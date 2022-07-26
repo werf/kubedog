@@ -2,6 +2,7 @@ package generic
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -73,9 +74,9 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 	resModifiedCh := make(chan *unstructured.Unstructured)
 	resDeletedCh := make(chan *unstructured.Unstructured)
 
-	go func(errCh chan<- error) {
+	go func(stateWatcherErrCh chan<- error) {
 		resourceStateWatcher := NewResourceStateWatcher(t.ResourceID, t.client, t.dynamicClient, t.mapper)
-		errCh <- resourceStateWatcher.Run(ctx, resAddedCh, resModifiedCh, resDeletedCh)
+		stateWatcherErrCh <- resourceStateWatcher.Run(ctx, resAddedCh, resModifiedCh, resDeletedCh)
 	}(stateWatcherErrCh)
 
 	statusStabilizingTicker := time.NewTicker(time.Second)
@@ -114,7 +115,13 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 		case <-time.After(noActivityTimeout):
 			failedCh <- NewFailedResourceStatus(fmt.Sprintf("marking resource as failed because no activity for %s", noActivityTimeout))
 		case err := <-stateWatcherErrCh:
-			return err
+			var unrecoverableWatchErr *UnrecoverableWatchError
+			if errors.As(err, &unrecoverableWatchErr) {
+				succeededCh <- NewSucceededResourceStatus()
+				return nil
+			} else {
+				return err
+			}
 		case err := <-eventWatcherErrCh:
 			if err != nil {
 				return err

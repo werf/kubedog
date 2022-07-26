@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,13 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/resid"
 	"github.com/werf/kubedog/pkg/utils"
-	"github.com/werf/logboek"
 )
 
 type ResourceEventsWatcher struct {
@@ -47,92 +43,69 @@ func NewResourceEventsWatcher(
 }
 
 func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1.Event) error {
+	runCtx, runCancelFn := context.WithCancel(ctx)
+
+	i.generateResourceInitialEventsUIDs(runCtx)
+
 	fieldsSet, eventsNs := utils.EventFieldSelectorFromUnstructured(i.object)
 
-	for _, verb := range []string{"list", "watch"} {
-		response, err := i.client.AuthorizationV1().SelfSubjectAccessReviews().Create(
-			ctx,
-			&authorizationv1.SelfSubjectAccessReview{
-				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-					ResourceAttributes: &authorizationv1.ResourceAttributes{
-						Verb:      verb,
-						Namespace: eventsNs,
-						Resource:  "events",
-						Version:   "v1",
-					},
-				},
-			},
-			metav1.CreateOptions{},
-		)
-
-		if debug.Debug() {
-			if err != nil {
-				fmt.Printf("SelfSubjectAccessReview error for %q: %+v\n", i.ResourceID, err)
-			} else {
-				fmt.Printf("SelfSubjectAccessReview for %q: %+v\n", i.ResourceID, response)
-			}
-		}
-
-		if err != nil {
-			logboek.Context(context.Background()).Default().LogF("Won't track %q events: error checking %q access: %s\n", i.ResourceID, verb, err)
-			return nil
-		} else if !response.Status.Allowed || response.Status.Denied {
-			logboek.Context(context.Background()).Default().LogF("Won't track %q events: no %q access.\n", i.ResourceID, verb)
-			return nil
-		}
-	}
-
-	i.generateResourceInitialEventsUIDs(ctx)
-
-	setOptionsFunc := func(options *metav1.ListOptions) {
+	tweakListOptsFn := func(options *metav1.ListOptions) {
 		options.FieldSelector = fieldsSet.AsSelector().String()
 	}
 
-	listWatch := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			setOptionsFunc(&options)
-			return i.client.CoreV1().Events(eventsNs).List(ctx, options)
+	informer := cache.NewSharedIndexInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				tweakListOptsFn(&options)
+				return i.client.CoreV1().Events(eventsNs).List(runCtx, options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				tweakListOptsFn(&options)
+				return i.client.CoreV1().Events(eventsNs).Watch(runCtx, options)
+			},
 		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			setOptionsFunc(&options)
-			return i.client.CoreV1().Events(eventsNs).Watch(ctx, options)
+		&corev1.Event{},
+		0,
+		cache.Indexers{},
+	)
+
+	informer.AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				if debug.Debug() {
+					fmt.Printf("    add event: %#v\n", i.ResourceID)
+				}
+				i.handleEventStateChange(runCtx, obj.(*corev1.Event), eventsCh)
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				if debug.Debug() {
+					fmt.Printf("    update event: %#v\n", i.ResourceID)
+				}
+				i.handleEventStateChange(runCtx, newObj.(*corev1.Event), eventsCh)
+			},
+			DeleteFunc: func(obj interface{}) {
+				if debug.Debug() {
+					fmt.Printf("    delete event: %#v\n", i.ResourceID)
+				}
+			},
 		},
+	)
+
+	if err := SetWatchErrorHandler(runCancelFn, i.ResourceID.String(), informer.SetWatchErrorHandler, SetWatchErrorHandlerOptions{}); err != nil {
+		return fmt.Errorf("error setting watch error handler: %w", err)
 	}
 
 	if debug.Debug() {
 		fmt.Printf("> %s run event informer\n", i.ResourceID)
 	}
 
-	_, err := watchtools.UntilWithSync(ctx, listWatch, &corev1.Event{}, nil, func(watchEvent watch.Event) (bool, error) {
-		if debug.Debug() {
-			fmt.Printf("    %s event: %#v\n", i.ResourceID, watchEvent.Type)
-		}
-
-		var event *corev1.Event
-		if watchEvent.Type != watch.Error {
-			var ok bool
-			event, ok = watchEvent.Object.(*corev1.Event)
-			if !ok {
-				return true, fmt.Errorf("TRACK EVENT expect *corev1.Event object, got %T", watchEvent.Object)
-			}
-		}
-
-		switch watchEvent.Type {
-		case watch.Added, watch.Modified:
-			i.handleEventStateChange(ctx, event, eventsCh)
-		case watch.Deleted:
-		case watch.Error:
-			return true, fmt.Errorf("event watch error: %v", watchEvent.Object)
-		}
-
-		return false, nil
-	})
+	informer.Run(runCtx.Done())
 
 	if debug.Debug() {
 		fmt.Printf("     %s event informer DONE\n", i.ResourceID)
 	}
 
-	return tracker.AdaptInformerError(err)
+	return nil
 }
 
 func (i *ResourceEventsWatcher) generateResourceInitialEventsUIDs(ctx context.Context) {
