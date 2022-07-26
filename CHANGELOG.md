@@ -1,5 +1,14 @@
 # Changelog
 
+### [0.9.5](https://www.github.com/werf/kubedog/compare/v0.9.4...v0.9.5) (2022-07-26)
+
+
+### Bug Fixes
+
+* **generic:** add logging and don't retry fatal errors on List/Watch ([246d454](https://www.github.com/werf/kubedog/commit/246d45452ae7686584d67dfa4763bf6563907a30))
+* **generic:** Condition output was malformed ([8c05e40](https://www.github.com/werf/kubedog/commit/8c05e40d9a5381c88b38982d284e6d4f8653d917))
+* hide Header if no resources of such type being tracked ([232c4ed](https://www.github.com/werf/kubedog/commit/232c4ede20fa52f18a2e574c173b94e6d0a114cd))
+
 ### [0.9.4](https://www.github.com/werf/kubedog/compare/v0.9.3...v0.9.4) (2022-07-21)
 
 
