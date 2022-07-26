@@ -266,6 +266,7 @@ func (mt *multitracker) displayCanariesProgress() {
 	}
 	sort.Strings(resourcesNames)
 
+	var tableChangesCount int
 	for _, name := range resourcesNames {
 		status := mt.CanariesStatuses[name]
 
@@ -273,13 +274,15 @@ func (mt *multitracker) displayCanariesProgress() {
 		resource := formatResourceCaption(name, spec.FailMode, status.IsSucceeded, status.IsFailed, true)
 
 		if status.IsFailed {
+			tableChangesCount++
 			t.Row(resource, status.FailedReason, status.CanaryWeight, status.LastTransitionTime)
 		} else {
+			tableChangesCount++
 			t.Row(resource, status.CanaryStatus.Phase, status.CanaryWeight, status.LastTransitionTime)
 		}
 	}
 
-	if len(resourcesNames) > 0 {
+	if tableChangesCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
@@ -295,6 +298,7 @@ func (mt *multitracker) displayJobsProgress() {
 	}
 	sort.Strings(resourcesNames)
 
+	var tableChangesCount int
 	for _, name := range resourcesNames {
 		prevStatus := mt.PrevJobsStatuses[name]
 		status := mt.JobsStatuses[name]
@@ -328,8 +332,10 @@ func (mt *multitracker) displayJobsProgress() {
 		}
 
 		if status.IsFailed {
+			tableChangesCount++
 			t.Row(resource, status.Active, duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"), formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
+			tableChangesCount++
 			t.Row(resource, status.Active, duration, strings.Join([]string{succeeded, fmt.Sprintf("%d", status.Failed)}, "/"))
 		}
 
@@ -339,10 +345,12 @@ func (mt *multitracker) displayJobsProgress() {
 				newPodsNames = append(newPodsNames, podName)
 			}
 
-			st := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, newPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, newPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			tableChangesCount = tableChangesCount + podTableChangesCount
 
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
+				tableChangesCount++
 				extraMsg += "---\n"
 				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
@@ -352,7 +360,7 @@ func (mt *multitracker) displayJobsProgress() {
 		mt.PrevJobsStatuses[name] = status
 	}
 
-	if len(resourcesNames) > 0 {
+	if tableChangesCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
@@ -368,6 +376,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 	}
 	sort.Strings(resourcesNames)
 
+	var tableChangesCount int
 	for _, name := range resourcesNames {
 		prevStatus := mt.PrevStatefulSetsStatuses[name]
 		status := mt.StatefulSetsStatuses[name]
@@ -409,6 +418,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 		}
 
 		if status.IsFailed {
+			tableChangesCount++
 			t.Row(resource, replicas, ready, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
 			args := []interface{}{}
@@ -416,13 +426,16 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 			for _, w := range status.WarningMessages {
 				args = append(args, formatResourceWarning(disableWarningColors, w))
 			}
+			tableChangesCount++
 			t.Row(args...)
 		}
 
 		if len(status.Pods) > 0 {
-			st := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			tableChangesCount = tableChangesCount + podTableChangesCount
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
+				tableChangesCount++
 				extraMsg += "---\n"
 				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
@@ -432,7 +445,7 @@ func (mt *multitracker) displayStatefulSetsStatusProgress() {
 		mt.PrevStatefulSetsStatuses[name] = status
 	}
 
-	if len(resourcesNames) > 0 {
+	if tableChangesCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
@@ -448,6 +461,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 	}
 	sort.Strings(resourcesNames)
 
+	var tableChangesCount int
 	for _, name := range resourcesNames {
 		prevStatus := mt.PrevDaemonSetsStatuses[name]
 		status := mt.DaemonSetsStatuses[name]
@@ -489,15 +503,19 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 		}
 
 		if status.IsFailed {
+			tableChangesCount++
 			t.Row(resource, replicas, available, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
+			tableChangesCount++
 			t.Row(resource, replicas, available, uptodate)
 		}
 
 		if len(status.Pods) > 0 {
-			st := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			tableChangesCount = tableChangesCount + podTableChangesCount
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
+				tableChangesCount++
 				extraMsg += "---\n"
 				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
@@ -507,7 +525,7 @@ func (mt *multitracker) displayDaemonSetsStatusProgress() {
 		mt.PrevDaemonSetsStatuses[name] = status
 	}
 
-	if len(resourcesNames) > 0 {
+	if tableChangesCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
@@ -523,6 +541,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 	}
 	sort.Strings(resourcesNames)
 
+	var tableChangesCount int
 	for _, name := range resourcesNames {
 		prevStatus := mt.PrevDeploymentsStatuses[name]
 		status := mt.DeploymentsStatuses[name]
@@ -563,15 +582,19 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 		}
 
 		if status.IsFailed {
+			tableChangesCount++
 			t.Row(resource, replicas, available, uptodate, formatResourceError(disableWarningColors, status.FailedReason))
 		} else {
+			tableChangesCount++
 			t.Row(resource, replicas, available, uptodate)
 		}
 
 		if len(status.Pods) > 0 {
-			st := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			st, podTableChangesCount := mt.displayChildPodsStatusProgress(&t, prevStatus.Pods, status.Pods, status.NewPodsNames, spec.FailMode, showProgress, disableWarningColors)
+			tableChangesCount = tableChangesCount + podTableChangesCount
 			extraMsg := ""
 			if len(status.WaitingForMessages) > 0 {
+				tableChangesCount++
 				extraMsg += "---\n"
 				extraMsg += utils.BlueF("Waiting for: %s", strings.Join(status.WaitingForMessages, ", "))
 			}
@@ -581,7 +604,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 		mt.PrevDeploymentsStatuses[name] = status
 	}
 
-	if len(resourcesNames) > 0 {
+	if tableChangesCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
@@ -591,7 +614,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
 	t.Header("RESOURCE", "NAMESPACE", "CONDITION: CURRENT (DESIRED)")
 
-	var toBePrintedCount int
+	var tableChangesCount int
 	for _, resource := range mt.GenericResources {
 		var namespace string
 		if resource.Spec.Namespace != "" {
@@ -603,6 +626,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 		lastStatus := resource.State.LastStatus()
 		if lastStatus == nil {
 			resourceCaption := formatGenericResourceCaption(resource.Spec.ResourceID.KindNameString(), resource.Spec.FailMode, false, false, true)
+			tableChangesCount++
 			t.Row(resourceCaption, namespace, "-", "-")
 			continue
 		}
@@ -651,7 +675,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 			condition = "-"
 		}
 
-		toBePrintedCount++
+		tableChangesCount++
 		if lastStatus.IsFailed() && lastStatus.FailureReason() != "" {
 			t.Row(resourceCaption, namespace, condition, formatResourceError(disableWarningColors, lastStatus.FailureReason()))
 		} else {
@@ -661,13 +685,17 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 		resource.State.SetLastPrintedStatus(lastStatus)
 	}
 
-	if toBePrintedCount > 0 {
+	if tableChangesCount > 0 {
 		logboek.Context(context.Background()).Log(t.Render())
 	}
 }
 
-func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) *utils.Table {
-	st := t.SubTable(statusProgressSubTableRatio...)
+func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods, pods map[string]pod.PodStatus, newPodsNames []string, failMode FailMode, showProgress, disableWarningColors bool) (st *utils.Table, tableChangesCount int) {
+	{
+		subT := t.SubTable(statusProgressSubTableRatio...)
+		st = &subT
+	}
+
 	st.Header("POD", "READY", "RESTARTS", "STATUS")
 
 	podsNames := []string{}
@@ -719,7 +747,7 @@ func (mt *multitracker) displayChildPodsStatusProgress(t *utils.Table, prevPods,
 
 	st.Rows(podRows...)
 
-	return &st
+	return st, len(podRows)
 }
 
 func formatResourceWarning(disableWarningColors bool, reason string) string {
