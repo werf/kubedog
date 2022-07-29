@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.6](https://www.github.com/werf/kubedog/compare/v0.9.5...v0.9.6) (2022-07-29)
+
+
+### Bug Fixes
+
+* **generic:** ignore jsonpath errs on Condition search ([8d88c65](https://www.github.com/werf/kubedog/commit/8d88c6509e3ac1c12a8a564aebb9e04d2b7c73e0))
+
 ### [0.9.5](https://www.github.com/werf/kubedog/compare/v0.9.4...v0.9.5) (2022-07-26)
 
 
