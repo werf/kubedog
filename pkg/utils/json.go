@@ -17,12 +17,12 @@ func JSONPath(tmpl string, input interface{}) (result string, found bool, err er
 
 	resultBuf := &bytes.Buffer{}
 	if err := jsonPath.Execute(resultBuf, input); err != nil {
-		if strings.HasSuffix(err.Error(), " is not found") {
-			return "", false, nil
-		} else {
-			return "", false, fmt.Errorf("error executing jsonpath: %w", err)
+		if debug() && !strings.HasSuffix(err.Error(), " is not found") {
+			fmt.Printf("error executing jsonpath for tmpl %q and input %v: %s\n", tmpl, input, err)
 		}
+		return "", false, nil
 	}
+
 	if strings.TrimSpace(resultBuf.String()) == "" {
 		return "", false, nil
 	}
