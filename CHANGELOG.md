@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.8](https://www.github.com/werf/kubedog/compare/v0.9.7...v0.9.8) (2023-03-09)
+
+
+### Bug Fixes
+
+* update to Go 1.20 ([37db5ec](https://www.github.com/werf/kubedog/commit/37db5ec4ce03fc01d20e8930f1a709349805809d))
+
 ### [0.9.7](https://www.github.com/werf/kubedog/compare/v0.9.6...v0.9.7) (2023-03-09)
 
 
