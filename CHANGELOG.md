@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.9](https://www.github.com/werf/kubedog/compare/v0.9.8...v0.9.9) (2023-03-09)
+
+
+### Bug Fixes
+
+* **ci:** update linter ([140b339](https://www.github.com/werf/kubedog/commit/140b33932d952f43e9972680cc39141367147bb1))
+
 ### [0.9.8](https://www.github.com/werf/kubedog/compare/v0.9.7...v0.9.8) (2023-03-09)
 
 
