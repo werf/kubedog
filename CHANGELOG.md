@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.7](https://www.github.com/werf/kubedog/compare/v0.9.6...v0.9.7) (2023-03-09)
+
+
+### Bug Fixes
+
+* trigger release ([2421e8b](https://www.github.com/werf/kubedog/commit/2421e8b9c5f84f7b54e8c50b38b96d50933f67b8))
+
 ### [0.9.6](https://www.github.com/werf/kubedog/compare/v0.9.5...v0.9.6) (2022-07-29)
 
 
