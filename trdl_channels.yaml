@@ -2,7 +2,7 @@ groups:
 - name: "0"
   channels:
   - name: alpha
-    version: 0.9.6
+    version: 0.9.7
   - name: beta
     version: 0.6.4
   - name: stable
