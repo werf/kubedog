@@ -7,7 +7,7 @@ require (
 	github.com/fluxcd/flagger v1.29.0
 	github.com/gookit/color v1.5.2
 	github.com/spf13/cobra v1.6.1
-	github.com/werf/logboek v0.5.4
+	github.com/werf/logboek v0.5.5
 	golang.org/x/crypto v0.7.0
 	golang.org/x/text v0.8.0
 	k8s.io/api v0.26.2
@@ -71,4 +71,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
