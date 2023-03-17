@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.10](https://www.github.com/werf/kubedog/compare/v0.9.9...v0.9.10) (2023-03-13)
+
+
+### Bug Fixes
+
+* update dependencies ([7ccd3cb](https://www.github.com/werf/kubedog/commit/7ccd3cb56bb44179befc66d957f6bec6e56fb237))
+
 ### [0.9.9](https://www.github.com/werf/kubedog/compare/v0.9.8...v0.9.9) (2023-03-09)
 
 
