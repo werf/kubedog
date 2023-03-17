@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.11](https://www.github.com/werf/kubedog/compare/v0.9.10...v0.9.11) (2023-03-17)
+
+
+### Bug Fixes
+
+* **deps:** update logboek ([f4b0ab7](https://www.github.com/werf/kubedog/commit/f4b0ab7a3f042ba2fd97727ad443b7e2bb5d9a44))
+
 ### [0.9.10](https://www.github.com/werf/kubedog/compare/v0.9.9...v0.9.10) (2023-03-13)
 
 
