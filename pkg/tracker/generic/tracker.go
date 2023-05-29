@@ -2,7 +2,6 @@ package generic
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -115,11 +114,7 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 		case <-time.After(noActivityTimeout):
 			failedCh <- NewFailedResourceStatus(fmt.Sprintf("marking resource as failed because no activity for %s", noActivityTimeout))
 		case err := <-stateWatcherErrCh:
-			var unrecoverableWatchErr *UnrecoverableWatchError
-			if errors.As(err, &unrecoverableWatchErr) {
-				succeededCh <- NewSucceededResourceStatus()
-				return nil
-			} else {
+			if err != nil {
 				return err
 			}
 		case err := <-eventWatcherErrCh:
