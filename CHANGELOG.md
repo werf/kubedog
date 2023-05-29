@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.9.12](https://www.github.com/werf/kubedog/compare/v0.9.11...v0.9.12) (2023-05-29)
+
+
+### Bug Fixes
+
+* resource hangs on context canceled ([0c195e2](https://www.github.com/werf/kubedog/commit/0c195e2f8a6b297e1afbc622f6dec05dffe039e6))
+
 ### [0.9.11](https://www.github.com/werf/kubedog/compare/v0.9.10...v0.9.11) (2023-03-17)
 
 
