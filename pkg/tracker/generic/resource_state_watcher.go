@@ -96,5 +96,9 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 		fmt.Printf("      %s resource watcher DONE\n", w.ResourceID)
 	}
 
-	return fatalWatchErr
+	if fatalWatchErr.Err != nil {
+		return fatalWatchErr
+	} else {
+		return nil
+	}
 }
