@@ -1,0 +1,18 @@
+version: "3"
+
+silent: true
+
+tasks:
+  sign:
+    desc: 'Sign last version tag + origin/main and push signatures. Important vars: "refs".'
+    cmds:
+      - git fetch --tags -f
+      - git signatures pull {{.CLI_ARGS}}
+      - |
+        for ref in {{.refs | default "$(git tag --sort=v:refname | tail -n1) origin/main"}}; do
+          echo Signing $ref...
+          git signatures add {{.CLI_ARGS}} $ref
+          git signatures show {{.CLI_ARGS}} $ref
+        done
+      - git signatures push {{.CLI_ARGS}}
+
