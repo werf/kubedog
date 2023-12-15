@@ -12,6 +12,8 @@ import (
 type PodStatus struct {
 	corev1.PodStatus
 
+	Name string
+
 	StatusGeneration uint64
 
 	StatusIndicator *indicators.StringEqualConditionIndicator
@@ -35,6 +37,7 @@ func NewPodStatus(pod *corev1.Pod, statusGeneration uint64, trackedContainers []
 		Age:              utils.TranslateTimestampSince(pod.CreationTimestamp),
 		StatusIndicator:  &indicators.StringEqualConditionIndicator{},
 		StatusGeneration: statusGeneration,
+		Name:             pod.Name,
 	}
 
 	for _, cond := range pod.Status.Conditions {

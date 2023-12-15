@@ -4,8 +4,10 @@ go 1.20
 
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
+	github.com/dominikbraun/graph v0.23.0
 	github.com/fluxcd/flagger v1.29.0
 	github.com/gookit/color v1.5.2
+	github.com/samber/lo v1.38.1
 	github.com/spf13/cobra v1.6.1
 	github.com/werf/logboek v0.5.5
 	golang.org/x/crypto v0.7.0
@@ -53,6 +55,7 @@ require (
 	github.com/xlab/treeprint v1.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
+	golang.org/x/exp v0.0.0-20221126150942-6ab00d035af9 // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
