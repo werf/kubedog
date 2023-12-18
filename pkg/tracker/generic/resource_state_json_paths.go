@@ -2,10 +2,10 @@ package generic
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/chanced/caps"
 	"github.com/samber/lo"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -64,11 +64,14 @@ func buildUniversalConditions() {
 		"creating",
 		"updating",
 		"waiting",
+		"awaiting",
 		"pending",
 		"finishing",
 		"starting",
 		"readying",
+		"in progress",
 		"progressing",
+		"initialization",
 		"initializing",
 		"approving",
 		"unknown",
@@ -193,20 +196,24 @@ func buildLowPriorityConditions() {
 func casify(in ...string) []string {
 	var result []string
 
-	casers := []cases.Caser{cases.Lower(language.Und), cases.Title(language.Und)}
 	for _, value := range in {
 		result = append(result, value)
-
-		for _, caser := range casers {
-			cased := caser.String(value)
-
-			if lo.Contains(result, cased) {
-				continue
-			}
-
-			result = append(result, caser.String(value))
-		}
+		result = append(result, strings.ReplaceAll(value, " ", ""))
+		result = append(result, caps.ToUpper(strings.ReplaceAll(value, " ", "")))
+		result = append(result, caps.ToCamel(value))
+		result = append(result, caps.ToKebab(value))
+		result = append(result, caps.ToDotNotation(value))
+		result = append(result, caps.ToSnake(value))
+		result = append(result, caps.ToTitle(value))
+		result = append(result, caps.ToUpper(value))
+		result = append(result, caps.ToLower(value))
+		result = append(result, caps.ToLowerCamel(value))
+		result = append(result, caps.ToScreamingDotNotation(value))
+		result = append(result, caps.ToScreamingKebab(value))
+		result = append(result, caps.ToScreamingSnake(value))
 	}
+
+	result = lo.Uniq(result)
 
 	return result
 }
