@@ -1,0 +1,15 @@
+rules:
+  - resourceGroup: "acid.zalan.do"
+    resourceKind: "postgresql"
+    jsonPath: "$.status.PostgresClusterStatus"
+    humanJsonPath: "status.PostgresClusterStatus"
+    conditions:
+      ready:
+        - "Running"
+      progressing:
+        - "Creating"
+        - "Updating"
+      failed:
+        - "CreateFailed"
+        - "UpdateFailed"
+        - "DeleteFailed"

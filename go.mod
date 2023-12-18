@@ -11,6 +11,7 @@ require (
 	github.com/samber/lo v1.38.1
 	github.com/spf13/cobra v1.6.1
 	github.com/werf/logboek v0.5.5
+	github.com/xeipuuv/gojsonschema v1.2.0
 	golang.org/x/crypto v0.7.0
 	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.2
@@ -52,6 +53,8 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
+	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xlab/treeprint v1.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect

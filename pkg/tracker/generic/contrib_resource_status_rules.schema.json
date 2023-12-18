@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "$id": "http://werf.io/contrib_resource_status_rules.schema.json",
+  "title": "Contrib resource status rules schema",
+  "type": "object",
+  "required": [
+    "rules"
+  ],
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "dependencies": {
+          "resourceGroup": ["resourceKind"],
+          "resourceKind": ["resourceGroup"]
+        },
+        "required": [
+          "jsonPath",
+          "humanJsonPath",
+          "conditions"
+        ],
+        "properties": {
+          "resourceGroup": {
+            "type": "string",
+            "minLength": 1
+          },
+          "resourceKind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "jsonPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "humanJsonPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "conditions": {
+            "type": "object",
+            "required": [
+              "ready",
+              "progressing"
+            ],
+            "properties": {
+              "ready": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "progressing": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "failed": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
