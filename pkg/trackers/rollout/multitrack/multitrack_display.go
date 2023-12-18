@@ -612,7 +612,7 @@ func (mt *multitracker) displayDeploymentsStatusProgress() {
 func (mt *multitracker) displayGenericsStatusProgress() {
 	t := utils.NewTable([]float64{.43, .14, .43}...)
 	t.SetWidth(logboek.Context(context.Background()).Streams().ContentWidth() - 1)
-	t.Header("RESOURCE", "NAMESPACE", "CONDITION: CURRENT (DESIRED)")
+	t.Header("RESOURCE", "NAMESPACE", "WATCHING FOR FIELD")
 
 	var tableChangesCount int
 	for _, resource := range mt.GenericResources {
@@ -661,7 +661,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 				currentAndDesiredState = lastStatus.Indicator.FormatTableElem(lastPrintedStatusIndicator, indicators.FormatTableElemOptions{
 					ShowProgress:         showProgress,
 					DisableWarningColors: disableWarningColors,
-					WithTargetValue:      true,
+					WithTargetValue:      false,
 				})
 			}
 		} else {

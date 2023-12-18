@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
+	github.com/chanced/caps v1.0.1
 	github.com/dominikbraun/graph v0.23.0
 	github.com/fluxcd/flagger v1.29.0
 	github.com/gookit/color v1.5.2
@@ -11,7 +12,6 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/werf/logboek v0.5.5
 	golang.org/x/crypto v0.7.0
-	golang.org/x/text v0.8.0
 	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.2
 	k8s.io/cli-runtime v0.26.2
@@ -60,6 +60,7 @@ require (
 	golang.org/x/oauth2 v0.5.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/term v0.6.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
