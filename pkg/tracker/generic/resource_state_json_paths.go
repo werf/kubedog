@@ -47,20 +47,43 @@ func buildUniversalConditions() {
 		"complete",
 		"completed",
 		"finished",
+		"finalized",
+		"done",
 		"available",
 		"running",
+		"ok",
+		"active",
+		"live",
+		"healthy",
 		"started",
 		"initialized",
 		"approved",
 	}
 
 	pendingValuesByPriority := []string{
+		"creating",
+		"updating",
+		"waiting",
 		"pending",
+		"finishing",
+		"starting",
+		"readying",
+		"progressing",
+		"initializing",
+		"approving",
 		"unknown",
 	}
 
 	failedValuesByPriority := []string{
+		"failure",
 		"failed",
+		"abort",
+		"aborted",
+		"terminated",
+		"error",
+		"errored",
+		"rejection",
+		"rejected",
 	}
 
 	for _, readyValue := range readyValuesByPriority {
