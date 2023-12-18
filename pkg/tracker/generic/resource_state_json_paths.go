@@ -70,6 +70,22 @@ func initResourceStatusJSONPathsByPriority() {
 				})
 
 				ResourceStatusJSONPathsByPriority = append(ResourceStatusJSONPathsByPriority, ResourceStatusJSONPath{
+					JSONPath:      `$.status.status`,
+					HumanPath:     "status.status",
+					ReadyValue:    caser.String(action),
+					PendingValues: []string{caser.String("pending"), caser.String("unknown")},
+					FailedValue:   caser.String("failed"),
+				})
+
+				ResourceStatusJSONPathsByPriority = append(ResourceStatusJSONPathsByPriority, ResourceStatusJSONPath{
+					JSONPath:      `$.status.currentStatus`,
+					HumanPath:     "status.currentStatus",
+					ReadyValue:    caser.String(action),
+					PendingValues: []string{caser.String("pending"), caser.String("unknown")},
+					FailedValue:   caser.String("failed"),
+				})
+
+				ResourceStatusJSONPathsByPriority = append(ResourceStatusJSONPathsByPriority, ResourceStatusJSONPath{
 					JSONPath:      `$.status.health`,
 					HumanPath:     "status.health",
 					ReadyValue:    caser.String(action),
