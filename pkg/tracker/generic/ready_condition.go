@@ -26,9 +26,7 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *i
 			continue
 		}
 
-		knownValues := append(condition.ReadyValues,
-			append(condition.PendingValues, condition.FailedValues...)...,
-		)
+		knownValues := lo.Union(condition.ReadyValues, condition.PendingValues, condition.FailedValues)
 
 		if lo.Contains(knownValues, currentValue) {
 			matchedCondition = condition
