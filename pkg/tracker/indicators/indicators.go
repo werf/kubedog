@@ -25,17 +25,36 @@ type StringEqualConditionIndicator struct {
 	Value       string
 	TargetValue string
 	FailedValue string
+
+	forceReady  *bool
+	forceFailed *bool
 }
 
 func (indicator *StringEqualConditionIndicator) IsProgressing(prevIndicator *StringEqualConditionIndicator) bool {
 	return (prevIndicator != nil) && (indicator.Value != prevIndicator.Value)
 }
 
+func (indicator *StringEqualConditionIndicator) SetReady(ready bool) {
+	indicator.forceReady = &ready
+}
+
 func (indicator *StringEqualConditionIndicator) IsReady() bool {
+	if indicator.forceReady != nil {
+		return *indicator.forceReady
+	}
+
 	return indicator.Value == indicator.TargetValue
 }
 
+func (indicator *StringEqualConditionIndicator) SetFailed(failed bool) {
+	indicator.forceFailed = &failed
+}
+
 func (indicator *StringEqualConditionIndicator) IsFailed() bool {
+	if indicator.forceFailed != nil {
+		return *indicator.forceFailed
+	}
+
 	return indicator.Value == indicator.FailedValue
 }
 

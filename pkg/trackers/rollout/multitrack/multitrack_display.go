@@ -661,7 +661,7 @@ func (mt *multitracker) displayGenericsStatusProgress() {
 				currentAndDesiredState = lastStatus.Indicator.FormatTableElem(lastPrintedStatusIndicator, indicators.FormatTableElemOptions{
 					ShowProgress:         showProgress,
 					DisableWarningColors: disableWarningColors,
-					WithTargetValue:      true,
+					WithTargetValue:      false,
 				})
 			}
 		} else {
