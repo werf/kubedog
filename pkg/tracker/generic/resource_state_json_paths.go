@@ -23,7 +23,15 @@ type ResourceStatusJSONPathCondition struct {
 }
 
 func initResourceStatusJSONPathsByPriority() {
-	genericReadyValuesByPriority := []string{
+	buildResourceSpecificConditions()
+	buildUniversalConditions()
+	buildLowPriorityConditions()
+}
+
+func buildResourceSpecificConditions() {}
+
+func buildUniversalConditions() {
+	readyValuesByPriority := []string{
 		"ready",
 		"success",
 		"succeeded",
@@ -37,16 +45,16 @@ func initResourceStatusJSONPathsByPriority() {
 		"approved",
 	}
 
-	genericPendingValuesByPriority := []string{
+	pendingValuesByPriority := []string{
 		"pending",
 		"unknown",
 	}
 
-	genericFailedValuesByPriority := []string{
+	failedValuesByPriority := []string{
 		"failed",
 	}
 
-	for _, readyValue := range genericReadyValuesByPriority {
+	for _, readyValue := range readyValuesByPriority {
 		ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 			JSONPath:      fmt.Sprintf(`$.status.conditions[?(@.type==%q)].status`, casify(readyValue)[0]),
 			HumanPath:     fmt.Sprintf("status.conditions[type=%s].status", casify(readyValue)[0]),
@@ -58,67 +66,69 @@ func initResourceStatusJSONPathsByPriority() {
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.phase`,
 		HumanPath:     "status.phase",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.currentPhase`,
 		HumanPath:     "status.currentPhase",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.state`,
 		HumanPath:     "status.state",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.currentState`,
 		HumanPath:     "status.currentState",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.status`,
 		HumanPath:     "status.status",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.currentStatus`,
 		HumanPath:     "status.currentStatus",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.health`,
 		HumanPath:     "status.health",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
 
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.currentHealth`,
 		HumanPath:     "status.currentHealth",
-		ReadyValues:   casify(genericReadyValuesByPriority...),
-		PendingValues: casify(genericPendingValuesByPriority...),
-		FailedValues:  casify(genericFailedValuesByPriority...),
+		ReadyValues:   casify(readyValuesByPriority...),
+		PendingValues: casify(pendingValuesByPriority...),
+		FailedValues:  casify(failedValuesByPriority...),
 	})
+}
 
+func buildLowPriorityConditions() {
 	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
 		JSONPath:      `$.status.state`,
 		HumanPath:     "status.state",
