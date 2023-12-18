@@ -23,20 +23,9 @@ type ResourceStatusJSONPathCondition struct {
 }
 
 func initResourceStatusJSONPathsByPriority() {
-	buildResourceSpecificConditions()
+	buildContribResourceStatusRules()
 	buildUniversalConditions()
 	buildLowPriorityConditions()
-}
-
-func buildResourceSpecificConditions() {
-	ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
-		GroupKind:     &schema.GroupKind{Group: "acid.zalan.do", Kind: "postgresql"},
-		JSONPath:      `$.status.PostgresClusterStatus`,
-		HumanPath:     "status.PostgresClusterStatus",
-		ReadyValues:   casify("Running"),
-		PendingValues: casify("Creating", "Updating"),
-		FailedValues:  casify("CreateFailed", "UpdateFailed", "SyncFailed"),
-	})
 }
 
 func buildUniversalConditions() {
