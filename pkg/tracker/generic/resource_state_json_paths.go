@@ -3,6 +3,7 @@ package generic
 import (
 	"fmt"
 
+	"github.com/samber/lo"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -152,7 +153,15 @@ func casify(in ...string) []string {
 
 	casers := []cases.Caser{cases.Lower(language.Und), cases.Title(language.Und)}
 	for _, value := range in {
+		result = append(result, value)
+
 		for _, caser := range casers {
+			cased := caser.String(value)
+
+			if lo.Contains(result, cased) {
+				continue
+			}
+
 			result = append(result, caser.String(value))
 		}
 	}
