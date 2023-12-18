@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://www.github.com/werf/kubedog/compare/v0.9.12...v0.10.0) (2023-12-15)
+
+
+### Features
+
+* new high-level concurrent dynamic tracker ([5721c3e](https://www.github.com/werf/kubedog/commit/5721c3ed54d4bd26a53743e3e6028bd85015ad6a))
+
 ### [0.9.12](https://www.github.com/werf/kubedog/compare/v0.9.11...v0.9.12) (2023-05-29)
 
 
