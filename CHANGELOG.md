@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.11.0](https://www.github.com/werf/kubedog/compare/v0.10.0...v0.11.0) (2023-12-18)
+
+
+### Features
+
+* add a lot of new generic conditions for generic tracker ([8c44e5d](https://www.github.com/werf/kubedog/commit/8c44e5d6ff6ff3a0693d1fcbc4d748ea3382a5cf))
+* add acid.zalan.do/postrgresql generic tracker rule ([d7d8648](https://www.github.com/werf/kubedog/commit/d7d86482772583645f6022d16956260b9b034c75))
+* add more status conditions, add extra case options for conditions ([969cad9](https://www.github.com/werf/kubedog/commit/969cad97bf11a1c73211c41b7133cb057334a0a5))
+* separate file for user-contributed resource status rules ([0f41256](https://www.github.com/werf/kubedog/commit/0f41256c6a63d3a3d490e64e21e34c734d59c2c3))
+* track status.(current)status in generic tracker ([03ed5b2](https://www.github.com/werf/kubedog/commit/03ed5b2ddf87a2474fba92502f741b2ac870367b))
+
+
+### Bug Fixes
+
+* condition column name ([f7bed28](https://www.github.com/werf/kubedog/commit/f7bed28512312f7f9bdde4d8f3d957a873183bb8))
+* preserve original case for values when building generic status ruleset ([869b5fe](https://www.github.com/werf/kubedog/commit/869b5fee19a6cff6f31204e85fae73d865fa0708))
+* refactor generic ruleset generation ([7560fd2](https://www.github.com/werf/kubedog/commit/7560fd25ceb8ccff52811da169c095cfdad00ab3))
+* refactor generic status rules /2 ([855ef9d](https://www.github.com/werf/kubedog/commit/855ef9dcf1810ad18929825a8102920a25eba6d0))
+* refactor generic status rules /3 ([a8eeb67](https://www.github.com/werf/kubedog/commit/a8eeb674f64492a02d9673c8bcb5178617679d90))
+
 ## [0.10.0](https://www.github.com/werf/kubedog/compare/v0.9.12...v0.10.0) (2023-12-15)
 
 
