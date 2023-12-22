@@ -398,6 +398,5 @@ func cachedDiscoveryClient(config rest.Config) (discovery.CachedDiscoveryInterfa
 
 func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.RESTMapper {
 	mapper := restmapper.NewDeferredDiscoveryRESTMapper(*cachedDiscoveryClient)
-
-	return restmapper.NewShortcutExpander(mapper, *cachedDiscoveryClient)
+	return restmapper.NewShortcutExpander(mapper, *cachedDiscoveryClient, func(string) {})
 }
