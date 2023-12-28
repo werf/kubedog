@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://www.github.com/werf/kubedog/compare/v0.11.0...v0.12.0) (2023-12-28)
+
+
+### Features
+
+* **dynamic:** expose more Attributes, add more options for Tracker ([51dbaa7](https://www.github.com/werf/kubedog/commit/51dbaa72362109c353877d3ed2a688e7274ce081))
+
 ## [0.11.0](https://www.github.com/werf/kubedog/compare/v0.10.0...v0.11.0) (2023-12-18)
 
 
