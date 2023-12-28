@@ -144,9 +144,10 @@ func initReadinessTaskStateReadyConditions() []ReadinessTaskConditionFn {
 	readyConditions = append(readyConditions, func(taskState *ReadinessTaskState) bool {
 		resourcesReadyRequired := 1
 		taskState.ResourceState(taskState.name, taskState.namespace, taskState.groupVersionKind).RTransaction(func(s *ResourceState) {
-			attrs := s.Attributes()
-			if attr, found := attrs[AttributeNameRequiredReplicas]; found {
-				resourcesReadyRequired += attr.(Attribute[int]).Value
+			if replicasAttr, found := lo.Find(s.Attributes(), func(attr Attributer) bool {
+				return attr.Name() == AttributeNameRequiredReplicas
+			}); found {
+				resourcesReadyRequired += replicasAttr.(*Attribute[int]).Value
 			}
 		})
 

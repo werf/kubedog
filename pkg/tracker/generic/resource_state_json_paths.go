@@ -186,20 +186,23 @@ func casify(in ...string) []string {
 	var result []string
 
 	for _, value := range in {
-		result = append(result, value)
-		result = append(result, strings.ReplaceAll(value, " ", ""))
-		result = append(result, caps.ToUpper(strings.ReplaceAll(value, " ", "")))
-		result = append(result, caps.ToCamel(value))
-		result = append(result, caps.ToKebab(value))
-		result = append(result, caps.ToDotNotation(value))
-		result = append(result, caps.ToSnake(value))
-		result = append(result, caps.ToTitle(value))
-		result = append(result, caps.ToUpper(value))
-		result = append(result, caps.ToLower(value))
-		result = append(result, caps.ToLowerCamel(value))
-		result = append(result, caps.ToScreamingDotNotation(value))
-		result = append(result, caps.ToScreamingKebab(value))
-		result = append(result, caps.ToScreamingSnake(value))
+		result = append(
+			result,
+			value,
+			strings.ReplaceAll(value, " ", ""),
+			caps.ToUpper(strings.ReplaceAll(value, " ", "")),
+			caps.ToCamel(value),
+			caps.ToKebab(value),
+			caps.ToDotNotation(value),
+			caps.ToSnake(value),
+			caps.ToTitle(value),
+			caps.ToUpper(value),
+			caps.ToLower(value),
+			caps.ToLowerCamel(value),
+			caps.ToScreamingDotNotation(value),
+			caps.ToScreamingKebab(value),
+			caps.ToScreamingSnake(value),
+		)
 	}
 
 	result = lo.Uniq(result)
