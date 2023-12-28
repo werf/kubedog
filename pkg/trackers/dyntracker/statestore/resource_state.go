@@ -14,7 +14,7 @@ type ResourceState struct {
 	groupVersionKind schema.GroupVersionKind
 
 	status     ResourceStatus
-	attributes map[string]Attributer
+	attributes []Attributer
 	events     []*Event
 	errors     map[string][]*Error
 }
@@ -25,7 +25,6 @@ func NewResourceState(name, namespace string, groupVersionKind schema.GroupVersi
 		namespace:        namespace,
 		groupVersionKind: groupVersionKind,
 		status:           ResourceStatusCreated,
-		attributes:       make(map[string]Attributer),
 		errors:           make(map[string][]*Error),
 	}
 }
@@ -86,18 +85,12 @@ func (s *ResourceState) Events() []*Event {
 	return append([]*Event{}, s.events...)
 }
 
-func (s *ResourceState) SetAttribute(name string, attr Attributer) {
-	s.attributes[name] = attr
+func (s *ResourceState) AddAttribute(attr Attributer) {
+	s.attributes = append(s.attributes, attr)
 }
 
-func (s *ResourceState) Attributes() map[string]Attributer {
-	result := make(map[string]Attributer)
-
-	for name, attr := range s.attributes {
-		result[name] = attr
-	}
-
-	return result
+func (s *ResourceState) Attributes() []Attributer {
+	return append([]Attributer{}, s.attributes...)
 }
 
 func (s *ResourceState) ID() string {
