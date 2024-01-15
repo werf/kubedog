@@ -41,6 +41,7 @@ func NewResourceStateWatcher(
 
 func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourceModifiedCh, resourceDeletedCh chan<- *unstructured.Unstructured) error {
 	runCtx, runCancelFn := context.WithCancel(ctx)
+	defer runCancelFn()
 
 	gvr, err := w.ResourceID.GroupVersionResource(w.mapper)
 	if err != nil {
