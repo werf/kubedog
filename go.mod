@@ -1,6 +1,8 @@
 module github.com/werf/kubedog
 
-go 1.20
+go 1.21
+
+toolchain go1.21.6
 
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
