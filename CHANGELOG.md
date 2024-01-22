@@ -1,5 +1,13 @@
 # Changelog
 
+### [0.12.1](https://www.github.com/werf/kubedog/compare/v0.12.0...v0.12.1) (2024-01-22)
+
+
+### Bug Fixes
+
+* switch to go 1.21 ([6cc5b83](https://www.github.com/werf/kubedog/commit/6cc5b832e653650441ba9aa4e1892baf22164272))
+* update all modules ([5b3cd82](https://www.github.com/werf/kubedog/commit/5b3cd82edcc89ff05ae790461e9ddd7c0d71bd1a))
+
 ## [0.12.0](https://www.github.com/werf/kubedog/compare/v0.11.0...v0.12.0) (2023-12-28)
 
 
