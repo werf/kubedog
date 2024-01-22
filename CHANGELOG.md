@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.12.2](https://www.github.com/werf/kubedog/compare/v0.12.1...v0.12.2) (2024-01-22)
+
+
+### Bug Fixes
+
+* bump version ([1e49622](https://www.github.com/werf/kubedog/commit/1e49622b178802e6bdded01ce48c979e6812ffbe))
+
 ### [0.12.1](https://www.github.com/werf/kubedog/compare/v0.12.0...v0.12.1) (2024-01-22)
 
 
