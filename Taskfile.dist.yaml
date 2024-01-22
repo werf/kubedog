@@ -9,7 +9,7 @@ tasks:
       - git fetch --tags -f
       - git signatures pull {{.CLI_ARGS}}
       - |
-        for ref in {{.refs | default "$(git tag --sort=v:refname | tail -n1) origin/main"}}; do
+        for ref in {{.refs | default "$(git tag --sort=v:refname | tail -n1) origin/main origin/trdl"}}; do
           echo Signing $ref...
           git signatures add {{.CLI_ARGS}} $ref
           git signatures show {{.CLI_ARGS}} $ref
