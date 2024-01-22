@@ -23,10 +23,6 @@ type ReplicaSetControllerWrapper struct {
 	replicaSetTemplate corev1.PodTemplateSpec
 	labelSelector      *metav1.LabelSelector
 	metadata           metav1.Object
-	deployment         *appsv1.Deployment
-	statefulSet        *appsv1.StatefulSet
-	daemonSet          *appsv1.DaemonSet
-	job                *batchv1.Job
 }
 
 func (w *ReplicaSetControllerWrapper) NewReplicaSetTemplate() corev1.PodTemplateSpec {
