@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.12.3](https://www.github.com/werf/kubedog/compare/v0.12.2...v0.12.3) (2024-01-25)
+
+
+### Bug Fixes
+
+* dynamic tracker hotfixes ([3817e3d](https://www.github.com/werf/kubedog/commit/3817e3dcea49144187798b37ba7a1962de3708bf))
+
 ### [0.12.2](https://www.github.com/werf/kubedog/compare/v0.12.1...v0.12.2) (2024-01-22)
 
 
