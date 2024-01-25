@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	domigraph "github.com/dominikbraun/graph"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -19,6 +20,7 @@ type ReadinessTaskState struct {
 	readyConditions   []ReadinessTaskConditionFn
 	failureConditions []ReadinessTaskConditionFn
 
+	uuid               string
 	resourceStatesTree domigraph.Graph[string, *util.Concurrent[*ResourceState]]
 }
 
@@ -46,12 +48,15 @@ func NewReadinessTaskState(name, namespace string, groupVersionKind schema.Group
 	rootResourceState := util.NewConcurrent(NewResourceState(name, namespace, groupVersionKind))
 	resourceStatesTree.AddVertex(rootResourceState)
 
+	uuid := uuid.NewString()
+
 	return &ReadinessTaskState{
 		name:               name,
 		namespace:          namespace,
 		groupVersionKind:   groupVersionKind,
 		failureConditions:  failureConditions,
 		readyConditions:    readyConditions,
+		uuid:               uuid,
 		resourceStatesTree: resourceStatesTree,
 	}
 }
@@ -136,6 +141,10 @@ func (s *ReadinessTaskState) Status() ReadinessTaskStatus {
 	}
 
 	return ReadinessTaskStatusReady
+}
+
+func (s *ReadinessTaskState) UUID() string {
+	return s.uuid
 }
 
 func initReadinessTaskStateReadyConditions() []ReadinessTaskConditionFn {
