@@ -188,6 +188,9 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				if err != nil {
 					return err
 				}
+				if len(d.knownReplicaSets) == 0 {
+					rsNew = true
+				}
 
 				d.StatusGeneration++
 				newPodsNames, err := d.getNewPodsNames()
@@ -224,6 +227,9 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
 				if err != nil {
 					return err
+				}
+				if len(d.knownReplicaSets) == 0 {
+					rsNew = true
 				}
 				status := NewDeploymentStatus(d.lastObject, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, d.podStatuses, newPodsNames)
 
@@ -292,6 +298,9 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 					if err != nil {
 						return err
 					}
+					if len(d.knownReplicaSets) == 0 {
+						rsNew = true
+					}
 
 					rsChunk := &replicaset.ReplicaSetPodLogChunk{
 						PodLogChunk: &pod.PodLogChunk{
@@ -328,6 +337,9 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 					rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
 					if err != nil {
 						return err
+					}
+					if len(d.knownReplicaSets) == 0 {
+						rsNew = true
 					}
 
 					d.PodError <- PodErrorReport{
@@ -374,6 +386,9 @@ func (d *Tracker) getNewPodsNames() ([]string, error) {
 				rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
 				if err != nil {
 					return nil, err
+				}
+				if len(d.knownReplicaSets) == 0 {
+					rsNew = true
 				}
 				if rsNew {
 					res = append(res, podName)
@@ -542,8 +557,8 @@ func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Depl
 
 	switch d.State {
 	case tracker.Initial:
-		d.runPodsInformer(ctx, object)
 		d.runReplicaSetsInformer(ctx, object)
+		d.runPodsInformer(ctx, object)
 
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
 			d.runEventsInformer(ctx, object)

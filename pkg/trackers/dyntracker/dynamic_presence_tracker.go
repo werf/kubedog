@@ -89,10 +89,7 @@ func (t *DynamicPresenceTracker) Track(ctx context.Context) error {
 		resourceClient = t.dynamicClient.Resource(gvr)
 	}
 
-	resourceHumanID, err := util.ResourceHumanID(name, namespace, groupVersionKind, t.mapper)
-	if err != nil {
-		return fmt.Errorf("get resource human ID: %w", err)
-	}
+	resourceHumanID := util.ResourceHumanID(name, namespace, groupVersionKind, t.mapper)
 
 	if err := wait.PollImmediate(t.pollPeriod, t.timeout, func() (bool, error) {
 		if _, err := resourceClient.Get(ctx, name, metav1.GetOptions{}); err != nil {
@@ -107,6 +104,12 @@ func (t *DynamicPresenceTracker) Track(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("poll resource %q: %w", resourceHumanID, err)
 	}
+
+	t.taskState.RWTransaction(func(pts *statestore.PresenceTaskState) {
+		pts.ResourceState().RWTransaction(func(rs *statestore.ResourceState) {
+			rs.SetStatus(statestore.ResourceStatusCreated)
+		})
+	})
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package statestore
 
 import (
+	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
@@ -14,6 +15,7 @@ type AbsenceTaskState struct {
 	absentConditions  []AbsenceTaskConditionFn
 	failureConditions []AbsenceTaskConditionFn
 
+	uuid          string
 	resourceState *util.Concurrent[*ResourceState]
 }
 
@@ -23,12 +25,15 @@ func NewAbsenceTaskState(name, namespace string, groupVersionKind schema.GroupVe
 	absentConditions := initAbsenceTaskStateAbsentConditions()
 	failureConditions := []AbsenceTaskConditionFn{}
 
+	uuid := uuid.NewString()
+
 	return &AbsenceTaskState{
 		name:              name,
 		namespace:         namespace,
 		groupVersionKind:  groupVersionKind,
 		absentConditions:  absentConditions,
 		failureConditions: failureConditions,
+		uuid:              uuid,
 		resourceState:     resourceState,
 	}
 }
@@ -65,6 +70,10 @@ func (s *AbsenceTaskState) Status() AbsenceTaskStatus {
 	}
 
 	return AbsenceTaskStatusAbsent
+}
+
+func (s *AbsenceTaskState) UUID() string {
+	return s.uuid
 }
 
 func initAbsenceTaskStateAbsentConditions() []AbsenceTaskConditionFn {

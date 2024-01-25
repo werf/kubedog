@@ -29,15 +29,17 @@ func GVRFromGVK(groupVersionKind schema.GroupVersionKind, mapper meta.Resettable
 	return mapping.Resource, nil
 }
 
-func ResourceHumanID(name, namespace string, groupVersionKind schema.GroupVersionKind, mapper meta.ResettableRESTMapper) (string, error) {
-	namespaced, err := IsNamespaced(groupVersionKind, mapper)
-	if err != nil {
-		return "", fmt.Errorf("check if namespaced: %w", err)
+func ResourceHumanID(name, namespace string, groupVersionKind schema.GroupVersionKind, mapper meta.ResettableRESTMapper) string {
+	namespaced := true
+	if mapper != nil {
+		if nsed, err := IsNamespaced(groupVersionKind, mapper); err == nil {
+			namespaced = nsed
+		}
 	}
 
 	if namespaced && namespace != "" {
-		return fmt.Sprintf("%s/%s/%s", namespace, groupVersionKind.Kind, name), nil
+		return fmt.Sprintf("%s/%s/%s", namespace, groupVersionKind.Kind, name)
 	} else {
-		return fmt.Sprintf("%s/%s", groupVersionKind.Kind, name), nil
+		return fmt.Sprintf("%s/%s", groupVersionKind.Kind, name)
 	}
 }

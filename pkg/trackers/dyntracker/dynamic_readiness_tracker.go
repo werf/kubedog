@@ -33,9 +33,14 @@ import (
 )
 
 type DynamicReadinessTracker struct {
-	taskState *util.Concurrent[*statestore.ReadinessTaskState]
-	logStore  *util.Concurrent[*logstore.LogStore]
-	tracker   any
+	resourceName      string
+	resourceNamespace string
+	resourceGVK       schema.GroupVersionKind
+	resourceHumanID   string
+	taskState         *util.Concurrent[*statestore.ReadinessTaskState]
+	logStore          *util.Concurrent[*logstore.LogStore]
+	mapper            meta.ResettableRESTMapper
+	tracker           any
 
 	timeout           time.Duration
 	noActivityTimeout time.Duration
@@ -57,7 +62,7 @@ func NewDynamicReadinessTracker(
 	discoveryClient discovery.CachedDiscoveryInterface,
 	mapper meta.ResettableRESTMapper,
 	opts DynamicReadinessTrackerOptions,
-) *DynamicReadinessTracker {
+) (*DynamicReadinessTracker, error) {
 	timeout := opts.Timeout
 	captureLogsFromTime := opts.CaptureLogsFromTime
 
@@ -83,6 +88,12 @@ func NewDynamicReadinessTracker(
 		resourceNamespace = ts.Namespace()
 		resourceGVK = ts.GroupVersionKind()
 	})
+
+	if namespaced, err := util.IsNamespaced(resourceGVK, mapper); err != nil {
+		return nil, fmt.Errorf("check if namespaced: %w", err)
+	} else if !namespaced {
+		resourceNamespace = ""
+	}
 
 	var tracker any
 	switch resourceGVK.GroupKind() {
@@ -130,8 +141,13 @@ func NewDynamicReadinessTracker(
 	}
 
 	return &DynamicReadinessTracker{
+		resourceName:                 resourceName,
+		resourceNamespace:            resourceNamespace,
+		resourceGVK:                  resourceGVK,
+		resourceHumanID:              util.ResourceHumanID(resourceName, resourceNamespace, resourceGVK, mapper),
 		taskState:                    taskState,
 		logStore:                     logStore,
+		mapper:                       mapper,
 		tracker:                      tracker,
 		timeout:                      timeout,
 		noActivityTimeout:            noActivityTimeout,
@@ -141,7 +157,7 @@ func NewDynamicReadinessTracker(
 		ignoreLogs:                   opts.IgnoreLogs,
 		ignoreLogsForContainers:      opts.IgnoreLogsForContainers,
 		saveEvents:                   opts.SaveEvents,
-	}
+	}, nil
 }
 
 type DynamicReadinessTrackerOptions struct {
@@ -203,7 +219,7 @@ func (t *DynamicReadinessTracker) trackDeployment(ctx context.Context, tracker *
 		select {
 		case err := <-trackErrCh:
 			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
-				return fmt.Errorf("track: %w", err)
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
 			}
 
 			return nil
@@ -334,7 +350,7 @@ func (t *DynamicReadinessTracker) trackStatefulSet(ctx context.Context, tracker 
 		select {
 		case err := <-trackErrCh:
 			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
-				return fmt.Errorf("track: %w", err)
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
 			}
 
 			return nil
@@ -451,7 +467,7 @@ func (t *DynamicReadinessTracker) trackDaemonSet(ctx context.Context, tracker *d
 		select {
 		case err := <-trackErrCh:
 			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
-				return fmt.Errorf("track: %w", err)
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
 			}
 
 			return nil
@@ -568,7 +584,7 @@ func (t *DynamicReadinessTracker) trackJob(ctx context.Context, tracker *job.Tra
 		select {
 		case err := <-trackErrCh:
 			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
-				return fmt.Errorf("track: %w", err)
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
 			}
 
 			return nil
@@ -685,7 +701,7 @@ func (t *DynamicReadinessTracker) trackCanary(ctx context.Context, tracker *cana
 		select {
 		case err := <-trackErrCh:
 			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
-				return fmt.Errorf("track: %w", err)
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
 			}
 
 			return nil
@@ -768,7 +784,7 @@ func (t *DynamicReadinessTracker) trackGeneric(ctx context.Context, tracker *gen
 		select {
 		case err := <-trackErrCh:
 			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
-				return fmt.Errorf("track: %w", err)
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
 			}
 
 			return nil
@@ -842,7 +858,7 @@ func (t *DynamicReadinessTracker) handlePodsFromDeploymentStatus(status *deploym
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
 		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -857,7 +873,7 @@ func (t *DynamicReadinessTracker) handlePodsFromStatefulSetStatus(status *statef
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
 		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -872,7 +888,7 @@ func (t *DynamicReadinessTracker) handlePodsFromDaemonSetStatus(status *daemonse
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
 		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -883,7 +899,7 @@ func (t *DynamicReadinessTracker) handlePodsFromJobStatus(status *job.JobStatus,
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
 		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -898,7 +914,7 @@ func (t *DynamicReadinessTracker) handlePodsFromDeploymentPodAddedReport(report 
 
 	for _, pod := range report.DeploymentStatus.Pods {
 		taskState.ResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -913,7 +929,7 @@ func (t *DynamicReadinessTracker) handlePodsFromStatefulSetPodAddedReport(report
 
 	for _, pod := range report.StatefulSetStatus.Pods {
 		taskState.ResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -928,7 +944,7 @@ func (t *DynamicReadinessTracker) handlePodsFromDaemonSetPodAddedReport(report *
 
 	for _, pod := range report.DaemonSetStatus.Pods {
 		taskState.ResourceState(report.Pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -939,7 +955,7 @@ func (t *DynamicReadinessTracker) handlePodsFromJobPodAddedReport(report *job.Po
 
 	for _, pod := range report.JobStatus.Pods {
 		taskState.ResourceState(report.PodName, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.PodStatus.Phase)
+			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 		})
 	}
 }
@@ -1212,7 +1228,7 @@ func (t *DynamicReadinessTracker) handleTaskStateStatus(taskState *statestore.Re
 		return
 	case statestore.ReadinessTaskStatusFailed:
 		abort = true
-		abortErr = fmt.Errorf("waiting for readiness failed")
+		abortErr = fmt.Errorf("waiting for resource %q readiness failed", t.resourceHumanID)
 		return
 	default:
 		panic("unexpected status")
@@ -1234,15 +1250,15 @@ func setReplicasAttribute(resourceState *statestore.ResourceState, replicas int)
 	}
 }
 
-func setPodStatusAttribute(resourceState *statestore.ResourceState, phase corev1.PodPhase) {
+func setPodStatusAttribute(resourceState *statestore.ResourceState, status string) {
 	attributes := resourceState.Attributes()
 
 	if statusAttr, found := lo.Find(attributes, func(attr statestore.Attributer) bool {
 		return attr.Name() == statestore.AttributeNameStatus
 	}); found {
-		statusAttr.(*statestore.Attribute[string]).Value = string(phase)
+		statusAttr.(*statestore.Attribute[string]).Value = status
 	} else {
-		statusAttr = statestore.NewAttribute(statestore.AttributeNameStatus, string(phase))
+		statusAttr = statestore.NewAttribute(statestore.AttributeNameStatus, status)
 		resourceState.AddAttribute(statusAttr)
 	}
 }
