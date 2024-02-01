@@ -976,6 +976,8 @@ func (t *DynamicReadinessTracker) handleDeploymentStatus(status *deployment.Depl
 	}
 
 	if status.IsReady {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
 		for _, state := range taskState.ResourceStates() {
 			state.RWTransaction(func(rs *statestore.ResourceState) {
 				rs.SetStatus(statestore.ResourceStatusReady)
@@ -1000,6 +1002,8 @@ func (t *DynamicReadinessTracker) handleStatefulSetStatus(status *statefulset.St
 	}
 
 	if status.IsReady {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
 		for _, state := range taskState.ResourceStates() {
 			state.RWTransaction(func(rs *statestore.ResourceState) {
 				rs.SetStatus(statestore.ResourceStatusReady)
@@ -1024,6 +1028,8 @@ func (t *DynamicReadinessTracker) handleDaemonSetStatus(status *daemonset.Daemon
 	}
 
 	if status.IsReady {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
 		for _, state := range taskState.ResourceStates() {
 			state.RWTransaction(func(rs *statestore.ResourceState) {
 				rs.SetStatus(statestore.ResourceStatusReady)
@@ -1046,6 +1052,8 @@ func (t *DynamicReadinessTracker) handleJobStatus(status *job.JobStatus, taskSta
 	}
 
 	if status.IsSucceeded {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
 		for _, state := range taskState.ResourceStates() {
 			state.RWTransaction(func(rs *statestore.ResourceState) {
 				rs.SetStatus(statestore.ResourceStatusReady)
@@ -1064,6 +1072,8 @@ func (t *DynamicReadinessTracker) handleCanaryStatus(status *canary.CanaryStatus
 	}
 
 	if status.IsSucceeded {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
 		for _, state := range taskState.ResourceStates() {
 			state.RWTransaction(func(rs *statestore.ResourceState) {
 				rs.SetStatus(statestore.ResourceStatusReady)
@@ -1088,6 +1098,8 @@ func (t *DynamicReadinessTracker) handleGenericResourceStatus(status *generic.Re
 	}
 
 	if status.IsReady() {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
 		for _, state := range taskState.ResourceStates() {
 			state.RWTransaction(func(rs *statestore.ResourceState) {
 				rs.SetStatus(statestore.ResourceStatusReady)

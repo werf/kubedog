@@ -15,6 +15,7 @@ type PresenceTaskState struct {
 	presentConditions []PresenceTaskConditionFn
 	failureConditions []PresenceTaskConditionFn
 
+	status        PresenceTaskStatus
 	uuid          string
 	resourceState *util.Concurrent[*ResourceState]
 }
@@ -56,7 +57,15 @@ func (s *PresenceTaskState) ResourceState() *util.Concurrent[*ResourceState] {
 	return s.resourceState
 }
 
+func (s *PresenceTaskState) SetStatus(status PresenceTaskStatus) {
+	s.status = status
+}
+
 func (s *PresenceTaskState) Status() PresenceTaskStatus {
+	if s.status != "" {
+		return s.status
+	}
+
 	for _, failureCondition := range s.failureConditions {
 		if failureCondition(s) {
 			return PresenceTaskStatusFailed
