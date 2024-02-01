@@ -15,6 +15,7 @@ type AbsenceTaskState struct {
 	absentConditions  []AbsenceTaskConditionFn
 	failureConditions []AbsenceTaskConditionFn
 
+	status        AbsenceTaskStatus
 	uuid          string
 	resourceState *util.Concurrent[*ResourceState]
 }
@@ -56,7 +57,15 @@ func (s *AbsenceTaskState) ResourceState() *util.Concurrent[*ResourceState] {
 	return s.resourceState
 }
 
+func (s *AbsenceTaskState) SetStatus(status AbsenceTaskStatus) {
+	s.status = status
+}
+
 func (s *AbsenceTaskState) Status() AbsenceTaskStatus {
+	if s.status != "" {
+		return s.status
+	}
+
 	for _, failureCondition := range s.failureConditions {
 		if failureCondition(s) {
 			return AbsenceTaskStatusFailed

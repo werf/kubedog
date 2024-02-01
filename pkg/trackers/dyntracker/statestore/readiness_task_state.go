@@ -20,6 +20,7 @@ type ReadinessTaskState struct {
 	readyConditions   []ReadinessTaskConditionFn
 	failureConditions []ReadinessTaskConditionFn
 
+	status             ReadinessTaskStatus
 	uuid               string
 	resourceStatesTree domigraph.Graph[string, *util.Concurrent[*ResourceState]]
 }
@@ -127,7 +128,15 @@ func (s *ReadinessTaskState) TraverseResourceStates(fromName, fromNamespace stri
 	return states
 }
 
+func (s *ReadinessTaskState) SetStatus(status ReadinessTaskStatus) {
+	s.status = status
+}
+
 func (s *ReadinessTaskState) Status() ReadinessTaskStatus {
+	if s.status != "" {
+		return s.status
+	}
+
 	for _, failureCondition := range s.failureConditions {
 		if failureCondition(s) {
 			return ReadinessTaskStatusFailed
