@@ -432,7 +432,7 @@ func (t *DynamicReadinessTracker) trackStatefulSet(ctx context.Context, tracker 
 		case logChunk := <-tracker.PodLogChunk:
 			t.taskState.RTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.logStore.RWTransaction(func(ls *logstore.LogStore) {
-					t.handleReplicaSetPodLogChunk(logChunk, ls, ts)
+					t.handlePodLogChunk(logChunk.PodLogChunk, ls, ts)
 				})
 			})
 		case msg := <-tracker.EventMsg:
@@ -551,7 +551,7 @@ func (t *DynamicReadinessTracker) trackDaemonSet(ctx context.Context, tracker *d
 		case logChunk := <-tracker.PodLogChunk:
 			t.taskState.RTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.logStore.RWTransaction(func(ls *logstore.LogStore) {
-					t.handleReplicaSetPodLogChunk(logChunk, ls, ts)
+					t.handlePodLogChunk(logChunk.PodLogChunk, ls, ts)
 				})
 			})
 		case msg := <-tracker.EventMsg:
