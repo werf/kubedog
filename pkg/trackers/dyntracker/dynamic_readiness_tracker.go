@@ -242,6 +242,8 @@ func (t *DynamicReadinessTracker) trackDeployment(ctx context.Context, tracker *
 				abort    bool
 				abortErr error
 			)
+			status.IsReady = true
+
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromDeploymentStatus(&status, ts)
 				t.handleDeploymentStatus(&status, ts)
@@ -373,6 +375,8 @@ func (t *DynamicReadinessTracker) trackStatefulSet(ctx context.Context, tracker 
 				abort    bool
 				abortErr error
 			)
+			status.IsReady = true
+
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromStatefulSetStatus(&status, ts)
 				t.handleStatefulSetStatus(&status, ts)
@@ -490,6 +494,8 @@ func (t *DynamicReadinessTracker) trackDaemonSet(ctx context.Context, tracker *d
 				abort    bool
 				abortErr error
 			)
+			status.IsReady = true
+
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromDaemonSetStatus(&status, ts)
 				t.handleDaemonSetStatus(&status, ts)
@@ -607,6 +613,8 @@ func (t *DynamicReadinessTracker) trackJob(ctx context.Context, tracker *job.Tra
 				abort    bool
 				abortErr error
 			)
+			status.IsSucceeded = true
+
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromJobStatus(&status, ts)
 				t.handleJobStatus(&status, ts)
@@ -723,6 +731,8 @@ func (t *DynamicReadinessTracker) trackCanary(ctx context.Context, tracker *cana
 				abort    bool
 				abortErr error
 			)
+			status.IsSucceeded = true
+
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handleCanaryStatus(&status, ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
