@@ -977,14 +977,6 @@ func (t *DynamicReadinessTracker) handleDeploymentStatus(status *deployment.Depl
 		})
 	}
 
-	if status.IsFailed {
-		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
-			rs.AddError(errors.New(status.FailedReason), "", time.Now())
-		})
-
-		return
-	}
-
 	if status.IsReady {
 		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
 
@@ -993,6 +985,14 @@ func (t *DynamicReadinessTracker) handleDeploymentStatus(status *deployment.Depl
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+	}
+
+	if status.IsFailed {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+		})
+
+		return
 	}
 }
 
@@ -1003,14 +1003,6 @@ func (t *DynamicReadinessTracker) handleStatefulSetStatus(status *statefulset.St
 		})
 	}
 
-	if status.IsFailed {
-		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
-			rs.AddError(errors.New(status.FailedReason), "", time.Now())
-		})
-
-		return
-	}
-
 	if status.IsReady {
 		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
 
@@ -1019,6 +1011,14 @@ func (t *DynamicReadinessTracker) handleStatefulSetStatus(status *statefulset.St
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+	}
+
+	if status.IsFailed {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+		})
+
+		return
 	}
 }
 
@@ -1029,14 +1029,6 @@ func (t *DynamicReadinessTracker) handleDaemonSetStatus(status *daemonset.Daemon
 		})
 	}
 
-	if status.IsFailed {
-		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
-			rs.AddError(errors.New(status.FailedReason), "", time.Now())
-		})
-
-		return
-	}
-
 	if status.IsReady {
 		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
 
@@ -1046,6 +1038,14 @@ func (t *DynamicReadinessTracker) handleDaemonSetStatus(status *daemonset.Daemon
 			})
 		}
 	}
+
+	if status.IsFailed {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+		})
+
+		return
+	}
 }
 
 func (t *DynamicReadinessTracker) handleJobStatus(status *job.JobStatus, taskState *statestore.ReadinessTaskState) {
@@ -1053,14 +1053,6 @@ func (t *DynamicReadinessTracker) handleJobStatus(status *job.JobStatus, taskSta
 		setReplicasAttribute(rs, 1)
 	})
 
-	if status.IsFailed {
-		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
-			rs.AddError(errors.New(status.FailedReason), "", time.Now())
-		})
-
-		return
-	}
-
 	if status.IsSucceeded {
 		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
 
@@ -1069,18 +1061,18 @@ func (t *DynamicReadinessTracker) handleJobStatus(status *job.JobStatus, taskSta
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+	}
+
+	if status.IsFailed {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+		})
+
+		return
 	}
 }
 
 func (t *DynamicReadinessTracker) handleCanaryStatus(status *canary.CanaryStatus, taskState *statestore.ReadinessTaskState) {
-	if status.IsFailed {
-		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
-			rs.AddError(errors.New(status.FailedReason), "", time.Now())
-		})
-
-		return
-	}
-
 	if status.IsSucceeded {
 		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
 
@@ -1089,6 +1081,14 @@ func (t *DynamicReadinessTracker) handleCanaryStatus(status *canary.CanaryStatus
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+	}
+
+	if status.IsFailed {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+		})
+
+		return
 	}
 }
 
@@ -1099,14 +1099,6 @@ func (t *DynamicReadinessTracker) handleGenericResourceStatus(status *generic.Re
 		})
 	}
 
-	if status.IsFailed() {
-		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
-			rs.AddError(errors.New(status.FailureReason()), "", time.Now())
-		})
-
-		return
-	}
-
 	if status.IsReady() {
 		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
 
@@ -1115,6 +1107,14 @@ func (t *DynamicReadinessTracker) handleGenericResourceStatus(status *generic.Re
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+
+		return
+	}
+
+	if status.IsFailed() {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailureReason()), "", time.Now())
+		})
 
 		return
 	}
