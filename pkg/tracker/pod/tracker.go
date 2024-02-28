@@ -327,30 +327,30 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 	switch pod.State {
 	case tracker.Initial:
 		switch {
-		case status.IsFailed:
-			pod.State = tracker.ResourceFailed
-			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
 		case status.IsReady:
 			pod.State = tracker.ResourceReady
 			pod.Ready <- status
+		case status.IsFailed:
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		default:
 			pod.State = tracker.ResourceAdded
 			pod.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
 		switch {
-		case status.IsFailed:
-			pod.State = tracker.ResourceFailed
-			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
 		case status.IsReady:
 			pod.State = tracker.ResourceReady
 			pod.Ready <- status
+		case status.IsFailed:
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		default:
 			pod.Status <- status
 		}
@@ -358,26 +358,26 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 		pod.Status <- status
 	case tracker.ResourceReady:
 		switch {
-		case status.IsFailed:
-			pod.State = tracker.ResourceFailed
-			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
+		case status.IsFailed:
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		default:
 			pod.Status <- status
 		}
 	case tracker.ResourceDeleted:
 		switch {
-		case status.IsFailed:
-			pod.State = tracker.ResourceFailed
-			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		case status.IsSucceeded:
 			pod.State = tracker.ResourceSucceeded
 			pod.Succeeded <- status
 		case status.IsReady:
 			pod.State = tracker.ResourceReady
 			pod.Ready <- status
+		case status.IsFailed:
+			pod.State = tracker.ResourceFailed
+			pod.Failed <- FailedReport{PodStatus: status, FailedReason: status.FailedReason}
 		default:
 			pod.State = tracker.ResourceAdded
 			pod.Added <- status

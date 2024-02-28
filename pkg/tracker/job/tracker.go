@@ -306,24 +306,24 @@ func (job *Tracker) handleJobState(ctx context.Context, object *batchv1.Job) err
 		}
 
 		switch {
-		case status.IsFailed:
-			job.State = tracker.ResourceFailed
-			job.Failed <- status
 		case status.IsSucceeded:
 			job.State = tracker.ResourceSucceeded
 			job.Succeeded <- status
+		case status.IsFailed:
+			job.State = tracker.ResourceFailed
+			job.Failed <- status
 		default:
 			job.State = tracker.ResourceAdded
 			job.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
 		switch {
-		case status.IsFailed:
-			job.State = tracker.ResourceFailed
-			job.Failed <- status
 		case status.IsSucceeded:
 			job.State = tracker.ResourceSucceeded
 			job.Succeeded <- status
+		case status.IsFailed:
+			job.State = tracker.ResourceFailed
+			job.Failed <- status
 		default:
 			job.Status <- status
 		}
@@ -331,12 +331,12 @@ func (job *Tracker) handleJobState(ctx context.Context, object *batchv1.Job) err
 		job.Status <- status
 	case tracker.ResourceDeleted:
 		switch {
-		case status.IsFailed:
-			job.State = tracker.ResourceFailed
-			job.Failed <- status
 		case status.IsSucceeded:
 			job.State = tracker.ResourceSucceeded
 			job.Succeeded <- status
+		case status.IsFailed:
+			job.State = tracker.ResourceFailed
+			job.Failed <- status
 		default:
 			job.State = tracker.ResourceAdded
 			job.Added <- status

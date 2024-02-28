@@ -424,24 +424,24 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 		}
 
 		switch {
-		case status.IsFailed:
-			d.State = tracker.ResourceFailed
-			d.Failed <- status
 		case status.IsReady:
 			d.State = tracker.ResourceReady
 			d.Ready <- status
+		case status.IsFailed:
+			d.State = tracker.ResourceFailed
+			d.Failed <- status
 		default:
 			d.State = tracker.ResourceAdded
 			d.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
 		switch {
-		case status.IsFailed:
-			d.State = tracker.ResourceFailed
-			d.Failed <- status
 		case status.IsReady:
 			d.State = tracker.ResourceReady
 			d.Ready <- status
+		case status.IsFailed:
+			d.State = tracker.ResourceFailed
+			d.Failed <- status
 		default:
 			d.Status <- status
 		}
@@ -449,12 +449,12 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 		d.Status <- status
 	case tracker.ResourceDeleted:
 		switch {
-		case status.IsFailed:
-			d.State = tracker.ResourceFailed
-			d.Failed <- status
 		case status.IsReady:
 			d.State = tracker.ResourceReady
 			d.Ready <- status
+		case status.IsFailed:
+			d.State = tracker.ResourceFailed
+			d.Failed <- status
 		default:
 			d.State = tracker.ResourceAdded
 			d.Added <- status
