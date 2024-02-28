@@ -187,24 +187,24 @@ func (canary *Tracker) handleCanaryState(ctx context.Context, object *v1beta1.Ca
 	switch canary.State {
 	case tracker.Initial:
 		switch {
-		case status.IsFailed:
-			canary.State = tracker.ResourceFailed
-			canary.Failed <- status
 		case status.IsSucceeded:
 			canary.State = tracker.ResourceSucceeded
 			canary.Succeeded <- status
+		case status.IsFailed:
+			canary.State = tracker.ResourceFailed
+			canary.Failed <- status
 		default:
 			canary.State = tracker.ResourceAdded
 			canary.Added <- status
 		}
 	case tracker.ResourceAdded, tracker.ResourceFailed:
 		switch {
-		case status.IsFailed:
-			canary.State = tracker.ResourceFailed
-			canary.Failed <- status
 		case status.IsSucceeded:
 			canary.State = tracker.ResourceSucceeded
 			canary.Succeeded <- status
+		case status.IsFailed:
+			canary.State = tracker.ResourceFailed
+			canary.Failed <- status
 		default:
 			canary.Status <- status
 		}
