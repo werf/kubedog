@@ -985,14 +985,14 @@ func (t *DynamicReadinessTracker) handleDeploymentStatus(status *deployment.Depl
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+
+		return
 	}
 
 	if status.IsFailed {
 		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
 			rs.AddError(errors.New(status.FailedReason), "", time.Now())
 		})
-
-		return
 	}
 }
 
@@ -1011,14 +1011,14 @@ func (t *DynamicReadinessTracker) handleStatefulSetStatus(status *statefulset.St
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+
+		return
 	}
 
 	if status.IsFailed {
 		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
 			rs.AddError(errors.New(status.FailedReason), "", time.Now())
 		})
-
-		return
 	}
 }
 
@@ -1037,14 +1037,14 @@ func (t *DynamicReadinessTracker) handleDaemonSetStatus(status *daemonset.Daemon
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+
+		return
 	}
 
 	if status.IsFailed {
 		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
 			rs.AddError(errors.New(status.FailedReason), "", time.Now())
 		})
-
-		return
 	}
 }
 
@@ -1061,14 +1061,14 @@ func (t *DynamicReadinessTracker) handleJobStatus(status *job.JobStatus, taskSta
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+
+		return
 	}
 
 	if status.IsFailed {
 		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
 			rs.AddError(errors.New(status.FailedReason), "", time.Now())
 		})
-
-		return
 	}
 }
 
@@ -1081,14 +1081,14 @@ func (t *DynamicReadinessTracker) handleCanaryStatus(status *canary.CanaryStatus
 				rs.SetStatus(statestore.ResourceStatusReady)
 			})
 		}
+
+		return
 	}
 
 	if status.IsFailed {
 		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
 			rs.AddError(errors.New(status.FailedReason), "", time.Now())
 		})
-
-		return
 	}
 }
 
