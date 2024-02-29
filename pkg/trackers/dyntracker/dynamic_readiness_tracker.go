@@ -867,9 +867,11 @@ func (t *DynamicReadinessTracker) handlePodsFromDeploymentStatus(status *deploym
 		taskState.AddResourceState(pod.Name, taskState.Namespace(), podGvk)
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
-		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -882,9 +884,11 @@ func (t *DynamicReadinessTracker) handlePodsFromStatefulSetStatus(status *statef
 		taskState.AddResourceState(pod.Name, taskState.Namespace(), podGvk)
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
-		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -897,9 +901,11 @@ func (t *DynamicReadinessTracker) handlePodsFromDaemonSetStatus(status *daemonse
 		taskState.AddResourceState(pod.Name, taskState.Namespace(), podGvk)
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
-		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -908,9 +914,11 @@ func (t *DynamicReadinessTracker) handlePodsFromJobStatus(status *job.JobStatus,
 		taskState.AddResourceState(pod.Name, taskState.Namespace(), podGvk)
 		taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), pod.Name, taskState.Namespace(), podGvk)
 
-		taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -923,9 +931,11 @@ func (t *DynamicReadinessTracker) handlePodsFromDeploymentPodAddedReport(report 
 	taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), report.ReplicaSetPod.Name, taskState.Namespace(), podGvk)
 
 	for _, pod := range report.DeploymentStatus.Pods {
-		taskState.ResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -938,9 +948,11 @@ func (t *DynamicReadinessTracker) handlePodsFromStatefulSetPodAddedReport(report
 	taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), report.ReplicaSetPod.Name, taskState.Namespace(), podGvk)
 
 	for _, pod := range report.StatefulSetStatus.Pods {
-		taskState.ResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -953,9 +965,11 @@ func (t *DynamicReadinessTracker) handlePodsFromDaemonSetPodAddedReport(report *
 	taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), report.Pod.Name, taskState.Namespace(), podGvk)
 
 	for _, pod := range report.DaemonSetStatus.Pods {
-		taskState.ResourceState(report.Pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(report.Pod.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
@@ -964,9 +978,11 @@ func (t *DynamicReadinessTracker) handlePodsFromJobPodAddedReport(report *job.Po
 	taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), report.PodName, taskState.Namespace(), podGvk)
 
 	for _, pod := range report.JobStatus.Pods {
-		taskState.ResourceState(report.PodName, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
-			setPodStatusAttribute(rs, pod.StatusIndicator.Value)
-		})
+		if pod.StatusIndicator != nil {
+			taskState.ResourceState(report.PodName, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
+			})
+		}
 	}
 }
 
