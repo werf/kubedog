@@ -558,6 +558,8 @@ func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Depl
 	switch d.State {
 	case tracker.Initial:
 		d.runReplicaSetsInformer(ctx, object)
+		// TODO: If pod events handled before any replicasets found, then during the handling we can't determine whether the pod is for the new or for the old replicaset. Needs some proper solution instead of time.Sleep.
+		time.Sleep(1500 * time.Millisecond)
 		d.runPodsInformer(ctx, object)
 
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
