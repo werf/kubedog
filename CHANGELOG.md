@@ -1,5 +1,20 @@
 # Changelog
 
+### [0.12.4](https://www.github.com/werf/kubedog/compare/v0.12.3...v0.12.4) (2024-03-21)
+
+
+### Bug Fixes
+
+* dynamic readiness tracker panics ([f287f5c](https://www.github.com/werf/kubedog/commit/f287f5cdca521082ef6e88a88cc7f567b9f2f1de))
+* **dynamic-tracker:** not saving logs for STS and DS ([d064632](https://www.github.com/werf/kubedog/commit/d064632d30d4819be9fe22b528895bb0e32ca868))
+* force resource status to Ready for low-level trackers ([d29a5cd](https://www.github.com/werf/kubedog/commit/d29a5cdc2260ac246070520c4b35e1655507fb21))
+* Jobs not failing on errors ([823b8ac](https://www.github.com/werf/kubedog/commit/823b8ac1b3ba0dc817a10f1ad1cb1830560a8576))
+* pods not readying thus task not ready ([95b81d0](https://www.github.com/werf/kubedog/commit/95b81d0b8c5662ce35232c8d720a4d520f998210))
+* **readiness:** prioritize forced success status over failure ([7163abd](https://www.github.com/werf/kubedog/commit/7163abddc6bd334af76410013351cb49475fd7aa))
+* **readiness:** prioritize forced success status over failure /2 ([4d52ab2](https://www.github.com/werf/kubedog/commit/4d52ab2208cd15205fca0bb500b821c4b75eba17))
+* **readiness:** prioritize readiness over failure in all low-level trackers ([9834fbd](https://www.github.com/werf/kubedog/commit/9834fbde60d956f35b30166a1adcd240c6682454))
+* tracking old deployment pods as new ([8aca45a](https://www.github.com/werf/kubedog/commit/8aca45a478a10c847c615eab800709cebd12d401))
+
 ### [0.12.3](https://www.github.com/werf/kubedog/compare/v0.12.2...v0.12.3) (2024-01-25)
 
 
