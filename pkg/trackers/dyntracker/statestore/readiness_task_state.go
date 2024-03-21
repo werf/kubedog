@@ -212,8 +212,6 @@ func initReadinessTaskStateFailureConditions(failMode multitrack.FailMode, total
 	})
 
 	if failMode != multitrack.IgnoreAndContinueDeployProcess {
-		maxErrors := lo.Max([]int{totalAllowFailuresCount + 1})
-
 		failureConditions = append(failureConditions, func(taskState *ReadinessTaskState) bool {
 			var totalErrsCount int
 			lo.Must0(domigraph.BFS(taskState.resourceStatesTree, util.ResourceID(taskState.name, taskState.namespace, taskState.groupVersionKind), func(id string) bool {
@@ -231,7 +229,7 @@ func initReadinessTaskStateFailureConditions(failMode multitrack.FailMode, total
 				return false
 			}))
 
-			return totalErrsCount > maxErrors
+			return totalErrsCount > totalAllowFailuresCount
 		})
 	}
 
