@@ -64,7 +64,13 @@ func NewDynamicReadinessTracker(
 	opts DynamicReadinessTrackerOptions,
 ) (*DynamicReadinessTracker, error) {
 	timeout := opts.Timeout
-	captureLogsFromTime := opts.CaptureLogsFromTime
+
+	var captureLogsFromTime time.Time
+	if opts.CaptureLogsFromTime.IsZero() {
+		captureLogsFromTime = time.Now()
+	} else {
+		captureLogsFromTime = opts.CaptureLogsFromTime
+	}
 
 	var noActivityTimeout time.Duration
 	if opts.NoActivityTimeout != 0 {
