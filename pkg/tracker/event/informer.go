@@ -180,6 +180,11 @@ func (e *EventInformer) handleEvent(event *corev1.Event) {
 }
 
 func (e *EventInformer) handleRegularEvent(event *corev1.Event, msg string) {
+	if strings.Contains(event.Reason, "RecreatingFailedPod") ||
+		strings.Contains(event.Reason, "FailedDelete") {
+		return
+	}
+
 	if strings.Contains(event.Reason, "Failed") {
 		if debug.Debug() {
 			fmt.Printf("got FAILED EVENT!!! %s\n", msg)
