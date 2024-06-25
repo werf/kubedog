@@ -453,7 +453,7 @@ func (t *DynamicReadinessTracker) trackStatefulSet(ctx context.Context, tracker 
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromStatefulSetStatus(&report.StatefulSetStatus, ts)
 				t.handleStatefulSetStatus(&report.StatefulSetStatus, ts)
-				t.handleReplicaSetPodError(&report.ReplicaSetPodError, ts)
+				t.handlePodError(&report.ReplicaSetPodError.PodError, ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -572,7 +572,7 @@ func (t *DynamicReadinessTracker) trackDaemonSet(ctx context.Context, tracker *d
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromDaemonSetStatus(&report.DaemonSetStatus, ts)
 				t.handleDaemonSetStatus(&report.DaemonSetStatus, ts)
-				t.handleReplicaSetPodError(&report.PodError, ts)
+				t.handlePodError(&report.PodError.PodError, ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -946,10 +946,6 @@ func (t *DynamicReadinessTracker) handlePodsFromDeploymentPodAddedReport(report 
 }
 
 func (t *DynamicReadinessTracker) handlePodsFromStatefulSetPodAddedReport(report *statefulset.PodAddedReport, taskState *statestore.ReadinessTaskState) {
-	if !report.ReplicaSetPod.ReplicaSet.IsNew {
-		return
-	}
-
 	taskState.AddResourceState(report.ReplicaSetPod.Name, taskState.Namespace(), podGvk)
 	taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), report.ReplicaSetPod.Name, taskState.Namespace(), podGvk)
 
@@ -963,10 +959,6 @@ func (t *DynamicReadinessTracker) handlePodsFromStatefulSetPodAddedReport(report
 }
 
 func (t *DynamicReadinessTracker) handlePodsFromDaemonSetPodAddedReport(report *daemonset.PodAddedReport, taskState *statestore.ReadinessTaskState) {
-	if !report.Pod.ReplicaSet.IsNew {
-		return
-	}
-
 	taskState.AddResourceState(report.Pod.Name, taskState.Namespace(), podGvk)
 	taskState.AddDependency(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind(), report.Pod.Name, taskState.Namespace(), podGvk)
 
