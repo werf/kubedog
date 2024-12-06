@@ -98,6 +98,12 @@ func (t *DynamicAbsenceTracker) Track(ctx context.Context) error {
 			return false, fmt.Errorf("get resource %q: %w", resourceHumanID, err)
 		}
 
+		t.taskState.RWTransaction(func(ats *statestore.AbsenceTaskState) {
+			ats.ResourceState().RWTransaction(func(rs *statestore.ResourceState) {
+				rs.SetStatus(statestore.ResourceStatusCreated)
+			})
+		})
+
 		return false, nil
 	}); err != nil {
 		return fmt.Errorf("poll resource %q: %w", resourceHumanID, err)

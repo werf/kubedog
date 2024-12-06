@@ -93,7 +93,17 @@ func (t *DynamicPresenceTracker) Track(ctx context.Context) error {
 
 	if err := wait.PollImmediate(t.pollPeriod, t.timeout, func() (bool, error) {
 		if _, err := resourceClient.Get(ctx, name, metav1.GetOptions{}); err != nil {
-			if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) || err == io.EOF || err == io.ErrUnexpectedEOF || apierrors.IsNotFound(err) {
+			if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) || err == io.EOF || err == io.ErrUnexpectedEOF {
+				return false, nil
+			}
+
+			if apierrors.IsNotFound(err) {
+				t.taskState.RWTransaction(func(pts *statestore.PresenceTaskState) {
+					pts.ResourceState().RWTransaction(func(rs *statestore.ResourceState) {
+						rs.SetStatus(statestore.ResourceStatusDeleted)
+					})
+				})
+
 				return false, nil
 			}
 

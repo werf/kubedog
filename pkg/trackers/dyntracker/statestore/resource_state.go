@@ -24,7 +24,7 @@ func NewResourceState(name, namespace string, groupVersionKind schema.GroupVersi
 		name:             name,
 		namespace:        namespace,
 		groupVersionKind: groupVersionKind,
-		status:           ResourceStatusCreated,
+		status:           ResourceStatusUnknown,
 		errors:           make(map[string][]*Error),
 	}
 }
