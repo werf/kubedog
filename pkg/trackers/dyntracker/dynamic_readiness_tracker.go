@@ -237,6 +237,7 @@ func (t *DynamicReadinessTracker) trackDeployment(ctx context.Context, tracker *
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromDeploymentStatus(&status, ts)
 				t.handleDeploymentStatus(&status, ts)
+				t.setRootResourceCreated(ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -370,6 +371,7 @@ func (t *DynamicReadinessTracker) trackStatefulSet(ctx context.Context, tracker 
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromStatefulSetStatus(&status, ts)
 				t.handleStatefulSetStatus(&status, ts)
+				t.setRootResourceCreated(ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -489,6 +491,7 @@ func (t *DynamicReadinessTracker) trackDaemonSet(ctx context.Context, tracker *d
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromDaemonSetStatus(&status, ts)
 				t.handleDaemonSetStatus(&status, ts)
+				t.setRootResourceCreated(ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -608,6 +611,7 @@ func (t *DynamicReadinessTracker) trackJob(ctx context.Context, tracker *job.Tra
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handlePodsFromJobStatus(&status, ts)
 				t.handleJobStatus(&status, ts)
+				t.setRootResourceCreated(ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -726,6 +730,7 @@ func (t *DynamicReadinessTracker) trackCanary(ctx context.Context, tracker *cana
 			)
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handleCanaryStatus(&status, ts)
+				t.setRootResourceCreated(ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -811,6 +816,7 @@ func (t *DynamicReadinessTracker) trackGeneric(ctx context.Context, tracker *gen
 			)
 			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
 				t.handleGenericResourceStatus(status, ts)
+				t.setRootResourceCreated(ts)
 				abort, abortErr = t.handleTaskStateStatus(ts)
 			})
 
@@ -1271,6 +1277,18 @@ func (t *DynamicReadinessTracker) handleTaskStateStatus(taskState *statestore.Re
 	}
 
 	return abort, abortErr
+}
+
+func (t *DynamicReadinessTracker) setRootResourceCreated(taskState *statestore.ReadinessTaskState) {
+	rss := taskState.ResourceStates()
+
+	if len(rss) == 0 {
+		return
+	}
+
+	rss[0].RWTransaction(func(rs *statestore.ResourceState) {
+		rs.SetStatus(statestore.ResourceStatusCreated)
+	})
 }
 
 func setReplicasAttribute(resourceState *statestore.ResourceState, replicas int) {
