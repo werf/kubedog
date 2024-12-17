@@ -5,8 +5,8 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/job"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/pod"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/job"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/pod"
 )
 
 func (mt *multitracker) TrackJob(kube kubernetes.Interface, spec MultitrackSpec, opts MultitrackOptions) error {

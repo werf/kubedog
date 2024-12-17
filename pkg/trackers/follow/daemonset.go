@@ -5,10 +5,10 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/display"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/daemonset"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/replicaset"
+	"github.com/werf/kubedog/for-werf-helm/pkg/display"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/daemonset"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/replicaset"
 )
 
 func TrackDaemonSet(name, namespace string, kube kubernetes.Interface, opts tracker.Options) error {

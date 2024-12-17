@@ -5,8 +5,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/indicators"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/pod"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/indicators"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/pod"
 )
 
 type DaemonSetStatus struct {

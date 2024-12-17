@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/utils"
+	"github.com/werf/kubedog/for-werf-helm/pkg/utils"
 )
 
 const (

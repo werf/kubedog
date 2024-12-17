@@ -6,7 +6,7 @@ import (
 	"github.com/gookit/color"
 	"github.com/werf/logboek"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/utils"
+	"github.com/werf/kubedog/for-werf-helm/pkg/utils"
 )
 
 func main() {

@@ -13,8 +13,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/debug"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/resid"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/debug"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/resid"
 )
 
 type ResourceStateWatcher struct {

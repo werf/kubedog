@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/indicators"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/indicators"
 )
 
 type ResourceStatus struct {

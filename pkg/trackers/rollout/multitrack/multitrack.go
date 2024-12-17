@@ -14,14 +14,14 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/canary"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/daemonset"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/debug"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/deployment"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/job"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/statefulset"
-	"github.com/werf/kubedog-for-werf-helm/pkg/trackers/rollout/multitrack/generic"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/canary"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/daemonset"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/debug"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/deployment"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/job"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/statefulset"
+	"github.com/werf/kubedog/for-werf-helm/pkg/trackers/rollout/multitrack/generic"
 	"github.com/werf/logboek/pkg/types"
 )
 

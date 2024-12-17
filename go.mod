@@ -1,4 +1,4 @@
-module github.com/werf/kubedog-for-werf-helm
+module github.com/werf/kubedog/for-werf-helm
 
 go 1.21
 

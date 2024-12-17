@@ -5,10 +5,10 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/display"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/replicaset"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/statefulset"
+	"github.com/werf/kubedog/for-werf-helm/pkg/display"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/replicaset"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/statefulset"
 )
 
 // TrackStatefulSetTillReady implements rollout track mode for StatefulSet

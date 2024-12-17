@@ -8,9 +8,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/controller"
-	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/debug"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/controller"
+	"github.com/werf/kubedog/for-werf-helm/pkg/tracker/debug"
 )
 
 type Feed interface {
