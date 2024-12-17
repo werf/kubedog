@@ -5,8 +5,8 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/werf/kubedog/pkg/tracker/daemonset"
-	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/daemonset"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/replicaset"
 )
 
 func (mt *multitracker) TrackDaemonSet(kube kubernetes.Interface, spec MultitrackSpec, opts MultitrackOptions) error {

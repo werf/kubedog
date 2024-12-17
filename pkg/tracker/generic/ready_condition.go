@@ -6,8 +6,8 @@ import (
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/werf/kubedog/pkg/tracker/indicators"
-	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/indicators"
+	"github.com/werf/kubedog-for-werf-helm/pkg/utils"
 )
 
 func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *indicators.StringEqualConditionIndicator, humanJSONPath string, err error) {

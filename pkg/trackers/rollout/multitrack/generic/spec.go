@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/werf/kubedog/pkg/tracker/resid"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/resid"
 )
 
 type TrackTerminationMode string

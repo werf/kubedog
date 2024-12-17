@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog-for-werf-helm/pkg/trackers/dyntracker/util"
 )
 
 type ResourceState struct {

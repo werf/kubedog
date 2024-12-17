@@ -3,7 +3,7 @@ package indicators
 import (
 	"fmt"
 
-	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/kubedog-for-werf-helm/pkg/utils"
 )
 
 type FormatTableElemOptions struct {

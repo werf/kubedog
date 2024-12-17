@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/werf/kubedog/pkg/kube"
-	"github.com/werf/kubedog/pkg/trackers/rollout/multitrack"
+	"github.com/werf/kubedog-for-werf-helm/pkg/kube"
+	"github.com/werf/kubedog-for-werf-helm/pkg/trackers/rollout/multitrack"
 )
 
 func main() {

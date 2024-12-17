@@ -5,8 +5,8 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/werf/kubedog/pkg/tracker/deployment"
-	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/deployment"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/replicaset"
 )
 
 func (mt *multitracker) TrackDeployment(kube kubernetes.Interface, spec MultitrackSpec, opts MultitrackOptions) error {

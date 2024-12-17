@@ -6,9 +6,9 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/werf/kubedog/pkg/tracker/indicators"
-	"github.com/werf/kubedog/pkg/tracker/pod"
-	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/indicators"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/pod"
+	"github.com/werf/kubedog-for-werf-helm/pkg/utils"
 )
 
 type JobStatus struct {

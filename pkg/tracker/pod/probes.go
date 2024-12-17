@@ -7,7 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/debug"
 )
 
 type ReadinessProbe struct {

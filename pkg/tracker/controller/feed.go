@@ -1,6 +1,6 @@
 package controller
 
-import "github.com/werf/kubedog/pkg/tracker/replicaset"
+import "github.com/werf/kubedog-for-werf-helm/pkg/tracker/replicaset"
 
 type ControllerFeed interface {
 	OnAdded(func(ready bool) error)

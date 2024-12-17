@@ -8,8 +8,8 @@ import (
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
-	"github.com/werf/kubedog/pkg/trackers/rollout/multitrack"
+	"github.com/werf/kubedog-for-werf-helm/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog-for-werf-helm/pkg/trackers/rollout/multitrack"
 )
 
 type ReadinessTaskState struct {

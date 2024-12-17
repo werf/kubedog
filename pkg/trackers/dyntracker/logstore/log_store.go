@@ -1,7 +1,7 @@
 package logstore
 
 import (
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog-for-werf-helm/pkg/trackers/dyntracker/util"
 )
 
 type LogStore struct {

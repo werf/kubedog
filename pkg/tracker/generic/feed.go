@@ -9,8 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker"
+	"github.com/werf/kubedog-for-werf-helm/pkg/tracker/debug"
 )
 
 type Feed struct {
