@@ -1,14 +1,37 @@
+# For many of the standard Kubernetes resources we have generic logic to detect their status.
+# But for some resources, especially Custom Resources, we need more specific logic to determine
+# their status. Custom rules to detect status of such resources are defined in this file.
+
 rules:
+    # Match the resource by its API group (without version)
   - resourceGroup: "acid.zalan.do"
+    # Match the resource by its kind (case insensitive)
     resourceKind: "postgresql"
+    # JSON Path to match the single field in the resource live manifest (get the manifest via
+    # `kubectl get -o json`). This is the field that we will monitor to determine the resource
+    # status.
     jsonPath: "$.status.PostgresClusterStatus"
+    # JSON Path in more human-readable form, used only in deploy logs to inform the user of the
+    # field that we are monitoring. Anything can be here, it does not need to be a valid JSON
+    # path, but it should be informative.
     humanJsonPath: "status.PostgresClusterStatus"
+    # Fill out conditions as much as possible. Quality of tracking and error detection depends on
+    # this.
     conditions:
+      # If the field that we got via JSON Path has value "Running", then we consider the resource
+      # to be ready. Status tracking for this resource stopped immediately.
       ready:
         - "Running"
+      # If the field that we got via JSON Path has value "Creating" or "Updating", then we
+      # consider the resource neither ready nor failed yet. Status tracking for this resource
+      # will continue.
       progressing:
         - "Creating"
         - "Updating"
+      # If the field that we got via JSON Path has value "CreateFailed" or "UpdateFailed" or
+      # "DeleteFailed", then we consider the resource to be failed. Status tracking for this
+      # resource will stop if the error threshold (configurable by the user) is reached. The
+      # deployment will fail (configurable by the user).
       failed:
         - "CreateFailed"
         - "UpdateFailed"
