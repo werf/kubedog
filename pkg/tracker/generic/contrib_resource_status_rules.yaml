@@ -13,3 +13,14 @@ rules:
         - "CreateFailed"
         - "UpdateFailed"
         - "DeleteFailed"
+  - resourceGroup: "external-secrets.io"
+    resourceKind: "ExternalSecret"
+    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
