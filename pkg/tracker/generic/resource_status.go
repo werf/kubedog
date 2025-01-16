@@ -24,11 +24,19 @@ func NewResourceStatus(object *unstructured.Unstructured) (*ResourceStatus, erro
 		return nil, fmt.Errorf("error getting resource status indicator: %w", err)
 	}
 
+	isFailed := resourceStatusIndicator != nil && resourceStatusIndicator.IsFailed()
+
+	var failureReason string
+	if isFailed {
+		failureReason = "Resource status field value matched failed condition."
+	}
+
 	return &ResourceStatus{
 		Indicator:          resourceStatusIndicator,
 		isReady:            resourceStatusIndicator == nil || (resourceStatusIndicator != nil && resourceStatusIndicator.IsReady()),
-		isFailed:           resourceStatusIndicator != nil && resourceStatusIndicator.IsFailed(),
+		isFailed:           isFailed,
 		humanConditionPath: humanJSONPath,
+		failureReason:      failureReason,
 	}, nil
 }
 
