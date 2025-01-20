@@ -22,6 +22,8 @@ type KubeConfigGetterOptions struct {
 	BearerToken      string
 	APIServer        string
 	CAFile           string
+	TLSServerName    string
+	SkipTLSVerify    bool
 	Impersonate      string
 	ImpersonateGroup []string
 }
@@ -50,6 +52,9 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 		configFlags.KubeConfig = new(string)
 		*configFlags.KubeConfig = opts.ConfigPath
 
+		configFlags.Insecure = new(bool)
+		*configFlags.Insecure = opts.SkipTLSVerify
+
 		if opts.Namespace != "" {
 			configFlags.Namespace = new(string)
 			*configFlags.Namespace = opts.Namespace
@@ -68,6 +73,11 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 		if opts.CAFile != "" {
 			configFlags.CAFile = new(string)
 			*configFlags.CAFile = opts.CAFile
+		}
+
+		if opts.TLSServerName != "" {
+			configFlags.TLSServerName = new(string)
+			*configFlags.TLSServerName = opts.TLSServerName
 		}
 
 		if opts.Impersonate != "" {
