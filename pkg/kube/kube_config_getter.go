@@ -26,6 +26,8 @@ type KubeConfigGetterOptions struct {
 	SkipTLSVerify    bool
 	Impersonate      string
 	ImpersonateGroup []string
+	QPSLimit         int
+	BurstLimit       int
 }
 
 func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTClientGetter, error) {
@@ -54,6 +56,18 @@ func NewKubeConfigGetter(opts KubeConfigGetterOptions) (genericclioptions.RESTCl
 
 		configFlags.Insecure = new(bool)
 		*configFlags.Insecure = opts.SkipTLSVerify
+
+		configFlags.WrapConfigFn = func(config *rest.Config) *rest.Config {
+			if opts.QPSLimit > 0 {
+				config.QPS = float32(opts.QPSLimit)
+			}
+
+			if opts.BurstLimit > 0 {
+				config.Burst = opts.BurstLimit
+			}
+
+			return config
+		}
 
 		if opts.Namespace != "" {
 			configFlags.Namespace = new(string)
