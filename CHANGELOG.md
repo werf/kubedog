@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.13.0](https://www.github.com/werf/kubedog/compare/v0.12.3...v0.13.0) (2025-01-22)
+
+
+### Features
+
+* add TLSServerName and SkipTLSVerify options ([8b3b4b5](https://www.github.com/werf/kubedog/commit/8b3b4b539be7175043a538e1091ac938aac3069f))
+* grab logs only since tracker start by default ([4cbddd9](https://www.github.com/werf/kubedog/commit/4cbddd9709352c73b42e8e19b622d715ab9cae93))
+* ExternalSecret CR tracking works again ([e227840](https://www.github.com/werf/kubedog/commit/e227840ee96ed5b520ca6ae6a7a0f0f499071614))
+* make Kube QPS and Burst limits configurable ([d0e11b0](https://www.github.com/werf/kubedog/commit/d0e11b068076af871bb98313cd352ec979060c31))
+* update/sync all dependencies to github.com/werf/werf ([36ad625](https://www.github.com/werf/kubedog/commit/36ad625650b47015c1da7b2a5a8e6008b75a517c))
+
+
+### Bug Fixes
+
+* dynamic readiness tracker panics ([f287f5c](https://www.github.com/werf/kubedog/commit/f287f5cdca521082ef6e88a88cc7f567b9f2f1de))
+* not saving logs for STS and DS ([d064632](https://www.github.com/werf/kubedog/commit/d064632d30d4819be9fe22b528895bb0e32ca868))
+* force resource status to Ready for low-level trackers ([d29a5cd](https://www.github.com/werf/kubedog/commit/d29a5cdc2260ac246070520c4b35e1655507fb21))
+* ignore false recreation errors for StatefulSets ([7bc6cf9](https://www.github.com/werf/kubedog/commit/7bc6cf9d9f92d5c352514df483b4c4b130d6b0f1))
+* initial resource status should be "unknown" instead of "created" ([5edd9e4](https://www.github.com/werf/kubedog/commit/5edd9e423f3dbb18494a58eedfce02a245b7353a))
+* Jobs not failing on errors ([823b8ac](https://www.github.com/werf/kubedog/commit/823b8ac1b3ba0dc817a10f1ad1cb1830560a8576))
+* no failure message if generic tracker conditions failed ([b84b40e](https://www.github.com/werf/kubedog/commit/b84b40e381381dc4ebf193fbbdea1237a057e1ba))
+* pods not readying thus task not ready ([95b81d0](https://www.github.com/werf/kubedog/commit/95b81d0b8c5662ce35232c8d720a4d520f998210))
+* prioritize forced success status over failure ([7163abd](https://www.github.com/werf/kubedog/commit/7163abddc6bd334af76410013351cb49475fd7aa))
+* prioritize forced success status over failure /2 ([4d52ab2](https://www.github.com/werf/kubedog/commit/4d52ab2208cd15205fca0bb500b821c4b75eba17))
+* prioritize readiness over failure in all low-level trackers ([9834fbd](https://www.github.com/werf/kubedog/commit/9834fbde60d956f35b30166a1adcd240c6682454))
+* some STS and DS pods not tracked and their errors ignored ([b9b3803](https://www.github.com/werf/kubedog/commit/b9b3803df14325a6e4cc780ebfa04beeffe0b76b))
+* tracking old deployment pods as new ([8aca45a](https://www.github.com/werf/kubedog/commit/8aca45a478a10c847c615eab800709cebd12d401))
+
 ### [0.12.3](https://www.github.com/werf/kubedog/compare/v0.12.2...v0.12.3) (2024-01-25)
 
 
