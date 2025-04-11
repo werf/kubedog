@@ -10,7 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	watchtools "k8s.io/client-go/tools/watch"
@@ -48,9 +50,11 @@ type Tracker struct {
 	objectModified chan *v1beta1.Canary
 	objectDeleted  chan *v1beta1.Canary
 	objectFailed   chan interface{}
+
+	dynamicClient dynamic.Interface
 }
 
-func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, dynamicClient dynamic.Interface, opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -74,6 +78,8 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		objectDeleted:  make(chan *v1beta1.Canary),
 		objectFailed:   make(chan interface{}, 1),
 		errors:         make(chan error),
+
+		dynamicClient: dynamicClient,
 	}
 }
 
@@ -117,25 +123,48 @@ func (canary *Tracker) Track(ctx context.Context) error {
 }
 
 func (canary *Tracker) runInformer(ctx context.Context) error {
-	config, err := kube.GetKubeConfig(kube.KubeConfigOptions{})
-	if err != nil {
-		fmt.Print(err)
-	}
-	flagger, err := flaggerv1beta1.NewForConfig(config.Config)
-	if err != nil {
-		fmt.Print(err)
-	}
 	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
 		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", canary.ResourceName).String()
 		return options
 	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return flagger.Canaries(canary.Namespace).List(ctx, tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return flagger.Canaries(canary.Namespace).Watch(ctx, tweakListOptions(options))
-		},
+
+	var lw *cache.ListWatch
+	if canary.dynamicClient != nil {
+		lw = &cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return canary.dynamicClient.Resource(schema.GroupVersionResource{
+					Group:    "flagger.app",
+					Version:  "v1beta1",
+					Resource: "canaries",
+				}).Namespace(canary.Namespace).List(ctx, tweakListOptions(options))
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return canary.dynamicClient.Resource(schema.GroupVersionResource{
+					Group:    "flagger.app",
+					Version:  "v1beta1",
+					Resource: "canaries",
+				}).Namespace(canary.Namespace).Watch(ctx, tweakListOptions(options))
+			},
+		}
+	} else {
+		config, err := kube.GetKubeConfig(kube.KubeConfigOptions{})
+		if err != nil {
+			fmt.Print(err)
+		}
+
+		flagger, err := flaggerv1beta1.NewForConfig(config.Config)
+		if err != nil {
+			fmt.Print(err)
+		}
+
+		lw = &cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return flagger.Canaries(canary.Namespace).List(ctx, tweakListOptions(options))
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return flagger.Canaries(canary.Namespace).Watch(ctx, tweakListOptions(options))
+			},
+		}
 	}
 
 	go func() {
