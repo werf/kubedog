@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.13.1](https://www.github.com/werf/kubedog/compare/v0.13.0...v0.13.1) (2025-04-11)
+
+
+### Bug Fixes
+
+* external secrets readying if external secret has no status ([cd33f46](https://www.github.com/werf/kubedog/commit/cd33f4634a6e1c5fb36d7bac18dec48b7f3e1727))
+
 ## [0.13.0](https://www.github.com/werf/kubedog/compare/v0.12.3...v0.13.0) (2025-01-22)
 
 
