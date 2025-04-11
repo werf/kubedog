@@ -118,7 +118,7 @@ func NewDynamicReadinessTracker(
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "flagger.app", Kind: "Canary"}:
-		tracker = canary.NewTracker(resourceName, resourceNamespace, staticClient, commontracker.Options{
+		tracker = canary.NewTracker(resourceName, resourceNamespace, staticClient, dynamicClient, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
