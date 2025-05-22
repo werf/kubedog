@@ -82,4 +82,67 @@ rules:
         - "Unknown"
       failed:
         - "False"
-
+# ArgoCD Application
+  - resourceGroup: "argoproj.io"
+    resourceKind: "Application"
+    jsonPath: "$.status.health.status"
+    humanJsonPath: "status.health.status"
+    conditions:
+      ready:
+        - "Healthy"
+      progressing:
+        - "Progressing"
+        - "Degraded"
+        - "Suspended"
+      failed:
+        - "Missing"
+        - "Unknown"
+        - "Error"
+# Argo CD — ApplicationSet
+  - resourceGroup: "argoproj.io"
+    resourceKind: "ApplicationSet"
+    jsonPath: "$.status.conditions[?(@.type=='ResourcesUpToDate')].status"
+    humanJsonPath: "status.conditions[type=ResourcesUpToDate].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
+# cert-manager Certificate
+  - resourceGroup: "cert-manager.io"
+    resourceKind: "Certificate"
+    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
+# Flux HelmRelease
+  - resourceGroup: "helm.toolkit.fluxcd.io"
+    resourceKind: "HelmRelease"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
+# Flux Kustomization
+  - resourceGroup: "kustomize.toolkit.fluxcd.io"
+    resourceKind: "Kustomization"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
