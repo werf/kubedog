@@ -82,7 +82,6 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# ArgoCD Application
 # https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health.go#L12
   - resourceGroup: "argoproj.io"
     resourceKind: "Application"
@@ -94,11 +93,9 @@ rules:
       progressing:
         - "Progressing"
         - "Suspended"
+        - "Unknown"
       failed:
         - "Degraded"
-        - "Missing"
-        - "Unknown"
-# Argo CD — ApplicationSet
 # https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
   - resourceGroup: "argoproj.io"
     resourceKind: "ApplicationSet"
@@ -111,7 +108,6 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# cert-manager Certificate
 # https://github.com/cert-manager/cert-manager/blob/c21f257a1c2067dfb5a842ffe98235326456224c/pkg/apis/certmanager/v1/types_certificate.go#L669
   - resourceGroup: "cert-manager.io"
     resourceKind: "Certificate"
@@ -124,7 +120,6 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# Flux HelmRelease
 # https://github.com/fluxcd/helm-controller/blob/main/api/v2/helmrelease_types.go#L971
   - resourceGroup: "helm.toolkit.fluxcd.io"
     resourceKind: "HelmRelease"
@@ -137,7 +132,6 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# Flux Kustomization
 # https://github.com/fluxcd/kustomize-controller/blob/main/api/v1/kustomization_types.go#L277
   - resourceGroup: "kustomize.toolkit.fluxcd.io"
     resourceKind: "Kustomization"
