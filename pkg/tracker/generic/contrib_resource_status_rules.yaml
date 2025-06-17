@@ -96,6 +96,7 @@ rules:
         - "Unknown"
       failed:
         - "Degraded"
+        - "Missing"
 # https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
   - resourceGroup: "argoproj.io"
     resourceKind: "ApplicationSet"
