@@ -47,7 +47,7 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.goAdd commentMore actions
+# https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.go
   - resourceGroup: "bitnami.com"
     resourceKind: "SealedSecret"
     jsonPath: "$.status.conditions[?(@.type=='Synced')].status"
