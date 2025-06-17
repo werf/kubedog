@@ -59,3 +59,27 @@ rules:
         - "Unknown"
       failed:
         - "False"
+# https://github.com/kyverno/kyverno/blob/main/api/kyverno/v1/policy_status.go
+  - resourceGroup: "kyverno.io"
+    resourceKind: "Policy"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
+  - resourceGroup: "kyverno.io"
+    resourceKind: "ClusterPolicy"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+      failed:
+        - "False"
+
