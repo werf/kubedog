@@ -354,7 +354,6 @@ func (job *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)
-	defer cancelPodCtx(fmt.Errorf("context canceled: pod %q tracker finished", podName))
 	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube, pod.Options{
 		IgnoreReadinessProbeFailsByContainerName: job.ignoreReadinessProbeFailsByContainerName,
 	})
