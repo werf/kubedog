@@ -47,7 +47,7 @@ func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer
 			FullResourceName: trk.FullResourceName,
 		},
 		Resource:         resource,
-		Errors:           make(chan error),
+		Errors:           make(chan error, 1),
 		initialEventUids: make(map[types.UID]bool),
 	}
 }

@@ -129,7 +129,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options)
 		objectModified: make(chan *corev1.Pod),
 		objectDeleted:  make(chan *corev1.Pod),
 		objectFailed:   make(chan interface{}, 1),
-		errors:         make(chan error),
+		errors:         make(chan error, 1),
 		containerDone:  make(chan string, 10),
 	}
 }

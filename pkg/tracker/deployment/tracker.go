@@ -110,7 +110,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
-		errors:             make(chan error),
+		errors:             make(chan error, 1),
 		resourceAdded:      make(chan *appsv1.Deployment, 1),
 		resourceModified:   make(chan *appsv1.Deployment, 1),
 		resourceDeleted:    make(chan *appsv1.Deployment, 1),
@@ -463,7 +463,7 @@ func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.Deployment
 }
 
 func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) error {
-	errorChan := make(chan error)
+	errorChan := make(chan error, 1)
 	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)

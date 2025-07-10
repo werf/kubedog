@@ -59,7 +59,7 @@ func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMeta
 		ReplicaSetAdded:    make(chan *appsv1.ReplicaSet, 1),
 		ReplicaSetModified: make(chan *appsv1.ReplicaSet, 1),
 		ReplicaSetDeleted:  make(chan *appsv1.ReplicaSet, 1),
-		Errors:             make(chan error),
+		Errors:             make(chan error, 1),
 	}
 }
 
