@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.14.0](https://www.github.com/werf/kubedog/compare/v0.13.0...v0.14.0) (2025-07-10)
+
+
+### Features
+
+* **crs:** add tracking rules for new custom resources ([2491f12](https://www.github.com/werf/kubedog/commit/2491f12b130a151b6c88b786887cdf88d6db3b5c))
+* **rules:** add rule for bitnami sealed secrets ([6948d26](https://www.github.com/werf/kubedog/commit/6948d26b3ec6589a0e9d28b340c312c041f8c9fa))
+* **rules:** add rules for kyverno policy and cluster policy ([#361](https://www.github.com/werf/kubedog/issues/361)) ([9511e8d](https://www.github.com/werf/kubedog/commit/9511e8dea1052f41749b82fdfab2fcf033a64cc8))
+
+
+### Bug Fixes
+
+* disable potentially problematic resource tracking rules ([a3c45a7](https://www.github.com/werf/kubedog/commit/a3c45a7ee17d69da5d5bbca808c238d1cc15a56b))
+* external secrets readying if external secret has no status ([cd33f46](https://www.github.com/werf/kubedog/commit/cd33f4634a6e1c5fb36d7bac18dec48b7f3e1727))
+* improve context cancellation handling and logging ([0ea6140](https://www.github.com/werf/kubedog/commit/0ea61405d2d475646ebf81f8c9484e73b4761f85))
+* leaking goroutines in dynamic tracker ([78ba12f](https://www.github.com/werf/kubedog/commit/78ba12ff7311314214f9c05125059f7ceaf1be5b))
+* no logs collected ([d5883c1](https://www.github.com/werf/kubedog/commit/d5883c1320659637d528bb9c2d225f44ef162bd6))
+
 ## [0.13.0](https://www.github.com/werf/kubedog/compare/v0.12.3...v0.13.0) (2025-01-22)
 
 
