@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/resid"
 )
 
@@ -122,11 +123,11 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 				return err
 			}
 		case <-ctx.Done():
-			if ctx.Err() == context.Canceled {
-				return nil
-			} else {
-				return ctx.Err()
+			if debug.Debug() {
+				fmt.Printf("`%s` tracker context canceled: %s\n", t.ResourceID, context.Cause(ctx))
 			}
+
+			return nil
 		}
 	}
 }

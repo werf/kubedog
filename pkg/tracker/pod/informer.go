@@ -44,10 +44,6 @@ func (p *PodsInformer) WithChannels(added chan *corev1.Pod, errors chan error) *
 }
 
 func (p *PodsInformer) Run(ctx context.Context) {
-	if debug.Debug() {
-		fmt.Printf("> PodsInformer.Run\n")
-	}
-
 	client := p.Kube
 
 	selector, err := metav1.LabelSelectorAsSelector(p.Controller.LabelSelector())
@@ -94,10 +90,6 @@ func (p *PodsInformer) Run(ctx context.Context) {
 
 		if err := tracker.AdaptInformerError(err); err != nil {
 			p.Errors <- fmt.Errorf("%s pods informer error: %w", p.FullResourceName, err)
-		}
-
-		if debug.Debug() {
-			fmt.Printf("      %s pods informer DONE\n", p.FullResourceName)
 		}
 	}()
 }

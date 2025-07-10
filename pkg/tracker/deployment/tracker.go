@@ -360,18 +360,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 
 		case <-ctx.Done():
 			if debug.Debug() {
-				fmt.Printf("Deployment %q tracker context Done! -> ctx.Err() -> %v\n", d.ResourceName, ctx.Err())
+				fmt.Printf("Deployment `%s` tracker context canceled: %s\n", d.ResourceName, context.Cause(ctx))
 			}
 
-			if ctx.Err() == context.Canceled {
-				return nil
-			}
-			return ctx.Err()
+			return nil
 		case err := <-d.errors:
-			if debug.Debug() {
-				fmt.Printf("Deployment %q tracker error received! -> %v\n", d.ResourceName, err)
-			}
-
 			return err
 		}
 	}
@@ -452,10 +445,6 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) {
 		if err := tracker.AdaptInformerError(err); err != nil {
 			d.errors <- err
 		}
-
-		if debug.Debug() {
-			fmt.Printf("      deploy/%s informer DONE\n", d.ResourceName)
-		}
 	}()
 }
 
@@ -477,7 +466,8 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	errorChan := make(chan error)
 	doneChan := make(chan struct{})
 
-	newCtx, cancelPodCtx := context.WithCancel(_ctx)
+	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)
+	defer cancelPodCtx(fmt.Errorf("context canceled: pod %q tracker finished", podName))
 	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
 		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
@@ -487,19 +477,11 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	d.TrackedPodsNames = append(d.TrackedPodsNames, podName)
 
 	go func() {
-		if debug.Debug() {
-			fmt.Printf("Starting Deployment's `%s` Pod `%s` tracker. pod state: %v\n", d.ResourceName, podTracker.ResourceName, podTracker.State)
-		}
-
 		err := podTracker.Start(newCtx)
 		if err != nil {
 			errorChan <- err
 		} else {
 			doneChan <- struct{}{}
-		}
-
-		if debug.Debug() {
-			fmt.Printf("Done Deployment's `%s` Pod `%s` tracker\n", d.ResourceName, podTracker.ResourceName)
 		}
 	}()
 
@@ -510,10 +492,10 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
 			case status := <-podTracker.Succeeded:
 				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
-				cancelPodCtx()
+				cancelPodCtx(fmt.Errorf("context canceled: got succeeded event for %q", podTracker.FullResourceName))
 			case status := <-podTracker.Deleted:
 				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: status}
-				cancelPodCtx()
+				cancelPodCtx(fmt.Errorf("context canceled: got deleted event for %q", podTracker.FullResourceName))
 			case report := <-podTracker.Failed:
 				d.podStatusesRelay <- map[string]pod.PodStatus{podTracker.ResourceName: report.PodStatus}
 			case status := <-podTracker.Ready:

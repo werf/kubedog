@@ -49,9 +49,6 @@ type ReplicaSetInformer struct {
 }
 
 func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) *ReplicaSetInformer {
-	if debug.Debug() {
-		fmt.Printf("> NewReplicaSetInformer\n")
-	}
 	return &ReplicaSetInformer{
 		Tracker: tracker.Tracker{
 			Kube:             trk.Kube,
@@ -130,10 +127,6 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) {
 
 		if err := tracker.AdaptInformerError(err); err != nil {
 			r.Errors <- err
-		}
-
-		if debug.Debug() {
-			fmt.Printf("      %s replicaSets informer DONE\n", r.FullResourceName)
 		}
 	}()
 }

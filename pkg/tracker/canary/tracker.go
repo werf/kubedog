@@ -112,10 +112,11 @@ func (canary *Tracker) Track(ctx context.Context) error {
 				panic(fmt.Errorf("unexpected type %T", failure))
 			}
 		case <-ctx.Done():
-			if ctx.Err() == context.Canceled {
-				return nil
+			if debug.Debug() {
+				fmt.Printf("Canary `%s` tracker context canceled: %s\n", canary.ResourceName, context.Cause(ctx))
 			}
-			return ctx.Err()
+
+			return nil
 		case err := <-canary.errors:
 			return err
 		}
@@ -197,10 +198,6 @@ func (canary *Tracker) runInformer(ctx context.Context) error {
 
 		if err != tracker.AdaptInformerError(err) {
 			canary.errors <- fmt.Errorf("canary informer error: %w", err)
-		}
-
-		if debug.Debug() {
-			fmt.Printf("Canary `%s` informer done\n", canary.ResourceName)
 		}
 	}()
 
