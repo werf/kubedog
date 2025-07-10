@@ -216,7 +216,7 @@ func (t *DynamicReadinessTracker) trackDeployment(ctx context.Context, tracker *
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
 
-	trackErrCh := make(chan error)
+	trackErrCh := make(chan error, 1)
 	go func() {
 		trackErrCh <- tracker.Track(trackCtx)
 	}()
@@ -350,7 +350,7 @@ func (t *DynamicReadinessTracker) trackStatefulSet(ctx context.Context, tracker 
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
 
-	trackErrCh := make(chan error)
+	trackErrCh := make(chan error, 1)
 	go func() {
 		trackErrCh <- tracker.Track(trackCtx)
 	}()
@@ -470,7 +470,7 @@ func (t *DynamicReadinessTracker) trackDaemonSet(ctx context.Context, tracker *d
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
 
-	trackErrCh := make(chan error)
+	trackErrCh := make(chan error, 1)
 	go func() {
 		trackErrCh <- tracker.Track(trackCtx)
 	}()
@@ -590,7 +590,7 @@ func (t *DynamicReadinessTracker) trackJob(ctx context.Context, tracker *job.Tra
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
 
-	trackErrCh := make(chan error)
+	trackErrCh := make(chan error, 1)
 	go func() {
 		trackErrCh <- tracker.Track(trackCtx)
 	}()
@@ -710,7 +710,7 @@ func (t *DynamicReadinessTracker) trackCanary(ctx context.Context, tracker *cana
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
 
-	trackErrCh := make(chan error)
+	trackErrCh := make(chan error, 1)
 	go func() {
 		trackErrCh <- tracker.Track(trackCtx)
 	}()
@@ -796,7 +796,7 @@ func (t *DynamicReadinessTracker) trackGeneric(ctx context.Context, tracker *gen
 	regularCh := make(chan *generic.ResourceStatus, 100)
 	eventCh := make(chan *corev1.Event)
 
-	trackErrCh := make(chan error)
+	trackErrCh := make(chan error, 1)
 	go func() {
 		trackErrCh <- tracker.Track(trackCtx, t.noActivityTimeout, addedCh, succeededCh, failedCh, regularCh, eventCh)
 	}()

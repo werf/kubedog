@@ -77,7 +77,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, dynamicClient
 		objectModified: make(chan *v1beta1.Canary),
 		objectDeleted:  make(chan *v1beta1.Canary),
 		objectFailed:   make(chan interface{}, 1),
-		errors:         make(chan error),
+		errors:         make(chan error, 1),
 
 		dynamicClient: dynamicClient,
 	}

@@ -102,7 +102,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		resourceModified: make(chan *appsv1.StatefulSet, 1),
 		resourceDeleted:  make(chan *appsv1.StatefulSet, 1),
 		resourceFailed:   make(chan interface{}, 1),
-		errors:           make(chan error),
+		errors:           make(chan error, 1),
 
 		podAddedRelay:           make(chan *corev1.Pod, 1),
 		podStatusesRelay:        make(chan map[string]pod.PodStatus, 10),
@@ -336,7 +336,7 @@ func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.StatefulSe
 }
 
 func (d *Tracker) runPodTracker(_ctx context.Context, podName string) error {
-	errorChan := make(chan error)
+	errorChan := make(chan error, 1)
 	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)

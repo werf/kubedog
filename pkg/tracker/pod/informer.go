@@ -33,7 +33,7 @@ func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) 
 		},
 		Controller: controller,
 		PodAdded:   make(chan *corev1.Pod, 1),
-		Errors:     make(chan error),
+		Errors:     make(chan error, 1),
 	}
 }
 
