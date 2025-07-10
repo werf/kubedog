@@ -2,7 +2,6 @@ package statefulset
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"k8s.io/client-go/kubernetes"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/controller"
-	"github.com/werf/kubedog/pkg/tracker/debug"
 )
 
 type Feed interface {
@@ -53,9 +51,6 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	stsTracker := NewTracker(name, namespace, kube, opts)
 
 	go func() {
-		if debug.Debug() {
-			fmt.Printf("  goroutine: start statefulset/%s tracker\n", name)
-		}
 		err := stsTracker.Track(ctx)
 		if err != nil {
 			errorChan <- err
@@ -63,10 +58,6 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 			doneChan <- true
 		}
 	}()
-
-	if debug.Debug() {
-		fmt.Printf("  statefulset/%s: for-select stsTracker channels\n", name)
-	}
 
 	for {
 		select {
@@ -134,13 +125,6 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 			}
 
 		case chunk := <-stsTracker.PodLogChunk:
-			if debug.Debug() {
-				fmt.Printf("    statefulset/%s pod `%s` log chunk\n", stsTracker.ResourceName, chunk.PodName)
-				for _, line := range chunk.LogLines {
-					fmt.Printf("po/%s [%s] %s\n", chunk.PodName, line.Timestamp, line.Message)
-				}
-			}
-
 			if f.OnPodLogChunkFunc != nil {
 				err := f.OnPodLogChunkFunc(chunk)
 				if err == tracker.ErrStopTrack {

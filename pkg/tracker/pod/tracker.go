@@ -211,13 +211,10 @@ func (pod *Tracker) Start(ctx context.Context) error {
 
 		case <-ctx.Done():
 			if debug.Debug() {
-				fmt.Printf("pod tracker %s context done: %v\n", pod.ResourceName, ctx.Err())
+				fmt.Printf("Pod `%s` tracker context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
 
-			if ctx.Err() == context.Canceled {
-				return nil
-			}
-			return ctx.Err()
+			return nil
 		case err := <-pod.errors:
 			if debug.Debug() {
 				fmt.Printf("pod tracker %s error received! err=%v\n", pod.ResourceName, err)
@@ -474,10 +471,11 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 
 		select {
 		case <-ctx.Done():
-			if ctx.Err() == context.Canceled {
-				return nil
+			if debug.Debug() {
+				fmt.Printf("Follow container logs for pod %q context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
-			return ctx.Err()
+
+			return nil
 		default:
 		}
 	}
@@ -508,13 +506,10 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 
 		case <-ctx.Done():
 			if debug.Debug() {
-				fmt.Printf("-- trackContainer context done -> %v\n", ctx.Err())
+				fmt.Printf("Tracking container for pod `%s` context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
 
-			if ctx.Err() == context.Canceled {
-				return nil
-			}
-			return ctx.Err()
+			return nil
 		}
 	}
 }
@@ -537,24 +532,13 @@ func (pod *Tracker) runContainersTrackers(ctx context.Context, object *corev1.Po
 
 		pod.TrackedContainers = append(pod.TrackedContainers, containerName)
 
-		newCtx, newCtxCancel := context.WithCancel(ctx)
-		_ = newCtxCancel
-
-		go func(ctx context.Context) {
-			if debug.Debug() {
-				fmt.Printf("Starting to track Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
-			}
-
+		go func() {
 			if err := pod.trackContainer(ctx, containerName, containerTrackerStateChanges); err != nil {
 				pod.errors <- err
 			}
 
-			if debug.Debug() {
-				fmt.Printf("Done tracking Pod's `%s` container `%s`\n", pod.ResourceName, containerName)
-			}
-
 			pod.containerDone <- containerName
-		}(newCtx)
+		}()
 	}
 
 	return nil
@@ -606,10 +590,6 @@ func (pod *Tracker) runInformer(ctx context.Context) error {
 
 		if err := tracker.AdaptInformerError(err); err != nil {
 			pod.errors <- fmt.Errorf("pod/%s informer error: %w", pod.ResourceName, err)
-		}
-
-		if debug.Debug() {
-			fmt.Printf("Pod `%s` informer done\n", pod.ResourceName)
 		}
 	}()
 

@@ -53,9 +53,6 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	deploymentTracker := NewTracker(name, namespace, kube, opts)
 
 	go func() {
-		if debug.Debug() {
-			fmt.Printf("  goroutine: start deploy/%s tracker\n", name)
-		}
 		err := deploymentTracker.Track(ctx)
 		if err != nil {
 			errorChan <- err
@@ -63,10 +60,6 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 			doneChan <- true
 		}
 	}()
-
-	if debug.Debug() {
-		fmt.Printf("  deploy/%s: for-select DeploymentTracker channels\n", name)
-	}
 
 	for {
 		select {

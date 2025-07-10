@@ -40,8 +40,8 @@ func NewResourceStateWatcher(
 }
 
 func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourceModifiedCh, resourceDeletedCh chan<- *unstructured.Unstructured) error {
-	runCtx, runCancelFn := context.WithCancel(ctx)
-	defer runCancelFn()
+	runCtx, runCancelFn := context.WithCancelCause(ctx)
+	defer runCancelFn(fmt.Errorf("context canceled: resource state watcher for %q finished", w.ResourceID))
 
 	gvr, err := w.ResourceID.GroupVersionResource(w.mapper)
 	if err != nil {
@@ -87,15 +87,7 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 		return fmt.Errorf("error setting watch error handler: %w", err)
 	}
 
-	if debug.Debug() {
-		fmt.Printf("      %s resource watcher STARTED\n", w.ResourceID)
-	}
-
 	informer.Informer().Run(runCtx.Done())
-
-	if debug.Debug() {
-		fmt.Printf("      %s resource watcher DONE\n", w.ResourceID)
-	}
 
 	if fatalWatchErr.Err != nil {
 		return fatalWatchErr

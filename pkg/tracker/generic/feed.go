@@ -3,14 +3,12 @@ package generic
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	watchtools "k8s.io/client-go/tools/watch"
 
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
 )
 
 type Feed struct {
@@ -61,10 +59,6 @@ func (f *Feed) Track(ctx context.Context, timeout, noActivityTimeout time.Durati
 	errCh := make(chan error, 10)
 
 	go func() {
-		if debug.Debug() {
-			fmt.Printf("  goroutine: start %s tracker\n", f.tracker.ResourceID)
-		}
-
 		errCh <- f.tracker.Track(ctx, noActivityTimeout, addedCh, succeededCh, failedCh, regularCh, eventCh)
 	}()
 

@@ -40,10 +40,6 @@ type EventInformer struct {
 }
 
 func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer {
-	if debug.Debug() {
-		fmt.Printf("> NewEventInformer for %s\n", trk.FullResourceName)
-	}
-
 	return &EventInformer{
 		Tracker: tracker.Tracker{
 			Kube:             trk.Kube,
@@ -84,9 +80,6 @@ func (e *EventInformer) Run(ctx context.Context) {
 	}
 
 	go func() {
-		if debug.Debug() {
-			fmt.Printf("> %s run event informer\n", e.FullResourceName)
-		}
 		_, err := watchtools.UntilWithSync(ctx, lwe, &corev1.Event{}, nil, func(ev watch.Event) (bool, error) {
 			if debug.Debug() {
 				fmt.Printf("    %s event: %#v\n", e.FullResourceName, ev.Type)
@@ -127,10 +120,6 @@ func (e *EventInformer) Run(ctx context.Context) {
 		if err := tracker.AdaptInformerError(err); err != nil {
 			e.Errors <- fmt.Errorf("event informer for %s failed: %w", e.FullResourceName, err)
 		}
-
-		if debug.Debug() {
-			fmt.Printf("     %s event informer DONE\n", e.FullResourceName)
-		}
 	}()
 }
 
@@ -142,9 +131,6 @@ func (e *EventInformer) handleInitialEvents(ctx context.Context) {
 			fmt.Printf("list event error: %v\n", err)
 		}
 		return
-	}
-	if debug.Debug() {
-		utils.DescribeEvents(evList)
 	}
 
 	for _, ev := range evList.Items {
@@ -158,9 +144,6 @@ func (e *EventInformer) handleEvent(event *corev1.Event) {
 	msg := fmt.Sprintf("%s: %s", event.Reason, event.Message)
 
 	if _, ok := e.initialEventUids[uid]; ok {
-		if debug.Debug() {
-			fmt.Printf("IGNORE initial event: %s\n", msg)
-		}
 		delete(e.initialEventUids, uid)
 		return
 	}

@@ -43,7 +43,8 @@ func NewResourceEventsWatcher(
 }
 
 func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1.Event) error {
-	runCtx, runCancelFn := context.WithCancel(ctx)
+	runCtx, runCancelFn := context.WithCancelCause(ctx)
+	defer runCancelFn(fmt.Errorf("context canceled: resource events watcher for %q finished", i.ResourceID))
 
 	i.generateResourceInitialEventsUIDs(runCtx)
 
@@ -95,15 +96,7 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 		return fmt.Errorf("error setting watch error handler: %w", err)
 	}
 
-	if debug.Debug() {
-		fmt.Printf("> %s run event informer\n", i.ResourceID)
-	}
-
 	informer.Run(runCtx.Done())
-
-	if debug.Debug() {
-		fmt.Printf("     %s event informer DONE\n", i.ResourceID)
-	}
 
 	return nil
 }
@@ -117,10 +110,6 @@ func (i *ResourceEventsWatcher) generateResourceInitialEventsUIDs(ctx context.Co
 		return
 	}
 
-	if debug.Debug() {
-		utils.DescribeEvents(eventsList)
-	}
-
 	for _, event := range eventsList.Items {
 		i.appendResourceInitialEventsUID(event.GetUID())
 	}
@@ -130,10 +119,6 @@ func (i *ResourceEventsWatcher) handleEventStateChange(ctx context.Context, even
 	for _, uid := range i.resourceInitialEventsUIDs() {
 		if uid != eventObj.GetUID() {
 			continue
-		}
-
-		if debug.Debug() {
-			fmt.Printf("IGNORE initial event: %s: %s\n", eventObj.Reason, eventObj.Message)
 		}
 
 		i.deleteResourceInitialEventsUID(uid)

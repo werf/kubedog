@@ -169,13 +169,6 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 			}
 
 		case chunk := <-job.PodLogChunk:
-			if debug.Debug() {
-				fmt.Printf("Job's `%s` pod `%s` log chunk\n", job.ResourceName, chunk.PodName)
-				for _, line := range chunk.LogLines {
-					fmt.Printf("[%s] %s\n", line.Timestamp, line.Message)
-				}
-			}
-
 			if f.OnPodLogChunkFunc != nil {
 				err := f.OnPodLogChunkFunc(chunk)
 				if err == tracker.ErrStopTrack {
