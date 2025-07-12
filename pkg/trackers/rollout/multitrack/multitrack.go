@@ -73,6 +73,9 @@ type MultitrackSpec struct {
 	LogRegex                *regexp.Regexp
 	LogRegexByContainerName map[string]*regexp.Regexp
 
+	SkipLogsByRegex              *regexp.Regexp
+	SkipLogsByRegexForContainers map[string]*regexp.Regexp
+
 	SkipLogs                  bool
 	SkipLogsForContainers     []string
 	ShowLogsOnlyForContainers []string
