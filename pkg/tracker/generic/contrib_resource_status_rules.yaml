@@ -47,41 +47,41 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# # https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.go
-#   - resourceGroup: "bitnami.com"
-#     resourceKind: "SealedSecret"
-#     jsonPath: "$.status.conditions[?(@.type=='Synced')].status"
-#     humanJsonPath: "status.conditions[type=Synced].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
-# # https://github.com/kyverno/kyverno/blob/main/api/kyverno/v1/policy_status.go
-#   - resourceGroup: "kyverno.io"
-#     resourceKind: "Policy"
-#     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
-#     humanJsonPath: "status.conditions[type=Ready].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
-#   - resourceGroup: "kyverno.io"
-#     resourceKind: "ClusterPolicy"
-#     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
-#     humanJsonPath: "status.conditions[type=Ready].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
+# https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.go
+  - resourceGroup: "bitnami.com"
+    resourceKind: "SealedSecret"
+    jsonPath: "$.status.conditions[?(@.type=='Synced')].status"
+    humanJsonPath: "status.conditions[type=Synced].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
+# https://github.com/kyverno/kyverno/blob/main/api/kyverno/v1/policy_status.go
+  - resourceGroup: "kyverno.io"
+    resourceKind: "Policy"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
+  - resourceGroup: "kyverno.io"
+    resourceKind: "ClusterPolicy"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
 # https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health.go#L12
   - resourceGroup: "argoproj.io"
     resourceKind: "Application"
@@ -97,51 +97,51 @@ rules:
         - "Missing"
       failed:
         - "Degraded"
-# # https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
-#   - resourceGroup: "argoproj.io"
-#     resourceKind: "ApplicationSet"
-#     jsonPath: "$.status.conditions[?(@.type=='ResourcesUpToDate')].status"
-#     humanJsonPath: "status.conditions[type=ResourcesUpToDate].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
-# # https://github.com/cert-manager/cert-manager/blob/c21f257a1c2067dfb5a842ffe98235326456224c/pkg/apis/certmanager/v1/types_certificate.go#L669
-#   - resourceGroup: "cert-manager.io"
-#     resourceKind: "Certificate"
-#     jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
-#     humanJsonPath: "status.conditions[type=Ready].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
-# # https://github.com/fluxcd/helm-controller/blob/main/api/v2/helmrelease_types.go#L971
-#   - resourceGroup: "helm.toolkit.fluxcd.io"
-#     resourceKind: "HelmRelease"
-#     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
-#     humanJsonPath: "status.conditions[type=Ready].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
-# # https://github.com/fluxcd/kustomize-controller/blob/main/api/v1/kustomization_types.go#L277
-#   - resourceGroup: "kustomize.toolkit.fluxcd.io"
-#     resourceKind: "Kustomization"
-#     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
-#     humanJsonPath: "status.conditions[type=Ready].status"
-#     conditions:
-#       ready:
-#         - "True"
-#       progressing:
-#         - "Unknown"
-#       failed:
-#         - "False"
+# https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
+  - resourceGroup: "argoproj.io"
+    resourceKind: "ApplicationSet"
+    jsonPath: "$.status.conditions[?(@.type=='ResourcesUpToDate')].status"
+    humanJsonPath: "status.conditions[type=ResourcesUpToDate].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
+# https://github.com/cert-manager/cert-manager/blob/c21f257a1c2067dfb5a842ffe98235326456224c/pkg/apis/certmanager/v1/types_certificate.go#L669
+  - resourceGroup: "cert-manager.io"
+    resourceKind: "Certificate"
+    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
+# https://github.com/fluxcd/helm-controller/blob/main/api/v2/helmrelease_types.go#L971
+  - resourceGroup: "helm.toolkit.fluxcd.io"
+    resourceKind: "HelmRelease"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
+# https://github.com/fluxcd/kustomize-controller/blob/main/api/v1/kustomization_types.go#L277
+  - resourceGroup: "kustomize.toolkit.fluxcd.io"
+    resourceKind: "Kustomization"
+    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Unknown"
+        - "False"
+      failed: []
