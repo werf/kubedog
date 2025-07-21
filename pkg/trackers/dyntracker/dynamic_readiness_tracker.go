@@ -108,6 +108,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "apps", Kind: "DaemonSet"}, schema.GroupKind{Group: "extensions", Kind: "DaemonSet"}:
@@ -115,6 +116,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "flagger.app", Kind: "Canary"}:
@@ -129,6 +131,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "batch", Kind: "Job"}:
@@ -136,6 +139,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	default:

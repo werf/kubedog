@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/gookit/color"
-	"github.com/werf/logboek"
 
 	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/logboek"
 )
 
 func main() {
