@@ -40,6 +40,7 @@ type Options struct {
 	ParentContext                            context.Context
 	Timeout                                  time.Duration
 	LogsFromTime                             time.Time
+	IgnoreLogs                               bool
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -78,6 +79,8 @@ type Tracker struct {
 	TrackedContainers []string
 	LogsFromTime      time.Time
 
+	ignoreLogs bool
+
 	readinessProbes                          map[string]*ReadinessProbe
 	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
 
@@ -95,6 +98,7 @@ type Tracker struct {
 
 type Options struct {
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
+	IgnoreLogs                               bool
 }
 
 func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options) *Tracker {
@@ -121,6 +125,8 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options)
 		ContainerTrackerStates:       make(map[string]tracker.TrackerState),
 		ContainerTrackerStateChanges: make(map[string]chan tracker.TrackerState),
 		LogsFromTime:                 time.Time{},
+
+		ignoreLogs: opts.IgnoreLogs,
 
 		readinessProbes:                          make(map[string]*ReadinessProbe),
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
@@ -392,7 +398,7 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	for _, cs := range allContainerStatuses {
 		if cs.State.Running != nil || cs.State.Terminated != nil {
 			oldState := pod.ContainerTrackerStates[cs.Name]
-			newState := tracker.FollowingContainerLogs
+			newState := lo.Ternary(pod.ignoreLogs, tracker.ContainerTrackerDone, tracker.FollowingContainerLogs)
 
 			if oldState != newState {
 				pod.ContainerTrackerStates[cs.Name] = newState
@@ -409,6 +415,10 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 }
 
 func (pod *Tracker) followContainerLogs(ctx context.Context, containerName string) error {
+	if pod.ignoreLogs {
+		return nil
+	}
+
 	logOpts := &corev1.PodLogOptions{
 		Container:  containerName,
 		Timestamps: true,

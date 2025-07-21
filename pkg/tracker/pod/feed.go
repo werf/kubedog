@@ -89,7 +89,8 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	defer cancel()
 
 	pod := NewTracker(name, namespace, kube, Options{
-		opts.IgnoreReadinessProbeFailsByContainerName,
+		IgnoreLogs:                               opts.IgnoreLogs,
+		IgnoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 	})
 
 	go func() {

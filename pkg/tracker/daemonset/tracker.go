@@ -55,6 +55,7 @@ type Tracker struct {
 	PodLogChunk chan *replicaset.ReplicaSetPodLogChunk
 	PodError    chan PodErrorReport
 
+	ignoreLogs                               bool
 	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
 
 	lastObject     *appsv1.DaemonSet
@@ -87,6 +88,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 		podStatuses:    make(map[string]pod.PodStatus),
 		podGenerations: make(map[string]string),
 
+		ignoreLogs:                               opts.IgnoreLogs,
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
 		Added:  make(chan DaemonSetStatus, 1),
@@ -335,6 +337,7 @@ func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
 
 	newCtx, cancelPodCtx := context.WithCancelCause(ctx)
 	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+		IgnoreLogs:                               d.ignoreLogs,
 		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
 	if !d.LogsFromTime.IsZero() {
