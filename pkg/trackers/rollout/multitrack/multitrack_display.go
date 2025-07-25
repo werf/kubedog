@@ -55,17 +55,37 @@ func (mt *multitracker) displayResourceLogChunk(resourceKind string, spec Multit
 
 	showLines := []string{}
 
+	allLines := []string{}
+	for _, logLine := range chunk.LogLines {
+		allLines = append(allLines, logLine.Message)
+	}
+
+	var skipRegexp *regexp.Regexp
+	if spec.SkipLogsByRegexForContainers[chunk.ContainerName] != nil {
+		skipRegexp = spec.SkipLogsByRegexForContainers[chunk.ContainerName]
+	} else if spec.SkipLogsByRegex != nil {
+		skipRegexp = spec.SkipLogsByRegex
+	}
+
+	if skipRegexp != nil {
+		var filteredLines []string
+		for _, line := range allLines {
+			if !skipRegexp.MatchString(line) {
+				filteredLines = append(filteredLines, line)
+			}
+		}
+		allLines = filteredLines
+	}
+
 	if logRegexp != nil {
-		for _, logLine := range chunk.LogLines {
-			message := logRegexp.FindString(logLine.Message)
+		for _, line := range allLines {
+			message := logRegexp.FindString(line)
 			if message != "" {
-				showLines = append(showLines, logLine.Message)
+				showLines = append(showLines, line)
 			}
 		}
 	} else {
-		for _, logLine := range chunk.LogLines {
-			showLines = append(showLines, logLine.Message)
-		}
+		showLines = allLines
 	}
 
 	if len(showLines) > 0 {
