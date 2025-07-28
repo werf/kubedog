@@ -145,3 +145,40 @@ rules:
         - "Unknown"
         - "False"
       failed: []
+# http://github.com/prometheus-operator/prometheus-operator/blob/main/pkg/apis/monitoring/v1/types.go#L228
+  - resourceGroup: "monitoring.coreos.com"
+    resourceKind: "Prometheus"
+    jsonPath: "$.status.conditions[?(@.type=='Available')].status"
+    humanJsonPath: "status.conditions[type=Available].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Degraded"
+        - "Unknown"
+        - "False"
+      failed: []
+  - resourceGroup: "monitoring.coreos.com"
+    resourceKind: "Alertmanager"
+    jsonPath: "$.status.conditions[?(@.type=='Available')].status"
+    humanJsonPath: "status.conditions[type=Available].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Degraded"
+        - "Unknown"
+        - "False"
+      failed: []
+  - resourceGroup: "monitoring.coreos.com"
+    resourceKind: "ThanosRuler"
+    jsonPath: "$.status.conditions[?(@.type=='Available')].status"
+    humanJsonPath: "status.conditions[type=Available].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "Degraded"
+        - "Unknown"
+        - "False"
+      failed: []
