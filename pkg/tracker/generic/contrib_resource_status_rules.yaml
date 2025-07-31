@@ -182,3 +182,34 @@ rules:
         - "Unknown"
         - "False"
       failed: []
+  #https://github.com/longhorn/longhorn-manager/blob/master/k8s/pkg/apis/longhorn/v1beta2/volume.go
+  - resourceGroup: "longhorn.io"
+    resourceKind: "Volume"
+    jsonPath: "$.status.state"
+    humanJsonPath: "status.state"
+    conditions:
+      ready:
+        - "attached"
+        - "detached"
+      progressing:
+        - "creating"
+        - "attaching"
+        - "detaching"
+        - "deleting"
+      failed: []
+  #https://github.com/longhorn/longhorn-manager/blob/master/k8s/pkg/apis/longhorn/v1beta2/backup.go
+  - resourceGroup: "longhorn.io"
+    resourceKind: "Backup"
+    jsonPath: "$.status.state"
+    humanJsonPath: "status.state"
+    conditions:
+      ready:
+        - "Completed"
+      progressing:
+        - "Pending"
+        - "InProgress"
+        - ""
+        - "Deleting" 
+      failed:
+        - "Error"
+        - "Unknown"
