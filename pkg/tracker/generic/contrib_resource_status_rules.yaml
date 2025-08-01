@@ -209,7 +209,6 @@ rules:
         - "Pending"
         - "InProgress"
         - ""
-        - "Deleting" 
       failed:
         - "Error"
         - "Unknown"
