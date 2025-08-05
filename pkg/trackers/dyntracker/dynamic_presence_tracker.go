@@ -13,14 +13,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/statestore"
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 type DynamicPresenceTracker struct {
-	taskState     *util.Concurrent[*statestore.PresenceTaskState]
-	dynamicClient dynamic.Interface
-	mapper        meta.ResettableRESTMapper
+	taskState       *util.Concurrent[*statestore.PresenceTaskState]
+	informerFactory *util.Concurrent[*informer.InformerFactory]
+	dynamicClient   dynamic.Interface
+	mapper          meta.ResettableRESTMapper
 
 	timeout    time.Duration
 	pollPeriod time.Duration
@@ -28,6 +30,7 @@ type DynamicPresenceTracker struct {
 
 func NewDynamicPresenceTracker(
 	taskState *util.Concurrent[*statestore.PresenceTaskState],
+	informerFactory *util.Concurrent[*informer.InformerFactory],
 	dynamicClient dynamic.Interface,
 	mapper meta.ResettableRESTMapper,
 	opts DynamicPresenceTrackerOptions,
@@ -47,11 +50,12 @@ func NewDynamicPresenceTracker(
 	}
 
 	return &DynamicPresenceTracker{
-		taskState:     taskState,
-		dynamicClient: dynamicClient,
-		mapper:        mapper,
-		timeout:       timeout,
-		pollPeriod:    pollPeriod,
+		taskState:       taskState,
+		informerFactory: informerFactory,
+		dynamicClient:   dynamicClient,
+		mapper:          mapper,
+		timeout:         timeout,
+		pollPeriod:      pollPeriod,
 	}
 }
 

@@ -28,9 +28,23 @@ func (c *Concurrent[T]) RWTransaction(f func(object T)) {
 	f(c.object)
 }
 
+func (c *Concurrent[T]) RWTransactionErr(f func(object T) error) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return f(c.object)
+}
+
 func (c *Concurrent[T]) RTransaction(f func(object T)) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	f(c.object)
+}
+
+func (c *Concurrent[T]) RTransactionErr(f func(object T) error) error {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	return f(c.object)
 }

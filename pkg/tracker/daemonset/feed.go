@@ -48,7 +48,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	daemonSetTracker := NewTracker(name, namespace, kube, opts)
+	daemonSetTracker := NewTracker(name, namespace, kube, nil, opts)
 
 	go func() {
 		err := daemonSetTracker.Track(ctx)

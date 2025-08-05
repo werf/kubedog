@@ -6,21 +6,22 @@ import (
 	"os"
 	"time"
 
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 	"github.com/werf/kubedog/pkg/utils"
 )
 
@@ -75,7 +76,7 @@ type Tracker struct {
 	donePodsRelay           chan map[string]pod.PodStatus
 }
 
-func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -83,6 +84,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 			FullResourceName: fmt.Sprintf("ds/%s", name),
 			ResourceName:     name,
 			LogsFromTime:     opts.LogsFromTime,
+			InformerFactory:  informerFactory,
 		},
 
 		podStatuses:    make(map[string]pod.PodStatus),
@@ -122,20 +124,26 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 // there is option StopOnAvailable — if true, watcher stops after DaemonSet has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
 func (d *Tracker) Track(ctx context.Context) error {
-	d.runDaemonSetInformer(ctx)
+	daemonsetInformerCleanupFn, err := d.runDaemonSetInformer(ctx)
+	if err != nil {
+		return err
+	}
+	defer daemonsetInformerCleanupFn()
 
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			if err := d.handleDaemonSetState(ctx, object); err != nil {
+			cleanupFn, err := d.handleDaemonSetState(ctx, object)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case object := <-d.resourceModified:
-			if err := d.handleDaemonSetState(ctx, object); err != nil {
+			cleanupFn, err := d.handleDaemonSetState(ctx, object)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case <-d.resourceDeleted:
 			d.State = tracker.ResourceDeleted
 			d.lastObject = nil
@@ -204,9 +212,11 @@ func (d *Tracker) Track(ctx context.Context) error {
 			d.TrackedPodsNames = trackedPodsNames
 
 			if d.lastObject != nil {
-				if err := d.handleDaemonSetState(ctx, d.lastObject); err != nil {
+				cleanupFn, err := d.handleDaemonSetState(ctx, d.lastObject)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
 
 		case podStatuses := <-d.podStatusesRelay:
@@ -214,9 +224,11 @@ func (d *Tracker) Track(ctx context.Context) error {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				if err := d.handleDaemonSetState(ctx, d.lastObject); err != nil {
+				cleanupFn, err := d.handleDaemonSetState(ctx, d.lastObject)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
 
 		case podContainerErrors := <-d.podContainerErrorsRelay:
@@ -270,65 +282,74 @@ func (d *Tracker) getNewPodsNames() []string {
 }
 
 // runDaemonSetInformer watch for DaemonSet events
-func (d *Tracker) runDaemonSetInformer(ctx context.Context) {
-	client := d.Kube
-
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", d.ResourceName).String()
-		return options
-	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(d.Namespace).List(ctx, tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.AppsV1().DaemonSets(d.Namespace).Watch(ctx, tweakListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lw, &appsv1.DaemonSet{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("    Daemonset/%s event: %#v\n", d.ResourceName, e.Type)
-			}
-
-			var object *appsv1.DaemonSet
-
-			if e.Type != watch.Error {
-				var ok bool
-				object, ok = e.Object.(*appsv1.DaemonSet)
-				if !ok {
-					return true, fmt.Errorf("expected %s to be a *appsv1.DaemonSet, got %T", d.ResourceName, e.Object)
-				}
-			}
-
-			switch e.Type {
-			case watch.Added:
-				d.resourceAdded <- object
-			case watch.Modified:
-				d.resourceModified <- object
-			case watch.Deleted:
-				d.resourceDeleted <- object
-			case watch.Error:
-				err := fmt.Errorf("DaemonSet error: %v", e.Object)
-				// d.errors <- err
-				return true, err
-			}
-
-			return false, nil
-		})
-
-		if err := tracker.AdaptInformerError(err); err != nil {
-			d.errors <- err
+func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := d.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "apps",
+			Version:  "v1",
+			Resource: "daemonsets",
+		}, d.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
 		}
-	}()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					daemonsetObj := &appsv1.DaemonSet{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
+					return daemonsetObj.Name == d.ResourceName &&
+						daemonsetObj.Namespace == d.Namespace
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						daemonsetObj := &appsv1.DaemonSet{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
+						d.resourceAdded <- daemonsetObj
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						daemonsetObj := &appsv1.DaemonSet{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, daemonsetObj))
+						d.resourceModified <- daemonsetObj
+					},
+					DeleteFunc: func(obj interface{}) {
+						daemonsetObj := &appsv1.DaemonSet{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
+						d.resourceDeleted <- daemonsetObj
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }
 
 // runPodsInformer watch for DaemonSet Pods events
-func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.DaemonSet) {
+func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.DaemonSet) (cleanupFn func(), err error) {
 	podsInformer := pod.NewPodsInformer(&d.Tracker, utils.ControllerAccessor(object))
 	podsInformer.WithChannels(d.podAddedRelay, d.errors)
-	podsInformer.Run(ctx)
+	return podsInformer.Run(ctx)
 }
 
 func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
@@ -336,7 +357,7 @@ func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
 	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancelCause(ctx)
-	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, d.InformerFactory, pod.Options{
 		IgnoreLogs:                               d.ignoreLogs,
 		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
@@ -400,18 +421,32 @@ func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleDaemonSetState(ctx context.Context, object *appsv1.DaemonSet) error {
+func (d *Tracker) handleDaemonSetState(ctx context.Context, object *appsv1.DaemonSet) (cleanupFn func(), err error) {
 	d.lastObject = object
 	d.StatusGeneration++
 
 	status := NewDaemonSetStatus(object, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, d.podStatuses, d.getNewPodsNames())
 
+	cleanupFn = func() {}
+
 	switch d.State {
 	case tracker.Initial:
-		d.runPodsInformer(ctx, object)
+		podsInformerCleanupFn, err := d.runPodsInformer(ctx, object)
+		if err != nil {
+			return nil, fmt.Errorf("run pods informer: %w", err)
+		}
 
+		eventsInformerCleanupFn := func() {}
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
-			d.runEventsInformer(ctx, object)
+			eventsInformerCleanupFn, err = d.runEventsInformer(ctx, object)
+			if err != nil {
+				return nil, fmt.Errorf("run events informer: %w", err)
+			}
+		}
+
+		cleanupFn = func() {
+			podsInformerCleanupFn()
+			eventsInformerCleanupFn()
 		}
 
 		switch {
@@ -452,12 +487,12 @@ func (d *Tracker) handleDaemonSetState(ctx context.Context, object *appsv1.Daemo
 		}
 	}
 
-	return nil
+	return cleanupFn, nil
 }
 
 // runEventsInformer watch for DaemonSet events
-func (d *Tracker) runEventsInformer(ctx context.Context, object *appsv1.DaemonSet) {
+func (d *Tracker) runEventsInformer(ctx context.Context, object *appsv1.DaemonSet) (cleanupFn func(), err error) {
 	eventInformer := event.NewEventInformer(&d.Tracker, object)
 	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
-	eventInformer.Run(ctx)
+	return eventInformer.Run(ctx)
 }

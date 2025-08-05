@@ -17,6 +17,7 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 
 	"github.com/werf/kubedog/pkg/display"
+	"github.com/werf/kubedog/pkg/informer"
 	commontracker "github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/canary"
 	"github.com/werf/kubedog/pkg/tracker/daemonset"
@@ -59,6 +60,7 @@ func NewDynamicReadinessTracker(
 	ctx context.Context,
 	taskState *util.Concurrent[*statestore.ReadinessTaskState],
 	logStore *util.Concurrent[*logstore.LogStore],
+	informerFactory *util.Concurrent[*informer.InformerFactory],
 	staticClient kubernetes.Interface,
 	dynamicClient dynamic.Interface,
 	discoveryClient discovery.CachedDiscoveryInterface,
@@ -106,7 +108,7 @@ func NewDynamicReadinessTracker(
 	var tracker any
 	switch resourceGVK.GroupKind() {
 	case schema.GroupKind{Group: "apps", Kind: "Deployment"}, schema.GroupKind{Group: "extensions", Kind: "Deployment"}:
-		tracker = deployment.NewTracker(resourceName, resourceNamespace, staticClient, commontracker.Options{
+		tracker = deployment.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
@@ -114,7 +116,7 @@ func NewDynamicReadinessTracker(
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "apps", Kind: "DaemonSet"}, schema.GroupKind{Group: "extensions", Kind: "DaemonSet"}:
-		tracker = daemonset.NewTracker(resourceName, resourceNamespace, staticClient, commontracker.Options{
+		tracker = daemonset.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
@@ -122,14 +124,14 @@ func NewDynamicReadinessTracker(
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "flagger.app", Kind: "Canary"}:
-		tracker = canary.NewTracker(resourceName, resourceNamespace, staticClient, dynamicClient, commontracker.Options{
+		tracker = canary.NewTracker(resourceName, resourceNamespace, staticClient, dynamicClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "apps", Kind: "StatefulSet"}:
-		tracker = statefulset.NewTracker(resourceName, resourceNamespace, staticClient, commontracker.Options{
+		tracker = statefulset.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
@@ -137,7 +139,7 @@ func NewDynamicReadinessTracker(
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
 	case schema.GroupKind{Group: "batch", Kind: "Job"}:
-		tracker = job.NewTracker(resourceName, resourceNamespace, staticClient, commontracker.Options{
+		tracker = job.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
@@ -149,7 +151,7 @@ func NewDynamicReadinessTracker(
 			Namespace: resourceNamespace,
 		})
 
-		tracker = generic.NewTracker(resid, staticClient, dynamicClient, discoveryClient, mapper)
+		tracker = generic.NewTracker(resid, staticClient, dynamicClient, discoveryClient, informerFactory, mapper)
 	}
 
 	return &DynamicReadinessTracker{
