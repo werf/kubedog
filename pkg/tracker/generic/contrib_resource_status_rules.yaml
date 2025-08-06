@@ -209,6 +209,6 @@ rules:
         - "Pending"
         - "InProgress"
         - ""
+        - "Unknown"
       failed:
         - "Error"
-        - "Unknown"
