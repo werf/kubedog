@@ -67,7 +67,7 @@ func (f *feed) Track(name, namespace string, kube kubernetes.Interface, opts tra
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(parentContext, opts.Timeout)
 	defer cancel()
 
-	canary := NewTracker(name, namespace, kube, nil, opts)
+	canary := NewTracker(name, namespace, kube, nil, nil, opts)
 
 	go func() {
 		err := canary.Track(ctx)

@@ -14,8 +14,10 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/resid"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 const ResourceStatusStabilizingDuration time.Duration = 2 * time.Second
@@ -48,6 +50,7 @@ type Tracker struct {
 	dynamicClient   dynamic.Interface
 	discoveryClient discovery.CachedDiscoveryInterface
 	mapper          meta.RESTMapper
+	informerFactory *util.Concurrent[*informer.InformerFactory]
 }
 
 func NewTracker(
@@ -55,6 +58,7 @@ func NewTracker(
 	client kubernetes.Interface,
 	dynClient dynamic.Interface,
 	discClient discovery.CachedDiscoveryInterface,
+	informerFactory *util.Concurrent[*informer.InformerFactory],
 	mapper meta.RESTMapper,
 ) *Tracker {
 	return &Tracker{
@@ -64,20 +68,21 @@ func NewTracker(
 		dynamicClient:   dynClient,
 		discoveryClient: discClient,
 		mapper:          mapper,
+		informerFactory: informerFactory,
 	}
 }
 
 func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, addedCh, succeededCh, failedCh, regularCh chan<- *ResourceStatus, eventCh chan<- *corev1.Event) error {
-	stateWatcherErrCh := make(chan error, 10)
-
 	resAddedCh := make(chan *unstructured.Unstructured)
 	resModifiedCh := make(chan *unstructured.Unstructured)
 	resDeletedCh := make(chan *unstructured.Unstructured)
 
-	go func(stateWatcherErrCh chan<- error) {
-		resourceStateWatcher := NewResourceStateWatcher(t.ResourceID, t.client, t.dynamicClient, t.mapper)
-		stateWatcherErrCh <- resourceStateWatcher.Run(ctx, resAddedCh, resModifiedCh, resDeletedCh)
-	}(stateWatcherErrCh)
+	resourceStateWatcher := NewResourceStateWatcher(t.ResourceID, t.client, t.dynamicClient, t.mapper, t.informerFactory)
+	resourceInformerCleanupFn, err := resourceStateWatcher.Run(ctx, resAddedCh, resModifiedCh, resDeletedCh)
+	if err != nil {
+		return fmt.Errorf("run resource state watcher: %w", err)
+	}
+	defer resourceInformerCleanupFn()
 
 	statusStabilizingTicker := time.NewTicker(time.Second)
 	statusStabilizingDoneCh := make(chan bool)
@@ -100,28 +105,27 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 	}()
 
 	eventWatcherCh := make(chan *corev1.Event)
-	eventWatcherErrCh := make(chan error, 10)
 
 	for {
 		select {
 		case obj := <-resAddedCh:
-			t.handleResourceAddedModified(ctx, obj, addedCh, succeededCh, failedCh, regularCh, eventWatcherCh, eventWatcherErrCh)
+			cleanupFn, err := t.handleResourceAddedModified(ctx, obj, addedCh, succeededCh, failedCh, regularCh, eventWatcherCh)
+			if err != nil {
+				return fmt.Errorf("handle resource added: %w", err)
+			}
+			defer cleanupFn()
 		case obj := <-resModifiedCh:
-			t.handleResourceAddedModified(ctx, obj, addedCh, succeededCh, failedCh, regularCh, eventWatcherCh, eventWatcherErrCh)
+			cleanupFn, err := t.handleResourceAddedModified(ctx, obj, addedCh, succeededCh, failedCh, regularCh, eventWatcherCh)
+			if err != nil {
+				return fmt.Errorf("handle resource modified: %w", err)
+			}
+			defer cleanupFn()
 		case <-resDeletedCh:
 			t.handleResourceDeleted(regularCh)
 		case event := <-eventWatcherCh:
 			t.handleEvent(event, eventCh, failedCh)
 		case <-time.After(noActivityTimeout):
 			failedCh <- NewFailedResourceStatus(fmt.Sprintf("marking resource as failed because no activity for %s", noActivityTimeout))
-		case err := <-stateWatcherErrCh:
-			if err != nil {
-				return err
-			}
-		case err := <-eventWatcherErrCh:
-			if err != nil {
-				return err
-			}
 		case <-ctx.Done():
 			if debug.Debug() {
 				fmt.Printf("`%s` tracker context canceled: %s\n", t.ResourceID, context.Cause(ctx))
@@ -146,13 +150,21 @@ func (t *Tracker) handleStatusStabilized(resModCh chan<- *unstructured.Unstructu
 	return false
 }
 
-func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstructured.Unstructured, addedCh, succeededCh, failedCh, regularCh chan<- *ResourceStatus, eventCh chan<- *corev1.Event, eventWatcherErrCh chan<- error) {
+func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstructured.Unstructured, addedCh, succeededCh, failedCh, regularCh chan<- *ResourceStatus, eventCh chan<- *corev1.Event) (cleanupFn func(), err error) {
+	cleanupFn = func() {}
+
 	if t.getLastState() == TrackerStateInitial {
+		eventsInformerCleanupFn := func() {}
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
-			go func() {
-				resourceEventsWatcher := NewResourceEventsWatcher(object, t.ResourceID, t.client)
-				eventWatcherErrCh <- resourceEventsWatcher.Run(ctx, eventCh)
-			}()
+			resourceEventsWatcher := NewResourceEventsWatcher(object, t.ResourceID, t.client, t.mapper, t.informerFactory)
+			eventsInformerCleanupFn, err = resourceEventsWatcher.Run(ctx, eventCh)
+			if err != nil {
+				return nil, fmt.Errorf("run resource events watcher: %w", err)
+			}
+		}
+
+		cleanupFn = func() {
+			eventsInformerCleanupFn()
 		}
 
 		t.setStatusStabilizeAt(time.Now().Add(ResourceStatusStabilizingDuration))
@@ -170,8 +182,7 @@ func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstr
 
 	resourceStatus, err := NewResourceStatus(object)
 	if err != nil {
-		eventWatcherErrCh <- fmt.Errorf("error creating resource status: %w", err)
-		return
+		return nil, fmt.Errorf("construct resource status: %w", err)
 	}
 
 	switch t.getLastState() {
@@ -199,6 +210,8 @@ func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstr
 			addedCh <- resourceStatus
 		}
 	}
+
+	return cleanupFn, nil
 }
 
 func (t *Tracker) handleResourceDeleted(regularCh chan<- *ResourceStatus) {

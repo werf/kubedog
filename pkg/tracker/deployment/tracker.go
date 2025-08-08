@@ -6,21 +6,22 @@ import (
 	"os"
 	"time"
 
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 	"github.com/werf/kubedog/pkg/utils"
 )
 
@@ -84,7 +85,7 @@ type Tracker struct {
 	donePodsRelay           chan map[string]pod.PodStatus
 }
 
-func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -92,6 +93,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 			FullResourceName: fmt.Sprintf("deploy/%s", name),
 			ResourceName:     name,
 			LogsFromTime:     opts.LogsFromTime,
+			InformerFactory:  informerFactory,
 		},
 
 		Added:  make(chan DeploymentStatus, 1),
@@ -137,20 +139,26 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 // there is option StopOnAvailable — if true, watcher stops after deployment has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
 func (d *Tracker) Track(ctx context.Context) (err error) {
-	d.runDeploymentInformer(ctx)
+	deploymentInformerCleanupFn, err := d.runDeploymentInformer(ctx)
+	if err != nil {
+		return err
+	}
+	defer deploymentInformerCleanupFn()
 
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			if err := d.handleDeploymentState(ctx, object); err != nil {
+			cleanupFn, err := d.handleDeploymentState(ctx, object)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case object := <-d.resourceModified:
-			if err := d.handleDeploymentState(ctx, object); err != nil {
+			cleanupFn, err := d.handleDeploymentState(ctx, object)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case <-d.resourceDeleted:
 			d.State = tracker.ResourceDeleted
 			d.lastObject = nil
@@ -273,9 +281,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			d.TrackedPodsNames = trackedPodsNames
 
 			if d.lastObject != nil {
-				if err := d.handleDeploymentState(ctx, d.lastObject); err != nil {
+				cleanupFn, err := d.handleDeploymentState(ctx, d.lastObject)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
 
 		case podStatuses := <-d.podStatusesRelay:
@@ -283,9 +293,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				if err := d.handleDeploymentState(ctx, d.lastObject); err != nil {
+				cleanupFn, err := d.handleDeploymentState(ctx, d.lastObject)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
 
 		case podLogChunks := <-d.podLogChunksRelay:
@@ -396,72 +408,81 @@ func (d *Tracker) getNewPodsNames() ([]string, error) {
 }
 
 // runDeploymentInformer watch for deployment events
-func (d *Tracker) runDeploymentInformer(ctx context.Context) {
-	client := d.Kube
-
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", d.ResourceName).String()
-		return options
-	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.AppsV1().Deployments(d.Namespace).List(ctx, tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.AppsV1().Deployments(d.Namespace).Watch(ctx, tweakListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lw, &appsv1.Deployment{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("    deploy/%s event: %#v\n", d.ResourceName, e.Type)
-			}
-
-			var object *appsv1.Deployment
-
-			if e.Type != watch.Error {
-				var ok bool
-				object, ok = e.Object.(*appsv1.Deployment)
-				if !ok {
-					return true, fmt.Errorf("expected %s to be a *extension.Deployment, got %T", d.ResourceName, e.Object)
-				}
-			}
-
-			switch e.Type {
-			case watch.Added:
-				d.resourceAdded <- object
-			case watch.Modified:
-				d.resourceModified <- object
-			case watch.Deleted:
-				d.resourceDeleted <- object
-			case watch.Error:
-				err := fmt.Errorf("deployment error: %v", e.Object)
-				// d.errors <- err
-				return true, err
-			}
-
-			return false, nil
-		})
-
-		if err := tracker.AdaptInformerError(err); err != nil {
-			d.errors <- err
+func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := d.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "apps",
+			Version:  "v1",
+			Resource: "deployments",
+		}, d.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
 		}
-	}()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					deploymentObj := &appsv1.Deployment{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
+					return deploymentObj.Name == d.ResourceName &&
+						deploymentObj.Namespace == d.Namespace
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						deploymentObj := &appsv1.Deployment{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
+						d.resourceAdded <- deploymentObj
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						deploymentObj := &appsv1.Deployment{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, deploymentObj))
+						d.resourceModified <- deploymentObj
+					},
+					DeleteFunc: func(obj interface{}) {
+						deploymentObj := &appsv1.Deployment{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
+						d.resourceDeleted <- deploymentObj
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }
 
 // runReplicaSetsInformer watch for deployment events
-func (d *Tracker) runReplicaSetsInformer(ctx context.Context, object *appsv1.Deployment) {
+func (d *Tracker) runReplicaSetsInformer(ctx context.Context, object *appsv1.Deployment) (cleanupFn func(), err error) {
 	rsInformer := replicaset.NewReplicaSetInformer(&d.Tracker, utils.ControllerAccessor(object))
 	rsInformer.WithChannels(d.replicaSetAdded, d.replicaSetModified, d.replicaSetDeleted, d.errors)
-	rsInformer.Run(ctx)
+	return rsInformer.Run(ctx)
 }
 
 // runDeploymentInformer watch for deployment events
-func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.Deployment) {
+func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.Deployment) (cleanupFn func(), err error) {
 	podsInformer := pod.NewPodsInformer(&d.Tracker, utils.ControllerAccessor(object))
 	podsInformer.WithChannels(d.podAddedRelay, d.errors)
-	podsInformer.Run(ctx)
+	return podsInformer.Run(ctx)
 }
 
 func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) error {
@@ -469,7 +490,7 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)
-	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, d.InformerFactory, pod.Options{
 		IgnoreLogs:                               d.ignoreLogs,
 		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
@@ -529,25 +550,45 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) er
 	return nil
 }
 
-func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Deployment) error {
+func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Deployment) (cleanupFn func(), err error) {
 	d.lastObject = object
 	d.StatusGeneration++
 
 	newPodsNames, err := d.getNewPodsNames()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	status := NewDeploymentStatus(object, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, d.podStatuses, newPodsNames)
 
+	cleanupFn = func() {}
+
 	switch d.State {
 	case tracker.Initial:
-		d.runReplicaSetsInformer(ctx, object)
+		replicasetsInformerCleanupFn, err := d.runReplicaSetsInformer(ctx, object)
+		if err != nil {
+			return nil, fmt.Errorf("run replicaset informer: %w", err)
+		}
+
 		// TODO: If pod events handled before any replicasets found, then during the handling we can't determine whether the pod is for the new or for the old replicaset. Needs some proper solution instead of time.Sleep.
 		time.Sleep(1500 * time.Millisecond)
-		d.runPodsInformer(ctx, object)
 
+		podsInformerCleanupFn, err := d.runPodsInformer(ctx, object)
+		if err != nil {
+			return nil, fmt.Errorf("run pods informer: %w", err)
+		}
+
+		eventsInformerCleanupFn := func() {}
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
-			d.runEventsInformer(ctx, object)
+			eventsInformerCleanupFn, err = d.runEventsInformer(ctx, object)
+			if err != nil {
+				return nil, fmt.Errorf("run events informer: %w", err)
+			}
+		}
+
+		cleanupFn = func() {
+			replicasetsInformerCleanupFn()
+			podsInformerCleanupFn()
+			eventsInformerCleanupFn()
 		}
 
 		switch {
@@ -588,12 +629,12 @@ func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Depl
 		}
 	}
 
-	return nil
+	return cleanupFn, nil
 }
 
 // runEventsInformer watch for Deployment events
-func (d *Tracker) runEventsInformer(ctx context.Context, resource interface{}) {
+func (d *Tracker) runEventsInformer(ctx context.Context, resource interface{}) (cleanupFn func(), err error) {
 	eventInformer := event.NewEventInformer(&d.Tracker, resource)
 	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
-	eventInformer.Run(ctx)
+	return eventInformer.Run(ctx)
 }

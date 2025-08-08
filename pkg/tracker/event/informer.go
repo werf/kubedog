@@ -6,17 +6,20 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	apilabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
-	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 type ProbeTriggeredRestart struct {
@@ -44,7 +47,9 @@ func NewEventInformer(trk *tracker.Tracker, resource interface{}) *EventInformer
 		Tracker: tracker.Tracker{
 			Kube:             trk.Kube,
 			Namespace:        trk.Namespace,
+			ResourceName:     trk.ResourceName,
 			FullResourceName: trk.FullResourceName,
+			InformerFactory:  trk.InformerFactory,
 		},
 		Resource:         resource,
 		Errors:           make(chan error, 1),
@@ -60,82 +65,94 @@ func (e *EventInformer) WithChannels(msgCh chan string, failCh chan interface{},
 }
 
 // Run watch for StatefulSet events
-func (e *EventInformer) Run(ctx context.Context) {
-	e.handleInitialEvents(ctx)
-
-	client := e.Kube
-
-	tweakEventListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.FieldSelector = utils.EventFieldSelectorFromResource(e.Resource)
-		return options
-	}
-
-	lwe := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.CoreV1().Events(e.Namespace).List(ctx, tweakEventListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.CoreV1().Events(e.Namespace).Watch(ctx, tweakEventListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lwe, &corev1.Event{}, nil, func(ev watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("    %s event: %#v\n", e.FullResourceName, ev.Type)
-			}
-
-			var object *corev1.Event
-
-			if ev.Type != watch.Error {
-				var ok bool
-				object, ok = ev.Object.(*corev1.Event)
-				if !ok {
-					return true, fmt.Errorf("TRACK EVENT expect *corev1.Event object, got %T", ev.Object)
-				}
-			}
-
-			switch ev.Type {
-			case watch.Added:
-				e.handleEvent(object)
-				// if debug.Debug() {
-				//	fmt.Printf("> Event: %#v\n", object)
-				// }
-			case watch.Modified:
-				e.handleEvent(object)
-				// if debug.Debug() {
-				//	fmt.Printf("> Event: %#v\n", object)
-				// }
-			case watch.Deleted:
-				// if debug.Debug() {
-				//	fmt.Printf("> Event: %#v\n", object)
-				// }
-			case watch.Error:
-				return true, fmt.Errorf("event watch error: %v", ev.Object)
-			}
-
-			return false, nil
-		})
-
-		if err := tracker.AdaptInformerError(err); err != nil {
-			e.Errors <- fmt.Errorf("event informer for %s failed: %w", e.FullResourceName, err)
+func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := e.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "",
+			Version:  "v1",
+			Resource: "events",
+		}, e.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
 		}
-	}()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	involvedObjMetadata, err := meta.Accessor(e.Resource)
+	if err != nil {
+		return nil, fmt.Errorf("get involved object metadata: %w", err)
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		if err := e.handleInitialEvents(inf, string(involvedObjMetadata.GetUID())); err != nil {
+			return fmt.Errorf("handle initial events: %w", err)
+		}
+
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					eventObj := &corev1.Event{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
+					return eventObj.InvolvedObject.UID == involvedObjMetadata.GetUID()
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						eventObj := &corev1.Event{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
+						e.handleEvent(eventObj)
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						eventObj := &corev1.Event{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, eventObj))
+						e.handleEvent(eventObj)
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }
 
 // handleInitialEvents saves uids of existed k8s events to ignore watch.Added events on them
-func (e *EventInformer) handleInitialEvents(ctx context.Context) {
-	evList, err := utils.ListEventsForObject(ctx, e.Kube, e.Resource)
+func (e *EventInformer) handleInitialEvents(inform *informer.Informer, involvedUID string) error {
+	objs, err := inform.List(apilabels.Everything())
 	if err != nil {
-		if debug.Debug() {
-			fmt.Printf("list event error: %v\n", err)
-		}
-		return
+		return fmt.Errorf("list events: %w", err)
 	}
 
-	for _, ev := range evList.Items {
-		e.initialEventUids[ev.UID] = true
+	var filteredEvents []*corev1.Event
+	for _, obj := range objs {
+		eventObj := &corev1.Event{}
+		lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
+
+		if string(eventObj.InvolvedObject.UID) == involvedUID {
+			filteredEvents = append(filteredEvents, eventObj)
+		}
 	}
+
+	for _, event := range filteredEvents {
+		e.initialEventUids[event.UID] = true
+	}
+
+	return nil
 }
 
 // handleEvent sends a message to Messages channel for all events and a message to Failures channel for Failed events

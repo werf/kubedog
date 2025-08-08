@@ -7,21 +7,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 	"github.com/werf/kubedog/pkg/utils"
 )
 
@@ -74,7 +75,7 @@ type Tracker struct {
 	donePodsRelay           chan map[string]pod.PodStatus
 }
 
-func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -82,6 +83,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 			FullResourceName: fmt.Sprintf("sts/%s", name),
 			ResourceName:     name,
 			LogsFromTime:     opts.LogsFromTime,
+			InformerFactory:  informerFactory,
 		},
 
 		Added:  make(chan StatefulSetStatus, 1),
@@ -122,20 +124,26 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts tracker.
 // there is option StopOnAvailable — if true, watcher stops after StatefulSet has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
 func (d *Tracker) Track(ctx context.Context) (err error) {
-	d.runStatefulSetInformer(ctx)
+	statefulsetInformerCleanupFn, err := d.runStatefulSetInformer(ctx)
+	if err != nil {
+		return err
+	}
+	defer statefulsetInformerCleanupFn()
 
 	for {
 		select {
 		case object := <-d.resourceAdded:
-			if err := d.handleStatefulSetState(ctx, object, nil); err != nil {
+			cleanupFn, err := d.handleStatefulSetState(ctx, object, nil)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case object := <-d.resourceModified:
-			if err := d.handleStatefulSetState(ctx, object, nil); err != nil {
+			cleanupFn, err := d.handleStatefulSetState(ctx, object, nil)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case <-d.resourceDeleted:
 			d.State = tracker.ResourceDeleted
 			d.lastObject = nil
@@ -151,9 +159,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 					// this is warning, not an error
 
 					if d.lastObject != nil {
-						if err := d.handleStatefulSetState(ctx, d.lastObject, []string{failure}); err != nil {
+						cleanupFn, err := d.handleStatefulSetState(ctx, d.lastObject, []string{failure})
+						if err != nil {
 							return err
 						}
+						defer cleanupFn()
 					}
 				} else {
 					d.State = tracker.ResourceFailed
@@ -214,9 +224,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			d.TrackedPodsNames = trackedPodsNames
 
 			if d.lastObject != nil {
-				if err := d.handleStatefulSetState(ctx, d.lastObject, nil); err != nil {
+				cleanupFn, err := d.handleStatefulSetState(ctx, d.lastObject, nil)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
 
 		case podStatuses := <-d.podStatusesRelay:
@@ -224,9 +236,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				d.podStatuses[podName] = podStatus
 			}
 			if d.lastObject != nil {
-				if err := d.handleStatefulSetState(ctx, d.lastObject, nil); err != nil {
+				cleanupFn, err := d.handleStatefulSetState(ctx, d.lastObject, nil)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
 
 		case podLogChunks := <-d.podLogChunksRelay:
@@ -276,65 +290,74 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 }
 
 // runStatefulSetInformer watch for StatefulSet events
-func (d *Tracker) runStatefulSetInformer(ctx context.Context) {
-	client := d.Kube
-
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", d.ResourceName).String()
-		return options
-	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.AppsV1().StatefulSets(d.Namespace).List(ctx, tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.AppsV1().StatefulSets(d.Namespace).Watch(ctx, tweakListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lw, &appsv1.StatefulSet{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("    statefulset/%s event: %#v\n", d.ResourceName, e.Type)
-			}
-
-			var object *appsv1.StatefulSet
-
-			if e.Type != watch.Error {
-				var ok bool
-				object, ok = e.Object.(*appsv1.StatefulSet)
-				if !ok {
-					return true, fmt.Errorf("expected %s to be a *appsv1.StatefulSet, got %T", d.ResourceName, e.Object)
-				}
-			}
-
-			switch e.Type {
-			case watch.Added:
-				d.resourceAdded <- object
-			case watch.Modified:
-				d.resourceModified <- object
-			case watch.Deleted:
-				d.resourceDeleted <- object
-			case watch.Error:
-				err := fmt.Errorf("StatefulSet error: %v", e.Object)
-				// d.errors <- err
-				return true, err
-			}
-
-			return false, nil
-		})
-
-		if err := tracker.AdaptInformerError(err); err != nil {
-			d.errors <- err
+func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := d.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "apps",
+			Version:  "v1",
+			Resource: "statefulsets",
+		}, d.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
 		}
-	}()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					statefulsetObj := &appsv1.StatefulSet{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
+					return statefulsetObj.Name == d.ResourceName &&
+						statefulsetObj.Namespace == d.Namespace
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						statefulsetObj := &appsv1.StatefulSet{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
+						d.resourceAdded <- statefulsetObj
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						statefulsetObj := &appsv1.StatefulSet{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, statefulsetObj))
+						d.resourceModified <- statefulsetObj
+					},
+					DeleteFunc: func(obj interface{}) {
+						statefulsetObj := &appsv1.StatefulSet{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
+						d.resourceDeleted <- statefulsetObj
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }
 
 // runPodsInformer watch for StatefulSet Pods events
-func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.StatefulSet) {
+func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.StatefulSet) (cleanupFn func(), err error) {
 	podsInformer := pod.NewPodsInformer(&d.Tracker, utils.ControllerAccessor(object))
 	podsInformer.WithChannels(d.podAddedRelay, d.errors)
-	podsInformer.Run(ctx)
+	return podsInformer.Run(ctx)
 }
 
 func (d *Tracker) runPodTracker(_ctx context.Context, podName string) error {
@@ -342,7 +365,7 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 	doneChan := make(chan struct{})
 
 	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)
-	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, pod.Options{
+	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, d.InformerFactory, pod.Options{
 		IgnoreLogs:                               d.ignoreLogs,
 		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
@@ -398,18 +421,32 @@ func (d *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 	return nil
 }
 
-func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.StatefulSet, warningMessages []string) error {
+func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.StatefulSet, warningMessages []string) (cleanupFn func(), err error) {
 	d.lastObject = object
 	d.StatusGeneration++
 
 	status := NewStatefulSetStatus(object, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, warningMessages, d.podStatuses, d.getNewPodsNames())
 
+	cleanupFn = func() {}
+
 	switch d.State {
 	case tracker.Initial:
-		d.runPodsInformer(ctx, object)
+		podsInformerCleanupFn, err := d.runPodsInformer(ctx, object)
+		if err != nil {
+			return nil, fmt.Errorf("run pods informer: %w", err)
+		}
 
+		eventsInformerCleanupFn := func() {}
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
-			d.runEventsInformer(ctx, object)
+			eventsInformerCleanupFn, err = d.runEventsInformer(ctx, object)
+			if err != nil {
+				return nil, fmt.Errorf("run events informer: %w", err)
+			}
+		}
+
+		cleanupFn = func() {
+			podsInformerCleanupFn()
+			eventsInformerCleanupFn()
 		}
 
 		switch {
@@ -450,14 +487,14 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 		}
 	}
 
-	return nil
+	return cleanupFn, nil
 }
 
 // runEventsInformer watch for StatefulSet events
-func (d *Tracker) runEventsInformer(ctx context.Context, object *appsv1.StatefulSet) {
+func (d *Tracker) runEventsInformer(ctx context.Context, object *appsv1.StatefulSet) (cleanupFn func(), err error) {
 	eventInformer := event.NewEventInformer(&d.Tracker, d.lastObject)
 	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
-	eventInformer.Run(ctx)
+	return eventInformer.Run(ctx)
 }
 
 func (d *Tracker) getNewPodsNames() []string {

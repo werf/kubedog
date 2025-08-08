@@ -5,24 +5,23 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker/resid"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 type ResourceStateWatcher struct {
 	ResourceID *resid.ResourceID
 
-	client        kubernetes.Interface
-	dynamicClient dynamic.Interface
-	mapper        meta.RESTMapper
+	client          kubernetes.Interface
+	dynamicClient   dynamic.Interface
+	mapper          meta.RESTMapper
+	informerFactory *util.Concurrent[*informer.InformerFactory]
 }
 
 func NewResourceStateWatcher(
@@ -30,68 +29,82 @@ func NewResourceStateWatcher(
 	client kubernetes.Interface,
 	dynClient dynamic.Interface,
 	mapper meta.RESTMapper,
+	informerFactory *util.Concurrent[*informer.InformerFactory],
 ) *ResourceStateWatcher {
 	return &ResourceStateWatcher{
-		ResourceID:    resID,
-		client:        client,
-		dynamicClient: dynClient,
-		mapper:        mapper,
+		ResourceID:      resID,
+		client:          client,
+		dynamicClient:   dynClient,
+		mapper:          mapper,
+		informerFactory: informerFactory,
 	}
 }
 
-func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourceModifiedCh, resourceDeletedCh chan<- *unstructured.Unstructured) error {
-	runCtx, runCancelFn := context.WithCancelCause(ctx)
-	defer runCancelFn(fmt.Errorf("context canceled: resource state watcher for %q finished", w.ResourceID))
-
+func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourceModifiedCh, resourceDeletedCh chan<- *unstructured.Unstructured) (cleanupFn func(), err error) {
 	gvr, err := w.ResourceID.GroupVersionResource(w.mapper)
 	if err != nil {
-		return fmt.Errorf("error getting GroupVersionResource: %w", err)
+		return nil, fmt.Errorf("get GroupVersionResource: %w", err)
 	}
 
-	informer := dynamicinformer.NewFilteredDynamicInformer(
-		w.dynamicClient,
-		*gvr,
-		w.ResourceID.Namespace,
-		0,
-		cache.Indexers{},
-		func(options *metav1.ListOptions) {
-			options.FieldSelector = fields.OneTermEqualSelector("metadata.name", w.ResourceID.Name).String()
-		},
-	)
-
-	informer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				if debug.Debug() {
-					fmt.Printf("    add state event: %#v\n", w.ResourceID)
-				}
-				resourceAddedCh <- obj.(*unstructured.Unstructured)
-			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				if debug.Debug() {
-					fmt.Printf("    update state event: %#v\n", w.ResourceID)
-				}
-				resourceModifiedCh <- newObj.(*unstructured.Unstructured)
-			},
-			DeleteFunc: func(obj interface{}) {
-				if debug.Debug() {
-					fmt.Printf("    delete state event: %#v\n", w.ResourceID)
-				}
-				resourceDeletedCh <- obj.(*unstructured.Unstructured)
-			},
-		},
-	)
-
-	fatalWatchErr := &UnrecoverableWatchError{}
-	if err := SetWatchErrorHandler(runCancelFn, w.ResourceID.String(), informer.Informer().SetWatchErrorHandler, SetWatchErrorHandlerOptions{FatalWatchErr: fatalWatchErr}); err != nil {
-		return fmt.Errorf("error setting watch error handler: %w", err)
+	namespaced, err := w.ResourceID.Namespaced(w.mapper)
+	if err != nil {
+		return nil, fmt.Errorf("check if resource is namespaced: %w", err)
 	}
 
-	informer.Informer().Run(runCtx.Done())
+	var inform *util.Concurrent[*informer.Informer]
+	if err := w.informerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		if namespaced {
+			inform, err = factory.ForNamespace(*gvr, w.ResourceID.Namespace)
+			if err != nil {
+				return fmt.Errorf("get namespaced informer from factory: %w", err)
+			}
+		} else {
+			inform, err = factory.Clustered(*gvr)
+			if err != nil {
+				return fmt.Errorf("get clustered informer from factory: %w", err)
+			}
+		}
 
-	if fatalWatchErr.Err != nil {
-		return fatalWatchErr
-	} else {
 		return nil
+	}); err != nil {
+		return nil, err
 	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					unstructObj := obj.(*unstructured.Unstructured)
+					return unstructObj.GetName() == w.ResourceID.Name &&
+						(!namespaced || unstructObj.GetNamespace() == w.ResourceID.Namespace)
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						resourceAddedCh <- obj.(*unstructured.Unstructured)
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						resourceModifiedCh <- newObj.(*unstructured.Unstructured)
+					},
+					DeleteFunc: func(obj interface{}) {
+						resourceDeletedCh <- obj.(*unstructured.Unstructured)
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }

@@ -6,21 +6,25 @@ import (
 	"time"
 
 	"github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
-	flaggerv1beta1 "github.com/fluxcd/flagger/pkg/client/clientset/versioned/typed/flagger/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	flaggerscheme "github.com/fluxcd/flagger/pkg/client/clientset/versioned/scheme"
+	"github.com/samber/lo"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
-	"github.com/werf/kubedog/pkg/kube"
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
+
+func init() {
+	flaggerscheme.AddToScheme(scheme.Scheme)
+}
 
 type FailedReport struct {
 	FailedReason string
@@ -54,7 +58,7 @@ type Tracker struct {
 	dynamicClient dynamic.Interface
 }
 
-func NewTracker(name, namespace string, kube kubernetes.Interface, dynamicClient dynamic.Interface, opts tracker.Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, dynamicClient dynamic.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
@@ -62,6 +66,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, dynamicClient
 			FullResourceName: fmt.Sprintf("canary/%s", name),
 			ResourceName:     name,
 			LogsFromTime:     opts.LogsFromTime,
+			InformerFactory:  informerFactory,
 		},
 
 		Added:     make(chan CanaryStatus, 1),
@@ -84,10 +89,12 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, dynamicClient
 }
 
 func (canary *Tracker) Track(ctx context.Context) error {
-	err := canary.runInformer(ctx)
+	canaryInformerCleanupFn, err := canary.runInformer(ctx)
 	if err != nil {
 		return err
 	}
+	defer canaryInformerCleanupFn()
+
 	for {
 		select {
 		case object := <-canary.objectAdded:
@@ -123,85 +130,67 @@ func (canary *Tracker) Track(ctx context.Context) error {
 	}
 }
 
-func (canary *Tracker) runInformer(ctx context.Context) error {
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", canary.ResourceName).String()
-		return options
+func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := canary.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "flagger.app",
+			Version:  "v1beta1",
+			Resource: "canaries",
+		}, canary.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	var lw *cache.ListWatch
-	if canary.dynamicClient != nil {
-		lw = &cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return canary.dynamicClient.Resource(schema.GroupVersionResource{
-					Group:    "flagger.app",
-					Version:  "v1beta1",
-					Resource: "canaries",
-				}).Namespace(canary.Namespace).List(ctx, tweakListOptions(options))
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					canaryObj := &v1beta1.Canary{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
+					return canaryObj.Name == canary.ResourceName &&
+						canaryObj.Namespace == canary.Namespace
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						canaryObj := &v1beta1.Canary{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
+						canary.objectAdded <- canaryObj
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						canaryObj := &v1beta1.Canary{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, canaryObj))
+						canary.objectModified <- canaryObj
+					},
+					DeleteFunc: func(obj interface{}) {
+						canaryObj := &v1beta1.Canary{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
+						canary.objectDeleted <- canaryObj
+					},
+				},
 			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return canary.dynamicClient.Resource(schema.GroupVersionResource{
-					Group:    "flagger.app",
-					Version:  "v1beta1",
-					Resource: "canaries",
-				}).Namespace(canary.Namespace).Watch(ctx, tweakListOptions(options))
-			},
-		}
-	} else {
-		config, err := kube.GetKubeConfig(kube.KubeConfigOptions{})
+		)
 		if err != nil {
-			fmt.Print(err)
+			return fmt.Errorf("add event handler: %w", err)
 		}
 
-		flagger, err := flaggerv1beta1.NewForConfig(config.Config)
-		if err != nil {
-			fmt.Print(err)
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
 		}
 
-		lw = &cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return flagger.Canaries(canary.Namespace).List(ctx, tweakListOptions(options))
-			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return flagger.Canaries(canary.Namespace).Watch(ctx, tweakListOptions(options))
-			},
-		}
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lw, &v1beta1.Canary{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("Canary `%s` informer event: %#v\n", canary.ResourceName, e.Type)
-			}
-
-			var object *v1beta1.Canary
-
-			if e.Type != watch.Error {
-				var ok bool
-				object, ok = e.Object.(*v1beta1.Canary)
-				if !ok {
-					return true, fmt.Errorf("expected %s to be a *v1beta1.Canary, got %T", canary.ResourceName, e.Object)
-				}
-			}
-
-			switch e.Type {
-			case watch.Added:
-				canary.objectAdded <- object
-			case watch.Modified:
-				canary.objectModified <- object
-			case watch.Deleted:
-				canary.objectDeleted <- object
-			}
-
-			return false, nil
-		})
-
-		if err != tracker.AdaptInformerError(err) {
-			canary.errors <- fmt.Errorf("canary informer error: %w", err)
-		}
-	}()
-
-	return nil
+	return cleanupFn, nil
 }
 
 func (canary *Tracker) handleCanaryState(ctx context.Context, object *v1beta1.Canary) error {

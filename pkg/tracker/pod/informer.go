@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	apilabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 	"github.com/werf/kubedog/pkg/utils"
 )
 
@@ -30,6 +33,8 @@ func NewPodsInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) 
 			Kube:             trk.Kube,
 			Namespace:        trk.Namespace,
 			FullResourceName: trk.FullResourceName,
+			ResourceName:     trk.ResourceName,
+			InformerFactory:  trk.InformerFactory,
 		},
 		Controller: controller,
 		PodAdded:   make(chan *corev1.Pod, 1),
@@ -43,53 +48,59 @@ func (p *PodsInformer) WithChannels(added chan *corev1.Pod, errors chan error) *
 	return p
 }
 
-func (p *PodsInformer) Run(ctx context.Context) {
-	client := p.Kube
-
-	selector, err := metav1.LabelSelectorAsSelector(p.Controller.LabelSelector())
-	if err != nil {
-		// TODO rescue this error!
-		return
-	}
-
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.LabelSelector = selector.String()
-		return options
-	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(p.Namespace).List(ctx, tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return client.CoreV1().Pods(p.Namespace).Watch(ctx, tweakListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("    %s pod event: %#v\n", p.FullResourceName, e.Type)
-			}
-
-			var object *corev1.Pod
-
-			if e.Type != watch.Error {
-				var ok bool
-				object, ok = e.Object.(*corev1.Pod)
-				if !ok {
-					return true, fmt.Errorf("corev1.Pod informer for %s got unexpected object %T", p.FullResourceName, e.Object)
-				}
-			}
-
-			if e.Type == watch.Added {
-				p.PodAdded <- object
-			}
-
-			return false, nil
-		})
-
-		if err := tracker.AdaptInformerError(err); err != nil {
-			p.Errors <- fmt.Errorf("%s pods informer error: %w", p.FullResourceName, err)
+func (p *PodsInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := p.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "",
+			Version:  "v1",
+			Resource: "pods",
+		}, p.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
 		}
-	}()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	labelSelector, err := metav1.LabelSelectorAsSelector(p.Controller.LabelSelector())
+	if err != nil {
+		return nil, fmt.Errorf("convert label selector: %w", err)
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					podObj := &corev1.Pod{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
+					return labelSelector.Matches(apilabels.Set(podObj.GetLabels()))
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						podObj := &corev1.Pod{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
+						p.PodAdded <- podObj
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }

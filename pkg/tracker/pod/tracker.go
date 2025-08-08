@@ -11,17 +11,18 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	watchtools "k8s.io/client-go/tools/watch"
 
 	"github.com/werf/kubedog/pkg/display"
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 type ContainerError struct {
@@ -101,13 +102,14 @@ type Options struct {
 	IgnoreLogs                               bool
 }
 
-func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options) *Tracker {
+func NewTracker(name, namespace string, kube kubernetes.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
 			Kube:             kube,
 			Namespace:        namespace,
 			FullResourceName: fmt.Sprintf("po/%s", name),
 			ResourceName:     name,
+			InformerFactory:  informerFactory,
 		},
 
 		Added:     make(chan PodStatus, 1),
@@ -141,23 +143,26 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, opts Options)
 }
 
 func (pod *Tracker) Start(ctx context.Context) error {
-	err := pod.runInformer(ctx)
+	podInformerCleanupFn, err := pod.runInformer(ctx)
 	if err != nil {
 		return err
 	}
+	defer podInformerCleanupFn()
 
 	for {
 		select {
 		case object := <-pod.objectAdded:
-			if err := pod.handlePodState(ctx, object); err != nil {
+			cleanupFn, err := pod.handlePodState(ctx, object)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case object := <-pod.objectModified:
-			if err := pod.handlePodState(ctx, object); err != nil {
+			cleanupFn, err := pod.handlePodState(ctx, object)
+			if err != nil {
 				return err
 			}
-
+			defer cleanupFn()
 		case <-pod.objectDeleted:
 			for containerName, ch := range pod.ContainerTrackerStateChanges {
 				oldState := pod.ContainerTrackerStates[containerName]
@@ -210,11 +215,12 @@ func (pod *Tracker) Start(ctx context.Context) error {
 			pod.TrackedContainers = trackedContainers
 
 			if pod.lastObject != nil {
-				if err := pod.handlePodState(ctx, pod.lastObject); err != nil {
+				cleanupFn, err := pod.handlePodState(ctx, pod.lastObject)
+				if err != nil {
 					return err
 				}
+				defer cleanupFn()
 			}
-
 		case <-ctx.Done():
 			if debug.Debug() {
 				fmt.Printf("Pod `%s` tracker context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
@@ -290,22 +296,27 @@ func (pod *Tracker) handleReadinessProbeFailure(event event.ReadinessProbeFailur
 	}
 }
 
-func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) error {
+func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) (cleanupFn func(), err error) {
 	pod.lastObject = object
 	pod.StatusGeneration++
 
 	status := NewPodStatus(object, pod.StatusGeneration, pod.TrackedContainers, pod.State == tracker.ResourceFailed, pod.failedReason)
 	pod.LastStatus = status
 
+	cleanupFn = func() {}
 	switch pod.State {
 	case tracker.Initial:
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
 			pod.setupReadinessProbes()
-			pod.runEventsInformer(ctx)
+
+			cleanupFn, err = pod.runEventsInformer(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("run events informer for pod %q: %w", pod.ResourceName, err)
+			}
 		}
 
 		if err := pod.runContainersTrackers(ctx, object); err != nil {
-			return fmt.Errorf("unable to start tracking pod/%s containers: %w", pod.ResourceName, err)
+			return nil, fmt.Errorf("unable to start tracking pod/%s containers: %w", pod.ResourceName, err)
 		}
 	default:
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
@@ -314,7 +325,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 	}
 
 	if err := pod.handleContainersState(object); err != nil {
-		return fmt.Errorf("unable to handle pod containers state: %w", err)
+		return nil, fmt.Errorf("unable to handle pod containers state: %w", err)
 	}
 
 	for _, containerError := range status.ContainersErrors {
@@ -387,7 +398,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) erro
 		}
 	}
 
-	return nil
+	return cleanupFn, nil
 }
 
 func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
@@ -554,63 +565,74 @@ func (pod *Tracker) runContainersTrackers(ctx context.Context, object *corev1.Po
 	return nil
 }
 
-func (pod *Tracker) runInformer(ctx context.Context) error {
-	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
-		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", pod.ResourceName).String()
-		return options
-	}
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return pod.Kube.CoreV1().Pods(pod.Namespace).List(ctx, tweakListOptions(options))
-		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return pod.Kube.CoreV1().Pods(pod.Namespace).Watch(ctx, tweakListOptions(options))
-		},
-	}
-
-	go func() {
-		_, err := watchtools.UntilWithSync(ctx, lw, &corev1.Pod{}, nil, func(e watch.Event) (bool, error) {
-			if debug.Debug() {
-				fmt.Printf("Pod `%s` informer event: %#v\n", pod.ResourceName, e.Type)
-			}
-
-			var object *corev1.Pod
-
-			if e.Type != watch.Error {
-				var ok bool
-				object, ok = e.Object.(*corev1.Pod)
-				if !ok {
-					return true, fmt.Errorf("TRACK POD EVENT %s expect *corev1.Pod object, got %T", pod.ResourceName, e.Object)
-				}
-			}
-
-			switch e.Type {
-			case watch.Added:
-				pod.objectAdded <- object
-			case watch.Modified:
-				pod.objectModified <- object
-			case watch.Deleted:
-				pod.objectDeleted <- object
-			case watch.Error:
-				pod.errors <- fmt.Errorf("pod %s error: %v", pod.ResourceName, e.Object)
-			}
-
-			return false, nil
-		})
-
-		if err := tracker.AdaptInformerError(err); err != nil {
-			pod.errors <- fmt.Errorf("pod/%s informer error: %w", pod.ResourceName, err)
+func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err error) {
+	var inform *util.Concurrent[*informer.Informer]
+	if err := pod.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "",
+			Version:  "v1",
+			Resource: "pods",
+		}, pod.Namespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
 		}
-	}()
 
-	return nil
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					podObj := &corev1.Pod{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
+					return podObj.Name == pod.ResourceName &&
+						podObj.Namespace == pod.Namespace
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						podObj := &corev1.Pod{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
+						pod.objectAdded <- podObj
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						podObj := &corev1.Pod{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, podObj))
+						pod.objectModified <- podObj
+					},
+					DeleteFunc: func(obj interface{}) {
+						podObj := &corev1.Pod{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
+						pod.objectDeleted <- podObj
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
 }
 
 // runEventsInformer watch for DaemonSet events
-func (pod *Tracker) runEventsInformer(ctx context.Context) {
+func (pod *Tracker) runEventsInformer(ctx context.Context) (cleanupFn func(), err error) {
 	eventInformer := event.NewEventInformer(&pod.Tracker, pod.lastObject)
 	eventInformer.WithChannels(pod.EventMsg, pod.objectFailed, pod.errors)
-	eventInformer.Run(ctx)
+	return eventInformer.Run(ctx)
 }
 
 func (pod *Tracker) setupReadinessProbes() {

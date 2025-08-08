@@ -5,18 +5,22 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	apilabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/resid"
-	"github.com/werf/kubedog/pkg/utils"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 type ResourceEventsWatcher struct {
@@ -27,92 +31,126 @@ type ResourceEventsWatcher struct {
 	resourceInitialEventsUIDsMux  sync.Mutex
 	resourceInitialEventsUIDsList []types.UID
 
-	client kubernetes.Interface
+	client          kubernetes.Interface
+	mapper          meta.RESTMapper
+	informerFactory *util.Concurrent[*informer.InformerFactory]
 }
 
 func NewResourceEventsWatcher(
 	object *unstructured.Unstructured,
 	resID *resid.ResourceID,
 	client kubernetes.Interface,
+	mapper meta.RESTMapper,
+	informerFactory *util.Concurrent[*informer.InformerFactory],
 ) *ResourceEventsWatcher {
 	return &ResourceEventsWatcher{
-		ResourceID: resID,
-		object:     object,
-		client:     client,
+		ResourceID:      resID,
+		object:          object,
+		client:          client,
+		mapper:          mapper,
+		informerFactory: informerFactory,
 	}
 }
 
-func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1.Event) error {
-	runCtx, runCancelFn := context.WithCancelCause(ctx)
-	defer runCancelFn(fmt.Errorf("context canceled: resource events watcher for %q finished", i.ResourceID))
-
-	i.generateResourceInitialEventsUIDs(runCtx)
-
-	fieldsSet, eventsNs := utils.EventFieldSelectorFromUnstructured(i.object)
-
-	tweakListOptsFn := func(options *metav1.ListOptions) {
-		options.FieldSelector = fieldsSet.AsSelector().String()
-	}
-
-	informer := cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				tweakListOptsFn(&options)
-				return i.client.CoreV1().Events(eventsNs).List(runCtx, options)
-			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				tweakListOptsFn(&options)
-				return i.client.CoreV1().Events(eventsNs).Watch(runCtx, options)
-			},
-		},
-		&corev1.Event{},
-		0,
-		cache.Indexers{},
-	)
-
-	informer.AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				if debug.Debug() {
-					fmt.Printf("    add event: %#v\n", i.ResourceID)
-				}
-				i.handleEventStateChange(runCtx, obj.(*corev1.Event), eventsCh)
-			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				if debug.Debug() {
-					fmt.Printf("    update event: %#v\n", i.ResourceID)
-				}
-				i.handleEventStateChange(runCtx, newObj.(*corev1.Event), eventsCh)
-			},
-			DeleteFunc: func(obj interface{}) {
-				if debug.Debug() {
-					fmt.Printf("    delete event: %#v\n", i.ResourceID)
-				}
-			},
-		},
-	)
-
-	if err := SetWatchErrorHandler(runCancelFn, i.ResourceID.String(), informer.SetWatchErrorHandler, SetWatchErrorHandlerOptions{}); err != nil {
-		return fmt.Errorf("error setting watch error handler: %w", err)
-	}
-
-	informer.Run(runCtx.Done())
-
-	return nil
-}
-
-func (i *ResourceEventsWatcher) generateResourceInitialEventsUIDs(ctx context.Context) {
-	eventsList, err := utils.ListEventsForUnstructured(ctx, i.client, i.object)
+func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1.Event) (cleanupFn func(), err error) {
+	namespaced, err := i.ResourceID.Namespaced(i.mapper)
 	if err != nil {
-		if debug.Debug() {
-			fmt.Printf("list event error: %v\n", err)
-		}
-		return
+		return nil, fmt.Errorf("check if resource is namespaced: %w", err)
 	}
 
-	for _, event := range eventsList.Items {
+	var eventNamespace string
+	if namespaced {
+		eventNamespace = i.ResourceID.Namespace
+	} else {
+		eventNamespace = metav1.NamespaceDefault
+	}
+
+	var inform *util.Concurrent[*informer.Informer]
+	if err := i.informerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
+		inform, err = factory.ForNamespace(schema.GroupVersionResource{
+			Group:    "",
+			Version:  "v1",
+			Resource: "events",
+		}, eventNamespace)
+		if err != nil {
+			return fmt.Errorf("get informer from factory: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	involvedObjMetadata, err := meta.Accessor(i.object)
+	if err != nil {
+		return nil, fmt.Errorf("get involved object metadata: %w", err)
+	}
+
+	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		if err := i.generateResourceInitialEventsUIDs(inf, string(involvedObjMetadata.GetUID())); err != nil {
+			return fmt.Errorf("generate initial events uids: %w", err)
+		}
+
+		handler, err := inf.AddEventHandler(
+			cache.FilteringResourceEventHandler{
+				FilterFunc: func(obj interface{}) bool {
+					eventObj := &corev1.Event{}
+					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
+					return eventObj.InvolvedObject.UID == involvedObjMetadata.GetUID()
+				},
+				Handler: cache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						eventObj := &corev1.Event{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
+						i.handleEventStateChange(ctx, eventObj, eventsCh)
+					},
+					UpdateFunc: func(oldObj, newObj interface{}) {
+						eventObj := &corev1.Event{}
+						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, eventObj))
+						i.handleEventStateChange(ctx, eventObj, eventsCh)
+					},
+				},
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("add event handler: %w", err)
+		}
+
+		cleanupFn = func() {
+			inf.RemoveEventHandler(handler)
+		}
+
+		inf.Run()
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return cleanupFn, nil
+}
+
+func (i *ResourceEventsWatcher) generateResourceInitialEventsUIDs(inform *informer.Informer, involvedUID string) error {
+	objs, err := inform.List(apilabels.Everything())
+	if err != nil {
+		return fmt.Errorf("list events: %w", err)
+	}
+
+	var filteredEvents []*corev1.Event
+	for _, obj := range objs {
+		eventObj := &corev1.Event{}
+		lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
+
+		if string(eventObj.InvolvedObject.UID) == involvedUID {
+			filteredEvents = append(filteredEvents, eventObj)
+		}
+	}
+
+	for _, event := range filteredEvents {
 		i.appendResourceInitialEventsUID(event.GetUID())
 	}
+
+	return nil
 }
 
 func (i *ResourceEventsWatcher) handleEventStateChange(ctx context.Context, eventObj *corev1.Event, eventsCh chan<- *corev1.Event) {

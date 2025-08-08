@@ -26,7 +26,7 @@ func NewResource(
 	discClient discovery.CachedDiscoveryInterface,
 	mapper meta.RESTMapper,
 ) *Resource {
-	tracker := generic.NewTracker(spec.ResourceID, client, dynClient, discClient, mapper)
+	tracker := generic.NewTracker(spec.ResourceID, client, dynClient, discClient, nil, mapper)
 
 	return &Resource{
 		Spec:    spec,
