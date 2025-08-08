@@ -47,19 +47,19 @@
               "ready": {
                 "type": "array",
                 "items": {
-                  "type": "string",
+                  "type": "string"
                 }
               },
               "progressing": {
                 "type": "array",
                 "items": {
-                  "type": "string",
+                  "type": "string"
                 }
               },
               "failed": {
                 "type": "array",
                 "items": {
-                  "type": "string",
+                  "type": "string"
                 }
               }
             }
