@@ -54,11 +54,12 @@ type ReplicaSetInformer struct {
 func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) *ReplicaSetInformer {
 	return &ReplicaSetInformer{
 		Tracker: tracker.Tracker{
-			Kube:             trk.Kube,
-			Namespace:        trk.Namespace,
-			ResourceName:     trk.ResourceName,
-			FullResourceName: trk.FullResourceName,
-			InformerFactory:  trk.InformerFactory,
+			Kube:                            trk.Kube,
+			Namespace:                       trk.Namespace,
+			ResourceName:                    trk.ResourceName,
+			FullResourceName:                trk.FullResourceName,
+			InformerFactory:                 trk.InformerFactory,
+			SaveLogsOnlyForNumberOfReplicas: trk.SaveLogsOnlyForNumberOfReplicas,
 		},
 		Controller:         controller,
 		ReplicaSetAdded:    make(chan *appsv1.ReplicaSet, 1),
