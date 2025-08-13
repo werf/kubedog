@@ -3,8 +3,11 @@ name: Lint
 on:
   push:
     branches:
-    - main
+      - main
   pull_request:
+
+env:
+  TASK_X_REMOTE_TASKFILES: 1
 
 jobs:
   lint:
@@ -13,16 +16,21 @@ jobs:
     env:
       GOFLAGS: -mod=readonly
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
           go-version-file: go.mod
 
-    - name: Install linter
-      run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Lint
-      run: make lint
+      - name: Install golangci-lint
+        run: task --yes -p deps:install:golangci-lint
+
+      - name: Lint
+        run: task --yes -p lint

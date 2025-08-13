@@ -8,12 +8,12 @@ jobs:
     name: Perform kubedog release using trdl server
     runs-on: ubuntu-latest
     steps:
-    - name: Release
-      uses: werf/trdl-vault-actions/release@main
-      with:
-        vault-addr: ${{ secrets.TRDL_VAULT_ADDR }}
-        project-name: kubedog
-        git-tag: ${{ github.event.ref }}
-        vault-auth-method: approle
-        vault-role-id: ${{ secrets.TRDL_VAULT_ROLE_ID }}
-        vault-secret-id: ${{ secrets.TRDL_VAULT_SECRET_ID }}
+      - name: Release
+        uses: werf/trdl-vault-actions/release@main
+        with:
+          vault-addr: ${{ secrets.TRDL_VAULT_ADDR }}
+          project-name: kubedog
+          git-tag: ${{ github.event.ref }}
+          vault-auth-method: approle
+          vault-role-id: ${{ secrets.TRDL_VAULT_ROLE_ID }}
+          vault-secret-id: ${{ secrets.TRDL_VAULT_SECRET_ID }}

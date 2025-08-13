@@ -218,11 +218,6 @@ func (mt *multitracker) displayMultitrackServiceMessageF(format string, a ...int
 	logboek.Context(context.Background()).Default().LogFHighlight(format, a...)
 }
 
-func (mt *multitracker) displayMultitrackErrorMessageF(format string, a ...interface{}) {
-	mt.resetLogProcess()
-	logboek.Context(context.Background()).Warn().LogF(format, a...)
-}
-
 func (mt *multitracker) displayStatusProgress() error {
 	displayLn := false
 	if mt.displayCalled {
