@@ -30,12 +30,13 @@ const (
 type TrackerState string
 
 type Tracker struct {
-	Kube             kubernetes.Interface
-	Namespace        string
-	ResourceName     string
-	FullResourceName string // full resource name with resource kind (deploy/superapp)
-	LogsFromTime     time.Time
-	InformerFactory  *util.Concurrent[*informer.InformerFactory]
+	Kube                            kubernetes.Interface
+	Namespace                       string
+	ResourceName                    string
+	FullResourceName                string // full resource name with resource kind (deploy/superapp)
+	SaveLogsOnlyForNumberOfReplicas int
+	LogsFromTime                    time.Time
+	InformerFactory                 *util.Concurrent[*informer.InformerFactory]
 
 	StatusGeneration uint64
 }
@@ -44,6 +45,7 @@ type Options struct {
 	ParentContext                            context.Context
 	Timeout                                  time.Duration
 	LogsFromTime                             time.Time
+	SaveLogsOnlyForNumberOfReplicas          int
 	IgnoreLogs                               bool
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 }

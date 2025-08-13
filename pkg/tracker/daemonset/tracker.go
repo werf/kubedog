@@ -58,6 +58,7 @@ type Tracker struct {
 
 	ignoreLogs                               bool
 	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
+	savingLogsReplicas                       int
 
 	lastObject     *appsv1.DaemonSet
 	failedReason   string
@@ -79,12 +80,13 @@ type Tracker struct {
 func NewTracker(name, namespace string, kube kubernetes.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
-			Kube:             kube,
-			Namespace:        namespace,
-			FullResourceName: fmt.Sprintf("ds/%s", name),
-			ResourceName:     name,
-			LogsFromTime:     opts.LogsFromTime,
-			InformerFactory:  informerFactory,
+			Kube:                            kube,
+			Namespace:                       namespace,
+			FullResourceName:                fmt.Sprintf("ds/%s", name),
+			ResourceName:                    name,
+			SaveLogsOnlyForNumberOfReplicas: opts.SaveLogsOnlyForNumberOfReplicas,
+			LogsFromTime:                    opts.LogsFromTime,
+			InformerFactory:                 informerFactory,
 		},
 
 		podStatuses:    make(map[string]pod.PodStatus),
@@ -356,9 +358,14 @@ func (d *Tracker) runPodTracker(ctx context.Context, podName string) error {
 	errorChan := make(chan error, 1)
 	doneChan := make(chan struct{})
 
+	ignoreLogs := d.ignoreLogs || d.savingLogsReplicas >= d.SaveLogsOnlyForNumberOfReplicas
+	if !ignoreLogs {
+		d.savingLogsReplicas++
+	}
+
 	newCtx, cancelPodCtx := context.WithCancelCause(ctx)
 	podTracker := pod.NewTracker(podName, d.Namespace, d.Kube, d.InformerFactory, pod.Options{
-		IgnoreLogs:                               d.ignoreLogs,
+		IgnoreLogs:                               ignoreLogs,
 		IgnoreReadinessProbeFailsByContainerName: d.ignoreReadinessProbeFailsByContainerName,
 	})
 	if !d.LogsFromTime.IsZero() {

@@ -62,6 +62,7 @@ type Tracker struct {
 
 	ignoreLogs                               bool
 	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
+	savingLogsReplicas                       int
 
 	objectAdded    chan *batchv1.Job
 	objectModified chan *batchv1.Job
@@ -80,12 +81,13 @@ type Tracker struct {
 func NewTracker(name, namespace string, kube kubernetes.Interface, informerFactory *util.Concurrent[*informer.InformerFactory], opts tracker.Options) *Tracker {
 	return &Tracker{
 		Tracker: tracker.Tracker{
-			Kube:             kube,
-			Namespace:        namespace,
-			FullResourceName: fmt.Sprintf("job/%s", name),
-			ResourceName:     name,
-			LogsFromTime:     opts.LogsFromTime,
-			InformerFactory:  informerFactory,
+			Kube:                            kube,
+			Namespace:                       namespace,
+			FullResourceName:                fmt.Sprintf("job/%s", name),
+			ResourceName:                    name,
+			SaveLogsOnlyForNumberOfReplicas: opts.SaveLogsOnlyForNumberOfReplicas,
+			LogsFromTime:                    opts.LogsFromTime,
+			InformerFactory:                 informerFactory,
 		},
 
 		Added:     make(chan JobStatus, 1),
@@ -391,9 +393,14 @@ func (job *Tracker) runPodTracker(_ctx context.Context, podName string) error {
 	errorChan := make(chan error, 1)
 	doneChan := make(chan struct{})
 
+	ignoreLogs := job.ignoreLogs || job.savingLogsReplicas >= job.SaveLogsOnlyForNumberOfReplicas
+	if !ignoreLogs {
+		job.savingLogsReplicas++
+	}
+
 	newCtx, cancelPodCtx := context.WithCancelCause(_ctx)
 	podTracker := pod.NewTracker(podName, job.Namespace, job.Kube, job.InformerFactory, pod.Options{
-		IgnoreLogs:                               job.ignoreLogs,
+		IgnoreLogs:                               ignoreLogs,
 		IgnoreReadinessProbeFailsByContainerName: job.ignoreReadinessProbeFailsByContainerName,
 	})
 	if !job.LogsFromTime.IsZero() {

@@ -46,14 +46,15 @@ type DynamicReadinessTracker struct {
 	timeout           time.Duration
 	noActivityTimeout time.Duration
 
-	saveLogsOnlyForContainers    []string
-	saveLogsByRegex              *regexp.Regexp
-	saveLogsByRegexForContainers map[string]*regexp.Regexp
-	skipLogsByRegex              *regexp.Regexp
-	skipLogsByRegexForContainers map[string]*regexp.Regexp
-	ignoreLogs                   bool
-	ignoreLogsForContainers      []string
-	saveEvents                   bool
+	saveLogsOnlyForNumberOfReplicas int
+	saveLogsOnlyForContainers       []string
+	saveLogsByRegex                 *regexp.Regexp
+	saveLogsByRegexForContainers    map[string]*regexp.Regexp
+	skipLogsByRegex                 *regexp.Regexp
+	skipLogsByRegexForContainers    map[string]*regexp.Regexp
+	ignoreLogs                      bool
+	ignoreLogsForContainers         []string
+	saveEvents                      bool
 }
 
 func NewDynamicReadinessTracker(
@@ -112,6 +113,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			SaveLogsOnlyForNumberOfReplicas:          opts.SaveLogsOnlyForNumberOfReplicas,
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
@@ -120,6 +122,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			SaveLogsOnlyForNumberOfReplicas:          opts.SaveLogsOnlyForNumberOfReplicas,
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
@@ -135,6 +138,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			SaveLogsOnlyForNumberOfReplicas:          opts.SaveLogsOnlyForNumberOfReplicas,
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
@@ -143,6 +147,7 @@ func NewDynamicReadinessTracker(
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
+			SaveLogsOnlyForNumberOfReplicas:          opts.SaveLogsOnlyForNumberOfReplicas,
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
@@ -181,6 +186,7 @@ type DynamicReadinessTrackerOptions struct {
 	NoActivityTimeout                        time.Duration
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 	CaptureLogsFromTime                      time.Time
+	SaveLogsOnlyForNumberOfReplicas          int
 	SaveLogsOnlyForContainers                []string
 	SaveLogsByRegex                          *regexp.Regexp
 	SaveLogsByRegexForContainers             map[string]*regexp.Regexp
