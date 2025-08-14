@@ -3,7 +3,7 @@
 # their status. Custom rules to detect status of such resources are defined in this file.
 
 rules:
-    # Match the resource by its API group (without version)
+  # Match the resource by its API group (without version)
   - resourceGroup: "acid.zalan.do"
     # Match the resource by its kind (case insensitive)
     resourceKind: "postgresql"
@@ -47,7 +47,7 @@ rules:
         - "Unknown"
       failed:
         - "False"
-# https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.go
+  # https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.go
   - resourceGroup: "bitnami.com"
     resourceKind: "SealedSecret"
     jsonPath: "$.status.conditions[?(@.type=='Synced')].status"
@@ -59,7 +59,7 @@ rules:
         - "Unknown"
         - "False"
       failed: []
-# https://github.com/kyverno/kyverno/blob/main/api/kyverno/v1/policy_status.go
+  # https://github.com/kyverno/kyverno/blob/main/api/kyverno/v1/policy_status.go
   - resourceGroup: "kyverno.io"
     resourceKind: "Policy"
     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
@@ -82,7 +82,7 @@ rules:
         - "Unknown"
         - "False"
       failed: []
-# https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health.go#L12
+  # https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health.go#L12
   - resourceGroup: "argoproj.io"
     resourceKind: "Application"
     jsonPath: "$.status.health.status"
@@ -97,7 +97,7 @@ rules:
         - "Missing"
       failed:
         - "Degraded"
-# https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
+  # https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
   - resourceGroup: "argoproj.io"
     resourceKind: "ApplicationSet"
     jsonPath: "$.status.conditions[?(@.type=='ResourcesUpToDate')].status"
@@ -109,7 +109,7 @@ rules:
         - "Unknown"
         - "False"
       failed: []
-# https://github.com/cert-manager/cert-manager/blob/c21f257a1c2067dfb5a842ffe98235326456224c/pkg/apis/certmanager/v1/types_certificate.go#L669
+  # https://github.com/cert-manager/cert-manager/blob/c21f257a1c2067dfb5a842ffe98235326456224c/pkg/apis/certmanager/v1/types_certificate.go#L669
   - resourceGroup: "cert-manager.io"
     resourceKind: "Certificate"
     jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
@@ -121,7 +121,7 @@ rules:
         - "Unknown"
         - "False"
       failed: []
-# https://github.com/fluxcd/helm-controller/blob/main/api/v2/helmrelease_types.go#L971
+  # https://github.com/fluxcd/helm-controller/blob/main/api/v2/helmrelease_types.go#L971
   - resourceGroup: "helm.toolkit.fluxcd.io"
     resourceKind: "HelmRelease"
     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
@@ -133,7 +133,7 @@ rules:
         - "Unknown"
         - "False"
       failed: []
-# https://github.com/fluxcd/kustomize-controller/blob/main/api/v1/kustomization_types.go#L277
+  # https://github.com/fluxcd/kustomize-controller/blob/main/api/v1/kustomization_types.go#L277
   - resourceGroup: "kustomize.toolkit.fluxcd.io"
     resourceKind: "Kustomization"
     jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
@@ -145,7 +145,7 @@ rules:
         - "Unknown"
         - "False"
       failed: []
-# http://github.com/prometheus-operator/prometheus-operator/blob/main/pkg/apis/monitoring/v1/types.go#L228
+  # http://github.com/prometheus-operator/prometheus-operator/blob/main/pkg/apis/monitoring/v1/types.go#L228
   - resourceGroup: "monitoring.coreos.com"
     resourceKind: "Prometheus"
     jsonPath: "$.status.conditions[?(@.type=='Available')].status"

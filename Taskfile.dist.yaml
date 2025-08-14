@@ -2,6 +2,16 @@ version: "3"
 
 silent: true
 
+includes:
+  lint:
+    taskfile: https://raw.githubusercontent.com/werf/common-ci/refs/heads/main/Taskfile.format_lint.yml
+    flatten: true
+    vars:
+      paths: "."
+  deps:
+    taskfile: https://raw.githubusercontent.com/werf/common-ci/refs/heads/main/Taskfile.deps.yml
+    flatten: true
+
 tasks:
   sign:
     desc: 'Sign last version tag + origin/main and push signatures. Important vars: "refs".'
@@ -16,3 +26,10 @@ tasks:
         done
       - git signatures push {{.CLI_ARGS}}
 
+  build:
+    desc: "Build kubedog binary file"
+    cmd: go build github.com/werf/kubedog/cmd/kubedog
+
+  install:
+    desc: "Install kubedog"
+    cmd: go install github.com/werf/kubedog/cmd/kubedog

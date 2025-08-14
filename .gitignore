@@ -25,6 +25,6 @@
 
 # End of https://www.toptal.com/developers/gitignore/api/go
 
-
+.task
 
 release-build
