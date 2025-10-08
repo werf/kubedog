@@ -784,7 +784,7 @@ func formatResourceCaption(resourceCaption string, resourceFailMode FailMode, is
 			return resourceCaption
 		}
 
-	case HopeUntilEndOfDeployProcess:
+	case LegacyHopeUntilEndOfDeployProcess:
 		if isReady {
 			return utils.GreenF("%s", resourceCaption)
 		} else {

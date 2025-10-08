@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker/debug"
@@ -46,7 +45,6 @@ type Tracker struct {
 	lastObjDuringStatusStabilization    *unstructured.Unstructured
 	lastObjDuringStatusStabilizationMux sync.Mutex
 
-	client          kubernetes.Interface
 	dynamicClient   dynamic.Interface
 	discoveryClient discovery.CachedDiscoveryInterface
 	mapper          meta.RESTMapper
@@ -55,7 +53,6 @@ type Tracker struct {
 
 func NewTracker(
 	resID *resid.ResourceID,
-	client kubernetes.Interface,
 	dynClient dynamic.Interface,
 	discClient discovery.CachedDiscoveryInterface,
 	informerFactory *util.Concurrent[*informer.InformerFactory],
@@ -64,7 +61,6 @@ func NewTracker(
 	return &Tracker{
 		ResourceID:      resID,
 		lastState:       TrackerStateInitial,
-		client:          client,
 		dynamicClient:   dynClient,
 		discoveryClient: discClient,
 		mapper:          mapper,
@@ -77,7 +73,7 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 	resModifiedCh := make(chan *unstructured.Unstructured)
 	resDeletedCh := make(chan *unstructured.Unstructured)
 
-	resourceStateWatcher := NewResourceStateWatcher(t.ResourceID, t.client, t.dynamicClient, t.mapper, t.informerFactory)
+	resourceStateWatcher := NewResourceStateWatcher(t.ResourceID, t.dynamicClient, t.mapper, t.informerFactory)
 	resourceInformerCleanupFn, err := resourceStateWatcher.Run(ctx, resAddedCh, resModifiedCh, resDeletedCh)
 	if err != nil {
 		return fmt.Errorf("run resource state watcher: %w", err)
@@ -156,7 +152,7 @@ func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstr
 	if t.getLastState() == TrackerStateInitial {
 		eventsInformerCleanupFn := func() {}
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
-			resourceEventsWatcher := NewResourceEventsWatcher(object, t.ResourceID, t.client, t.mapper, t.informerFactory)
+			resourceEventsWatcher := NewResourceEventsWatcher(object, t.ResourceID, t.mapper, t.informerFactory)
 			eventsInformerCleanupFn, err = resourceEventsWatcher.Run(ctx, eventCh)
 			if err != nil {
 				return nil, fmt.Errorf("run resource events watcher: %w", err)

@@ -37,7 +37,8 @@ type FailMode string
 const (
 	IgnoreAndContinueDeployProcess    FailMode = "IgnoreAndContinueDeployProcess"
 	FailWholeDeployProcessImmediately FailMode = "FailWholeDeployProcessImmediately"
-	HopeUntilEndOfDeployProcess       FailMode = "HopeUntilEndOfDeployProcess"
+	// TODO(v2): get rid. Is an equivalent to FailWholeDeployProcessImmediately at the moment.
+	LegacyHopeUntilEndOfDeployProcess FailMode = "HopeUntilEndOfDeployProcess"
 )
 
 // type DeployCondition string
@@ -691,7 +692,7 @@ func (mt *multitracker) handleResourceFailure(resourcesStates map[string]*multit
 
 		return ErrFailWholeDeployProcessImmediately
 
-	case HopeUntilEndOfDeployProcess:
+	case LegacyHopeUntilEndOfDeployProcess:
 
 	handleResourceState:
 		switch resourcesStates[spec.ResourceName].Status {

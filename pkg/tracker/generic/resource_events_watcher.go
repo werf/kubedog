@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/werf/kubedog/pkg/informer"
@@ -31,7 +30,6 @@ type ResourceEventsWatcher struct {
 	resourceInitialEventsUIDsMux  sync.Mutex
 	resourceInitialEventsUIDsList []types.UID
 
-	client          kubernetes.Interface
 	mapper          meta.RESTMapper
 	informerFactory *util.Concurrent[*informer.InformerFactory]
 }
@@ -39,14 +37,12 @@ type ResourceEventsWatcher struct {
 func NewResourceEventsWatcher(
 	object *unstructured.Unstructured,
 	resID *resid.ResourceID,
-	client kubernetes.Interface,
 	mapper meta.RESTMapper,
 	informerFactory *util.Concurrent[*informer.InformerFactory],
 ) *ResourceEventsWatcher {
 	return &ResourceEventsWatcher{
 		ResourceID:      resID,
 		object:          object,
-		client:          client,
 		mapper:          mapper,
 		informerFactory: informerFactory,
 	}

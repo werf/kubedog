@@ -7,7 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/werf/kubedog/pkg/informer"
@@ -18,7 +17,6 @@ import (
 type ResourceStateWatcher struct {
 	ResourceID *resid.ResourceID
 
-	client          kubernetes.Interface
 	dynamicClient   dynamic.Interface
 	mapper          meta.RESTMapper
 	informerFactory *util.Concurrent[*informer.InformerFactory]
@@ -26,14 +24,12 @@ type ResourceStateWatcher struct {
 
 func NewResourceStateWatcher(
 	resID *resid.ResourceID,
-	client kubernetes.Interface,
 	dynClient dynamic.Interface,
 	mapper meta.RESTMapper,
 	informerFactory *util.Concurrent[*informer.InformerFactory],
 ) *ResourceStateWatcher {
 	return &ResourceStateWatcher{
 		ResourceID:      resID,
-		client:          client,
 		dynamicClient:   dynClient,
 		mapper:          mapper,
 		informerFactory: informerFactory,
