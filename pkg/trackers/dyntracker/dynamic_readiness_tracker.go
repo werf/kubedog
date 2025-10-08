@@ -156,7 +156,7 @@ func NewDynamicReadinessTracker(
 			Namespace: resourceNamespace,
 		})
 
-		tracker = generic.NewTracker(resid, staticClient, dynamicClient, discoveryClient, informerFactory, mapper)
+		tracker = generic.NewTracker(resid, dynamicClient, discoveryClient, informerFactory, mapper)
 	}
 
 	return &DynamicReadinessTracker{
