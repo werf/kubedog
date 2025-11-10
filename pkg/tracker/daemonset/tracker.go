@@ -260,7 +260,7 @@ func (d *Tracker) Track(ctx context.Context) error {
 				fmt.Printf("DaemonSet `%s` tracker context canceled: %s\n", d.ResourceName, context.Cause(ctx))
 			}
 
-			return nil
+			return context.Cause(ctx)
 		case err := <-d.errors:
 			return err
 		}

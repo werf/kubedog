@@ -244,7 +244,7 @@ func (job *Tracker) Track(ctx context.Context) error {
 				fmt.Printf("Job `%s` tracker context canceled: %s\n", job.ResourceName, context.Cause(ctx))
 			}
 
-			return nil
+			return context.Cause(ctx)
 		case err := <-job.errors:
 			return err
 		}

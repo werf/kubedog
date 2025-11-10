@@ -127,7 +127,7 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 				fmt.Printf("`%s` tracker context canceled: %s\n", t.ResourceID, context.Cause(ctx))
 			}
 
-			return nil
+			return context.Cause(ctx)
 		}
 	}
 }

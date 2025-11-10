@@ -123,7 +123,7 @@ func (canary *Tracker) Track(ctx context.Context) error {
 				fmt.Printf("Canary `%s` tracker context canceled: %s\n", canary.ResourceName, context.Cause(ctx))
 			}
 
-			return nil
+			return context.Cause(ctx)
 		case err := <-canary.errors:
 			return err
 		}

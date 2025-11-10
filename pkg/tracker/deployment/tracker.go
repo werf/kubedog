@@ -379,7 +379,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				fmt.Printf("Deployment `%s` tracker context canceled: %s\n", d.ResourceName, context.Cause(ctx))
 			}
 
-			return nil
+			return context.Cause(ctx)
 		case err := <-d.errors:
 			return err
 		}
