@@ -50,10 +50,10 @@ type DynamicReadinessTracker struct {
 	saveLogsOnlyForContainers       []string
 	saveLogsByRegex                 *regexp.Regexp
 	saveLogsByRegexForContainers    map[string]*regexp.Regexp
-	skipLogsByRegex                 *regexp.Regexp
-	skipLogsByRegexForContainers    map[string]*regexp.Regexp
 	ignoreLogs                      bool
 	ignoreLogsForContainers         []string
+	ignoreLogsByRegex               *regexp.Regexp
+	ignoreLogsByRegexForContainers  map[string]*regexp.Regexp
 	saveEvents                      bool
 }
 
@@ -160,24 +160,24 @@ func NewDynamicReadinessTracker(
 	}
 
 	return &DynamicReadinessTracker{
-		resourceName:                 resourceName,
-		resourceNamespace:            resourceNamespace,
-		resourceGVK:                  resourceGVK,
-		resourceHumanID:              util.ResourceHumanID(resourceName, resourceNamespace, resourceGVK, mapper),
-		taskState:                    taskState,
-		logStore:                     logStore,
-		mapper:                       mapper,
-		tracker:                      tracker,
-		timeout:                      timeout,
-		noActivityTimeout:            noActivityTimeout,
-		saveLogsOnlyForContainers:    opts.SaveLogsOnlyForContainers,
-		saveLogsByRegex:              opts.SaveLogsByRegex,
-		saveLogsByRegexForContainers: opts.SaveLogsByRegexForContainers,
-		skipLogsByRegex:              opts.SkipLogsByRegex,
-		skipLogsByRegexForContainers: opts.SkipLogsByRegexForContainers,
-		ignoreLogs:                   opts.IgnoreLogs,
-		ignoreLogsForContainers:      opts.IgnoreLogsForContainers,
-		saveEvents:                   opts.SaveEvents,
+		resourceName:                   resourceName,
+		resourceNamespace:              resourceNamespace,
+		resourceGVK:                    resourceGVK,
+		resourceHumanID:                util.ResourceHumanID(resourceName, resourceNamespace, resourceGVK, mapper),
+		taskState:                      taskState,
+		logStore:                       logStore,
+		mapper:                         mapper,
+		tracker:                        tracker,
+		timeout:                        timeout,
+		noActivityTimeout:              noActivityTimeout,
+		saveLogsOnlyForContainers:      opts.SaveLogsOnlyForContainers,
+		saveLogsByRegex:                opts.SaveLogsByRegex,
+		saveLogsByRegexForContainers:   opts.SaveLogsByRegexForContainers,
+		ignoreLogsByRegex:              opts.IgnoreLogsByRegex,
+		ignoreLogsByRegexForContainers: opts.IgnoreLogsByRegexForContainers,
+		ignoreLogs:                     opts.IgnoreLogs,
+		ignoreLogsForContainers:        opts.IgnoreLogsForContainers,
+		saveEvents:                     opts.SaveEvents,
 	}, nil
 }
 
@@ -190,10 +190,10 @@ type DynamicReadinessTrackerOptions struct {
 	SaveLogsOnlyForContainers                []string
 	SaveLogsByRegex                          *regexp.Regexp
 	SaveLogsByRegexForContainers             map[string]*regexp.Regexp
-	SkipLogsByRegex                          *regexp.Regexp
-	SkipLogsByRegexForContainers             map[string]*regexp.Regexp
 	IgnoreLogs                               bool
 	IgnoreLogsForContainers                  []string
+	IgnoreLogsByRegex                        *regexp.Regexp
+	IgnoreLogsByRegexForContainers           map[string]*regexp.Regexp
 	SaveEvents                               bool
 }
 
@@ -1216,18 +1216,18 @@ func (t *DynamicReadinessTracker) handlePodLogChunk(logChunk *pod.PodLogChunk, l
 
 	logLines := logChunk.LogLines
 
-	if t.skipLogsByRegex != nil {
+	if t.ignoreLogsByRegex != nil {
 		var filteredLogLines []display.LogLine
 		for _, logLine := range logLines {
-			if !t.skipLogsByRegex.MatchString(logLine.Message) {
+			if !t.ignoreLogsByRegex.MatchString(logLine.Message) {
 				filteredLogLines = append(filteredLogLines, logLine)
 			}
 		}
 		logLines = filteredLogLines
 	}
 
-	if len(t.skipLogsByRegexForContainers) > 0 {
-		if regex, ok := t.skipLogsByRegexForContainers[logChunk.ContainerName]; ok {
+	if len(t.ignoreLogsByRegexForContainers) > 0 {
+		if regex, ok := t.ignoreLogsByRegexForContainers[logChunk.ContainerName]; ok {
 			var filteredLogLines []display.LogLine
 			for _, logLine := range logLines {
 				if !regex.MatchString(logLine.Message) {
