@@ -107,22 +107,38 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					rsObj := &appsv1.ReplicaSet{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
 					return labelSelector.Matches(apilabels.Set(rsObj.GetLabels()))
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						rsObj := &appsv1.ReplicaSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
 						r.ReplicaSetAdded <- rsObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						rsObj := &appsv1.ReplicaSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, rsObj))
 						r.ReplicaSetModified <- rsObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						rsObj := &appsv1.ReplicaSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
 						r.ReplicaSetDeleted <- rsObj

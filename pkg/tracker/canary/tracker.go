@@ -151,6 +151,10 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					canaryObj := &v1beta1.Canary{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
 					return canaryObj.Name == canary.ResourceName &&
@@ -158,16 +162,28 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						canaryObj := &v1beta1.Canary{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
 						canary.objectAdded <- canaryObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						canaryObj := &v1beta1.Canary{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, canaryObj))
 						canary.objectModified <- canaryObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						canaryObj := &v1beta1.Canary{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
 						canary.objectDeleted <- canaryObj

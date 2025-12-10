@@ -586,6 +586,10 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					podObj := &corev1.Pod{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
 					return podObj.Name == pod.ResourceName &&
@@ -593,16 +597,28 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
 						pod.objectAdded <- podObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, podObj))
 						pod.objectModified <- podObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
 						pod.objectDeleted <- podObj

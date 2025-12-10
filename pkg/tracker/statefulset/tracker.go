@@ -313,6 +313,10 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					statefulsetObj := &appsv1.StatefulSet{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
 					return statefulsetObj.Name == d.ResourceName &&
@@ -320,16 +324,28 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						statefulsetObj := &appsv1.StatefulSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
 						d.resourceAdded <- statefulsetObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						statefulsetObj := &appsv1.StatefulSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, statefulsetObj))
 						d.resourceModified <- statefulsetObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						statefulsetObj := &appsv1.StatefulSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
 						d.resourceDeleted <- statefulsetObj

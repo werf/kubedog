@@ -95,17 +95,29 @@ func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					eventObj := &corev1.Event{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
 					return eventObj.InvolvedObject.UID == involvedObjMetadata.GetUID()
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						eventObj := &corev1.Event{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
 						e.handleEvent(eventObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						eventObj := &corev1.Event{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, eventObj))
 						e.handleEvent(eventObj)

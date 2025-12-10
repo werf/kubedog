@@ -272,6 +272,10 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					jobObj := &batchv1.Job{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, jobObj))
 					return jobObj.Name == job.ResourceName &&
@@ -279,16 +283,28 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						jobObj := &batchv1.Job{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, jobObj))
 						job.objectAdded <- jobObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						jobObj := &batchv1.Job{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, jobObj))
 						job.objectModified <- jobObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						jobObj := &batchv1.Job{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, jobObj))
 						job.objectDeleted <- jobObj
