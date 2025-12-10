@@ -2,6 +2,7 @@ package pod
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,8 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/event"
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
+
+var errLogStreamingTimeout = errors.New("log streaming timeout reached")
 
 type ContainerError struct {
 	Message       string
@@ -425,21 +428,17 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	return nil
 }
 
-func (pod *Tracker) followContainerLogs(ctx context.Context, containerName string) error {
-	if pod.ignoreLogs {
-		return nil
-	}
+func (pod *Tracker) followContainerLogs(ctx context.Context, containerName string, sinceTime *metav1.Time) error {
+	// See: https://github.com/kubernetes/kubernetes/issues/104580#issuecomment-905744137
+	ctx, _ = context.WithTimeoutCause(ctx, 3*time.Hour, errLogStreamingTimeout)
 
 	logOpts := &corev1.PodLogOptions{
 		Container:  containerName,
 		Timestamps: true,
 		Follow:     true,
+		SinceTime:  sinceTime,
 	}
-	if !pod.LogsFromTime.IsZero() {
-		logOpts.SinceTime = &metav1.Time{
-			Time: pod.LogsFromTime,
-		}
-	}
+
 	req := pod.Kube.CoreV1().
 		Pods(pod.Namespace).
 		GetLogs(pod.ResourceName, logOpts)
@@ -496,6 +495,12 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 				fmt.Printf("Follow container logs for pod %q context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
 
+			if errors.Is(ctx.Err(), errLogStreamingTimeout) {
+				return pod.followContainerLogs(ctx, containerName, &metav1.Time{
+					Time: time.Now(),
+				})
+			}
+
 			return nil
 		default:
 		}
@@ -510,12 +515,23 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 		case state := <-containerTrackerStateChanges:
 			switch state {
 			case tracker.FollowingContainerLogs:
-				err := pod.followContainerLogs(ctx, containerName)
-				if err != nil {
+				if pod.ignoreLogs {
+					return nil
+				}
+
+				var sinceTime *metav1.Time
+				if !pod.LogsFromTime.IsZero() {
+					sinceTime = &metav1.Time{
+						Time: pod.LogsFromTime,
+					}
+				}
+
+				if err := pod.followContainerLogs(ctx, containerName, sinceTime); err != nil {
 					if debug.Debug() {
 						fmt.Fprintf(os.Stderr, "pod/%s container/%s logs streaming error: %s\n", pod.ResourceName, containerName, err)
 					}
 				}
+
 				return nil
 
 			case tracker.ContainerTrackerDone:
