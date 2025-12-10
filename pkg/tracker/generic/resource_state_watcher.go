@@ -70,18 +70,34 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					unstructObj := obj.(*unstructured.Unstructured)
 					return unstructObj.GetName() == w.ResourceID.Name &&
 						(!namespaced || unstructObj.GetNamespace() == w.ResourceID.Namespace)
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						resourceAddedCh <- obj.(*unstructured.Unstructured)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						resourceModifiedCh <- newObj.(*unstructured.Unstructured)
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						resourceDeletedCh <- obj.(*unstructured.Unstructured)
 					},
 				},

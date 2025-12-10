@@ -305,6 +305,10 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					daemonsetObj := &appsv1.DaemonSet{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
 					return daemonsetObj.Name == d.ResourceName &&
@@ -312,16 +316,28 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						daemonsetObj := &appsv1.DaemonSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
 						d.resourceAdded <- daemonsetObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						daemonsetObj := &appsv1.DaemonSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, daemonsetObj))
 						d.resourceModified <- daemonsetObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						daemonsetObj := &appsv1.DaemonSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
 						d.resourceDeleted <- daemonsetObj

@@ -431,6 +431,10 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 		handler, err := inf.AddEventHandler(
 			cache.FilteringResourceEventHandler{
 				FilterFunc: func(obj interface{}) bool {
+					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+						obj = d.Obj
+					}
+
 					deploymentObj := &appsv1.Deployment{}
 					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
 					return deploymentObj.Name == d.ResourceName &&
@@ -438,16 +442,28 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 				},
 				Handler: cache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						deploymentObj := &appsv1.Deployment{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
 						d.resourceAdded <- deploymentObj
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
+						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
+							newObj = d.Obj
+						}
+
 						deploymentObj := &appsv1.Deployment{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, deploymentObj))
 						d.resourceModified <- deploymentObj
 					},
 					DeleteFunc: func(obj interface{}) {
+						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+							obj = d.Obj
+						}
+
 						deploymentObj := &appsv1.Deployment{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
 						d.resourceDeleted <- deploymentObj
