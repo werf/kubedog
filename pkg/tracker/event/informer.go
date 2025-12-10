@@ -169,13 +169,21 @@ func (e *EventInformer) handleInitialEvents(inform *informer.Informer, involvedU
 
 // handleEvent sends a message to Messages channel for all events and a message to Failures channel for Failed events
 func (e *EventInformer) handleEvent(event *corev1.Event) {
-	uid := event.UID
-	msg := fmt.Sprintf("%s: %s", event.Reason, event.Message)
-
-	if _, ok := e.initialEventUids[uid]; ok {
-		delete(e.initialEventUids, uid)
+	if _, ok := e.initialEventUids[event.UID]; ok {
+		delete(e.initialEventUids, event.UID)
 		return
 	}
+
+	// Docker Hub leaks username and token, so we sanitize the message
+	if strings.Contains(event.Message, "You have reached your pull rate limit as") {
+		regex := regexp.MustCompile(`(.*You have reached your pull rate limit) as .*`)
+		sub := regex.FindStringSubmatch(event.Message)
+		if sub != nil {
+			event.Message = sub[1]
+		}
+	}
+
+	msg := fmt.Sprintf("%s: %s", event.Reason, event.Message)
 
 	if debug.Debug() {
 		fmt.Printf("  %s got normal event: %s\n", e.FullResourceName, msg)
