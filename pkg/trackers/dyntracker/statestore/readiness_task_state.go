@@ -211,7 +211,9 @@ func initReadinessTaskStateFailureConditions(failMode multitrack.FailMode, total
 		return failed
 	})
 
-	if failMode != multitrack.IgnoreAndContinueDeployProcess {
+	switch failMode {
+	case multitrack.IgnoreAndContinueDeployProcess:
+	case multitrack.FailWholeDeployProcessImmediately, multitrack.LegacyHopeUntilEndOfDeployProcess:
 		failureConditions = append(failureConditions, func(taskState *ReadinessTaskState) bool {
 			var totalErrsCount int
 			lo.Must0(domigraph.BFS(taskState.resourceStatesTree, util.ResourceID(taskState.name, taskState.namespace, taskState.groupVersionKind), func(id string) bool {
@@ -231,6 +233,8 @@ func initReadinessTaskStateFailureConditions(failMode multitrack.FailMode, total
 
 			return totalErrsCount > totalAllowFailuresCount
 		})
+	default:
+		panic("unsupported fail mode")
 	}
 
 	return failureConditions
