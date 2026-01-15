@@ -151,6 +151,11 @@ func NewDynamicReadinessTracker(
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
+	case schema.GroupKind{Group: "", Kind: "Pod"}:
+		tracker = pod.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, pod.Options{
+			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
+			IgnoreLogs:                               opts.IgnoreLogs,
+		})
 	default:
 		resid := resid.NewResourceID(resourceName, resourceGVK, resid.NewResourceIDOptions{
 			Namespace: resourceNamespace,
@@ -218,6 +223,10 @@ func (t *DynamicReadinessTracker) Track(ctx context.Context) error {
 	case *canary.Tracker:
 		if err := t.trackCanary(ctx, tracker); err != nil {
 			return fmt.Errorf("track canary: %w", err)
+		}
+	case *pod.Tracker:
+		if err := t.trackPod(ctx, tracker); err != nil {
+			return fmt.Errorf("track standalone pod: %w", err)
 		}
 	case *generic.Tracker:
 		if err := t.trackGeneric(ctx, tracker); err != nil {
@@ -724,6 +733,117 @@ func (t *DynamicReadinessTracker) trackJob(ctx context.Context, tracker *job.Tra
 	}
 }
 
+func (t *DynamicReadinessTracker) trackPod(ctx context.Context, tracker *pod.Tracker) error {
+	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
+	defer trackCtxCancelFn()
+
+	doneChan := make(chan struct{})
+	trackErrCh := make(chan error, 1)
+
+	go func() {
+		if err := tracker.Start(trackCtx); err != nil {
+			trackErrCh <- err
+		} else {
+			doneChan <- struct{}{}
+		}
+	}()
+
+	for {
+		select {
+		case err := <-trackErrCh:
+			if err != nil && !errors.Is(err, commontracker.ErrStopTrack) {
+				return fmt.Errorf("track resource %q: %w", t.resourceHumanID, err)
+			}
+
+			return nil
+		case status := <-tracker.Added:
+			var (
+				abort    bool
+				abortErr error
+			)
+			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.handlePodStatus(&status, ts)
+				t.setRootResourceCreated(ts)
+				abort, abortErr = t.handleTaskStateStatus(ts)
+			})
+
+			if abort {
+				return abortErr
+			}
+		case status := <-tracker.Succeeded:
+			var (
+				abort    bool
+				abortErr error
+			)
+			status.IsReady = true
+
+			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.handlePodStatus(&status, ts)
+				abort, abortErr = t.handleTaskStateStatus(ts)
+			})
+
+			if abort {
+				return abortErr
+			}
+		case status := <-tracker.Ready:
+			var (
+				abort    bool
+				abortErr error
+			)
+			status.IsReady = true
+
+			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.handlePodStatus(&status, ts)
+				abort, abortErr = t.handleTaskStateStatus(ts)
+			})
+
+			if abort {
+				return abortErr
+			}
+		case report := <-tracker.Failed:
+			var (
+				abort    bool
+				abortErr error
+			)
+			report.PodStatus.IsFailed = true
+
+			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.handlePodStatus(&report.PodStatus, ts)
+				abort, abortErr = t.handleTaskStateStatus(ts)
+			})
+
+			if abort {
+				return abortErr
+			}
+		case status := <-tracker.Status:
+			var (
+				abort    bool
+				abortErr error
+			)
+			t.taskState.RWTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.handlePodStatus(&status, ts)
+				abort, abortErr = t.handleTaskStateStatus(ts)
+			})
+
+			if abort {
+				return abortErr
+			}
+		case msg := <-tracker.EventMsg:
+			t.taskState.RTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.handleEventMessage(msg, ts, time.Now())
+			})
+		case chunk := <-tracker.ContainerLogChunk:
+			t.taskState.RTransaction(func(ts *statestore.ReadinessTaskState) {
+				t.logStore.RWTransaction(func(ls *logstore.LogStore) {
+					t.handlePodLogChunk(&pod.PodLogChunk{ContainerLogChunk: chunk, PodName: tracker.ResourceName}, ls, ts)
+				})
+			})
+		case <-doneChan:
+			return nil
+		}
+	}
+}
+
 func (t *DynamicReadinessTracker) trackCanary(ctx context.Context, tracker *canary.Tracker) error {
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
@@ -949,6 +1069,36 @@ func (t *DynamicReadinessTracker) handlePodsFromJobStatus(status *job.JobStatus,
 				setPodStatusAttribute(rs, pod.StatusIndicator.Value)
 			})
 		}
+	}
+}
+
+func (t *DynamicReadinessTracker) handlePodStatus(status *pod.PodStatus, taskState *statestore.ReadinessTaskState) {
+	taskState.AddResourceState(status.Name, taskState.Namespace(), podGvk)
+
+	if status.StatusIndicator != nil {
+		taskState.ResourceState(status.Name, taskState.Namespace(), podGvk).RWTransaction(func(rs *statestore.ResourceState) {
+			setPodStatusAttribute(rs, status.StatusIndicator.Value)
+		})
+	}
+
+	if status.IsReady {
+		taskState.SetStatus(statestore.ReadinessTaskStatusReady)
+
+		for _, state := range taskState.ResourceStates() {
+			state.RWTransaction(func(rs *statestore.ResourceState) {
+				rs.SetStatus(statestore.ResourceStatusReady)
+			})
+		}
+
+		return
+	}
+
+	if status.IsFailed {
+		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
+			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+		})
+
+		return
 	}
 }
 
