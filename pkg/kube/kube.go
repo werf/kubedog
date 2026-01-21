@@ -3,7 +3,6 @@ package kube
 import (
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,6 +80,9 @@ type KubeConfigOptions struct {
 	ConfigPath          string
 	ConfigDataBase64    string
 	ConfigPathMergeList []string
+
+	BearerToken     string
+	BearerTokenFile string
 }
 
 type KubeConfig struct {
@@ -91,8 +93,9 @@ type KubeConfig struct {
 
 func GetKubeConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 	// Try to load from kubeconfig in flags or from ~/.kube/config
-	config, outOfClusterErr := getOutOfClusterConfig(opts.Context, opts.ConfigPath, opts.ConfigDataBase64, opts.ConfigPathMergeList)
-
+	config, outOfClusterErr := getOutOfClusterConfig(
+		opts,
+	)
 	if config == nil {
 		if hasInClusterConfig() {
 			// Try to configure as inCluster
@@ -135,8 +138,11 @@ type ContextClient struct {
 func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient, error) {
 	// Try to load contexts from kubeconfig in flags or from ~/.kube/config
 	var outOfClusterErr error
-	contexts, outOfClusterErr := getOutOfClusterContextsClients(opts.ConfigPath, opts.ConfigDataBase64, opts.ConfigPathMergeList)
-	// return if contexts are loaded successfully
+	contexts, outOfClusterErr := getOutOfClusterContextsClients(KubeConfigOptions{
+		ConfigPath:          opts.ConfigPath,
+		ConfigDataBase64:    opts.ConfigDataBase64,
+		ConfigPathMergeList: opts.ConfigPathMergeList,
+	})
 	if len(contexts) > 0 {
 		return contexts, nil
 	}
@@ -229,17 +235,22 @@ func parseConfigDataBase64(configDataBase64 string) ([]byte, error) {
 	return configData, nil
 }
 
-func getOutOfClusterConfig(context, configPath, configDataBase64 string, configPathMergeList []string) (*KubeConfig, error) {
+func getOutOfClusterConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 	res := &KubeConfig{}
 
-	configData, err := parseConfigDataBase64(configDataBase64)
+	configData, err := parseConfigDataBase64(opts.ConfigDataBase64)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse base64 config data: %w", err)
 	}
 
-	clientConfig, err := GetClientConfig(context, configPath, configData, configPathMergeList)
+	clientConfig, err := GetClientConfig(
+		opts.Context,
+		opts.ConfigPath,
+		configData,
+		opts.ConfigPathMergeList,
+	)
 	if err != nil {
-		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
+		return nil, makeOutOfClusterClientConfigError(opts.ConfigDataBase64, opts.Context, err)
 	}
 
 	if ns, _, err := clientConfig.Namespace(); err != nil {
@@ -250,35 +261,38 @@ func getOutOfClusterConfig(context, configPath, configDataBase64 string, configP
 
 	config, err := clientConfig.ClientConfig()
 	if err != nil {
-		return nil, makeOutOfClusterClientConfigError(configPath, context, err)
+		return nil, makeOutOfClusterClientConfigError(opts.ConfigDataBase64, opts.Context, err)
 	}
 	if config == nil {
 		return nil, nil
 	}
+
+	applyBearerToken(config, opts)
+
 	res.Config = config
 
-	if context == "" {
+	if opts.Context == "" {
 		if rc, err := clientConfig.RawConfig(); err != nil {
 			return nil, fmt.Errorf("cannot get raw kubernetes config: %w", err)
 		} else {
 			res.Context = rc.CurrentContext
 		}
 	} else {
-		res.Context = context
+		res.Context = opts.Context
 	}
 
 	return res, nil
 }
 
-func getOutOfClusterContextsClients(configPath, configDataBase64 string, configPathMergeList []string) ([]*ContextClient, error) {
+func getOutOfClusterContextsClients(opts KubeConfigOptions) ([]*ContextClient, error) {
 	var res []*ContextClient
 
-	configData, err := parseConfigDataBase64(configDataBase64)
+	configData, err := parseConfigDataBase64(opts.ConfigDataBase64)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse base64 config data: %w", err)
 	}
 
-	clientConfig, err := GetClientConfig("", configPath, configData, configPathMergeList)
+	clientConfig, err := GetClientConfig("", opts.ConfigPath, configData, opts.ConfigPathMergeList)
 	if err != nil {
 		return nil, err
 	}
@@ -289,15 +303,17 @@ func getOutOfClusterContextsClients(configPath, configDataBase64 string, configP
 	}
 
 	for contextName, context := range rc.Contexts {
-		clientConfig, err := GetClientConfig(contextName, configPath, configData, configPathMergeList)
+		clientConfig, err := GetClientConfig(contextName, opts.ConfigPath, configData, opts.ConfigPathMergeList)
 		if err != nil {
-			return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
+			return nil, makeOutOfClusterClientConfigError(opts.ConfigPath, contextName, err)
 		}
 
 		config, err := clientConfig.ClientConfig()
 		if err != nil {
-			return nil, makeOutOfClusterClientConfigError(configPath, contextName, err)
+			return nil, makeOutOfClusterClientConfigError(opts.ConfigPath, contextName, err)
 		}
+
+		applyBearerToken(config, opts)
 
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -323,7 +339,7 @@ func getInClusterConfig() (*KubeConfig, error) {
 		res.Config = config
 	}
 
-	if data, err := ioutil.ReadFile(kubeNamespaceFilePath); err != nil {
+	if data, err := os.ReadFile(kubeNamespaceFilePath); err != nil {
 		return nil, fmt.Errorf("in-cluster configuration problem: cannot determine default kubernetes namespace: error reading %s: %w", kubeNamespaceFilePath, err)
 	} else {
 		res.DefaultNamespace = string(data)
@@ -402,4 +418,14 @@ func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.
 	return restmapper.NewShortcutExpander(mapper, *cachedDiscoveryClient, func(s string) {
 		fmt.Printf(s)
 	})
+}
+
+func applyBearerToken(config *rest.Config, opts KubeConfigOptions) {
+	if opts.BearerToken != "" {
+		config.BearerToken = opts.BearerToken
+		config.BearerTokenFile = ""
+	} else if opts.BearerTokenFile != "" {
+		config.BearerTokenFile = opts.BearerTokenFile
+		config.BearerToken = ""
+	}
 }
