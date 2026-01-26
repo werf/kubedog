@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/werf/kubedog/pkg/utils"
 )
@@ -185,8 +186,8 @@ func setConfigPathMergeListEnvironment(configPathMergeList []string) error {
 	return nil
 }
 
-func GetClientConfig(context, configPath string, configData []byte, configPathMergeList []string) (clientcmd.ClientConfig, error) {
-	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
+func GetClientConfig(context, configPath string, configData []byte, configPathMergeList []string, overrides *clientcmd.ConfigOverrides) (clientcmd.ClientConfig, error) {
+
 	if context != "" {
 		overrides.CurrentContext = context
 	}
@@ -243,11 +244,24 @@ func getOutOfClusterConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 		return nil, fmt.Errorf("unable to parse base64 config data: %w", err)
 	}
 
+	overrides := &clientcmd.ConfigOverrides{
+		ClusterDefaults: clientcmd.ClusterDefaults,
+		AuthInfo: api.AuthInfo{
+			Token:     opts.BearerToken,
+			TokenFile: opts.BearerTokenFile,
+		},
+	}
+
+	if opts.Context != "" {
+		overrides.CurrentContext = opts.Context
+	}
+
 	clientConfig, err := GetClientConfig(
 		opts.Context,
 		opts.ConfigPath,
 		configData,
 		opts.ConfigPathMergeList,
+		overrides,
 	)
 	if err != nil {
 		return nil, makeOutOfClusterClientConfigError(opts.ConfigDataBase64, opts.Context, err)
@@ -266,8 +280,6 @@ func getOutOfClusterConfig(opts KubeConfigOptions) (*KubeConfig, error) {
 	if config == nil {
 		return nil, nil
 	}
-
-	applyBearerToken(config, opts)
 
 	res.Config = config
 
@@ -292,7 +304,21 @@ func getOutOfClusterContextsClients(opts KubeConfigOptions) ([]*ContextClient, e
 		return nil, fmt.Errorf("unable to parse base64 config data: %w", err)
 	}
 
-	clientConfig, err := GetClientConfig("", opts.ConfigPath, configData, opts.ConfigPathMergeList)
+	overrides := &clientcmd.ConfigOverrides{
+		ClusterDefaults: clientcmd.ClusterDefaults,
+		AuthInfo: api.AuthInfo{
+			Token:     opts.BearerToken,
+			TokenFile: opts.BearerTokenFile,
+		},
+	}
+
+	clientConfig, err := GetClientConfig(
+		opts.Context,
+		opts.ConfigPath,
+		configData,
+		opts.ConfigPathMergeList,
+		overrides,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +329,13 @@ func getOutOfClusterContextsClients(opts KubeConfigOptions) ([]*ContextClient, e
 	}
 
 	for contextName, context := range rc.Contexts {
-		clientConfig, err := GetClientConfig(contextName, opts.ConfigPath, configData, opts.ConfigPathMergeList)
+		clientConfig, err := GetClientConfig(
+			opts.Context,
+			opts.ConfigPath,
+			configData,
+			opts.ConfigPathMergeList,
+			overrides,
+		)
 		if err != nil {
 			return nil, makeOutOfClusterClientConfigError(opts.ConfigPath, contextName, err)
 		}
@@ -312,8 +344,6 @@ func getOutOfClusterContextsClients(opts KubeConfigOptions) ([]*ContextClient, e
 		if err != nil {
 			return nil, makeOutOfClusterClientConfigError(opts.ConfigPath, contextName, err)
 		}
-
-		applyBearerToken(config, opts)
 
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -418,14 +448,4 @@ func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.
 	return restmapper.NewShortcutExpander(mapper, *cachedDiscoveryClient, func(s string) {
 		fmt.Printf(s)
 	})
-}
-
-func applyBearerToken(config *rest.Config, opts KubeConfigOptions) {
-	if opts.BearerToken != "" {
-		config.BearerToken = opts.BearerToken
-		config.BearerTokenFile = ""
-	} else if opts.BearerTokenFile != "" {
-		config.BearerTokenFile = opts.BearerTokenFile
-		config.BearerToken = ""
-	}
 }

@@ -169,6 +169,6 @@ func (getter *ClientGetterFromConfigData) getRawKubeConfigLoader() (clientcmd.Cl
 	if data, err := base64.StdEncoding.DecodeString(getter.ConfigDataBase64); err != nil {
 		return nil, fmt.Errorf("unable to decode base64 config data: %w", err)
 	} else {
-		return GetClientConfig(getter.Context, "", data, nil)
+		return GetClientConfig(getter.Context, "", data, nil, nil)
 	}
 }
