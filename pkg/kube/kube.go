@@ -187,7 +187,6 @@ func setConfigPathMergeListEnvironment(configPathMergeList []string) error {
 }
 
 func GetClientConfig(context, configPath string, configData []byte, configPathMergeList []string, overrides *clientcmd.ConfigOverrides) (clientcmd.ClientConfig, error) {
-
 	if context != "" {
 		overrides.CurrentContext = context
 	}
