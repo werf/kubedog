@@ -128,6 +128,8 @@ type GetAllContextsClientsOptions struct {
 	ConfigPath          string
 	ConfigDataBase64    string
 	ConfigPathMergeList []string
+	BearerToken         string
+	BearerTokenFile     string
 }
 
 type ContextClient struct {
@@ -139,6 +141,7 @@ type ContextClient struct {
 func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient, error) {
 	// Try to load contexts from kubeconfig in flags or from ~/.kube/config
 	var outOfClusterErr error
+
 	contexts, outOfClusterErr := getOutOfClusterContextsClients(KubeConfigOptions{
 		ConfigPath:          opts.ConfigPath,
 		ConfigDataBase64:    opts.ConfigDataBase64,
@@ -153,10 +156,23 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient,
 		if err != nil {
 			return nil, err
 		}
-
 		return []*ContextClient{contextClient}, nil
 	}
-	// if not in cluster return outOfCluster error
+
+	tokenClient, err := getTokenContextClient(KubeConfigOptions{
+		ConfigPath:          opts.ConfigPath,
+		ConfigDataBase64:    opts.ConfigDataBase64,
+		ConfigPathMergeList: opts.ConfigPathMergeList,
+		BearerToken:         opts.BearerToken,
+		BearerTokenFile:     opts.BearerTokenFile,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if tokenClient != nil {
+		return []*ContextClient{tokenClient}, nil
+	}
+
 	if outOfClusterErr != nil {
 		return nil, outOfClusterErr
 	}
@@ -447,4 +463,26 @@ func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.
 	return restmapper.NewShortcutExpander(mapper, *cachedDiscoveryClient, func(s string) {
 		fmt.Printf(s)
 	})
+}
+
+func getTokenContextClient(opts KubeConfigOptions) (*ContextClient, error) {
+	kubeConfig, err := getOutOfClusterConfig(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if kubeConfig == nil || kubeConfig.Config == nil {
+		return nil, nil
+	}
+
+	clientset, err := kubernetes.NewForConfig(kubeConfig.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ContextClient{
+		ContextName:      "token",
+		ContextNamespace: kubeConfig.DefaultNamespace,
+		Client:           clientset,
+	}, nil
 }
