@@ -84,6 +84,10 @@ type KubeConfigOptions struct {
 
 	BearerToken     string
 	BearerTokenFile string
+
+	APIServerURL string
+	Insecure     bool
+	CADataBase64 string
 }
 
 type KubeConfig struct {
@@ -130,6 +134,10 @@ type GetAllContextsClientsOptions struct {
 	ConfigPathMergeList []string
 	BearerToken         string
 	BearerTokenFile     string
+
+	APIServerURL string
+	Insecure     bool
+	CADataBase64 string
 }
 
 type ContextClient struct {
@@ -165,6 +173,9 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient,
 		ConfigPathMergeList: opts.ConfigPathMergeList,
 		BearerToken:         opts.BearerToken,
 		BearerTokenFile:     opts.BearerTokenFile,
+		APIServerURL:        opts.APIServerURL,
+		Insecure:            opts.Insecure,
+		CADataBase64:        opts.CADataBase64,
 	})
 	if err != nil {
 		return nil, err
@@ -466,23 +477,27 @@ func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.
 }
 
 func getTokenContextClient(opts KubeConfigOptions) (*ContextClient, error) {
-	kubeConfig, err := getOutOfClusterConfig(opts)
-	if err != nil {
-		return nil, err
+	if opts.BearerToken == "" || opts.APIServerURL == "" {
+		return nil, fmt.Errorf("cannot create client: missing token or API server URL")
 	}
 
-	if kubeConfig == nil || kubeConfig.Config == nil {
-		return nil, nil
+	cfg := &rest.Config{
+		Host:        opts.APIServerURL,
+		BearerToken: opts.BearerToken,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: opts.Insecure,
+			CAData:   []byte(opts.CADataBase64),
+		},
 	}
 
-	clientset, err := kubernetes.NewForConfig(kubeConfig.Config)
+	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create kubernetes client: %w", err)
 	}
 
 	return &ContextClient{
 		ContextName:      "token",
-		ContextNamespace: kubeConfig.DefaultNamespace,
+		ContextNamespace: "",
 		Client:           clientset,
 	}, nil
 }
