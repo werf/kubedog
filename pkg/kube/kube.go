@@ -339,7 +339,7 @@ func getOutOfClusterContextsClients(opts KubeConfigOptions) ([]*ContextClient, e
 	}
 
 	clientConfig, err := GetClientConfig(
-		opts.Context,
+		"",
 		opts.ConfigPath,
 		configData,
 		opts.ConfigPathMergeList,
@@ -356,7 +356,7 @@ func getOutOfClusterContextsClients(opts KubeConfigOptions) ([]*ContextClient, e
 
 	for contextName, context := range rc.Contexts {
 		clientConfig, err := GetClientConfig(
-			opts.Context,
+			contextName,
 			opts.ConfigPath,
 			configData,
 			opts.ConfigPathMergeList,
