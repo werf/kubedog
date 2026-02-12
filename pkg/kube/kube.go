@@ -477,8 +477,21 @@ func restMapper(cachedDiscoveryClient *discovery.CachedDiscoveryInterface) meta.
 }
 
 func getTokenContextClient(opts KubeConfigOptions) (*ContextClient, error) {
-	if opts.BearerToken == "" || opts.APIServerURL == "" {
-		return nil, fmt.Errorf("cannot create client: missing token or API server URL")
+	if opts.BearerToken == "" {
+		return nil, fmt.Errorf("missing bearer token")
+	}
+	if opts.APIServerURL == "" {
+		return nil, fmt.Errorf("missing API server URL")
+	}
+
+	var caData []byte
+	var err error
+
+	if opts.CADataBase64 != "" {
+		caData, err = base64.StdEncoding.DecodeString(opts.CADataBase64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CADataBase64: %w", err)
+		}
 	}
 
 	cfg := &rest.Config{
@@ -486,7 +499,7 @@ func getTokenContextClient(opts KubeConfigOptions) (*ContextClient, error) {
 		BearerToken: opts.BearerToken,
 		TLSClientConfig: rest.TLSClientConfig{
 			Insecure: opts.Insecure,
-			CAData:   []byte(opts.CADataBase64),
+			CAData:   caData,
 		},
 	}
 
