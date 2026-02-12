@@ -26,10 +26,9 @@ import (
 )
 
 type PodAddedReport struct {
-	// FIXME !!! DaemonSet is not like Deployment.
-	// FIXME !!! DaemonSet is not related to ReplicaSet.
-	// FIXME !!! Pods of DaemonSet have owner reference directly to ReplicaSet.
-	// FIXME !!! Delete all ReplicaSet-related data.
+	// FIXME: DaemonSet is not like Deployment. DaemonSet is not related to
+	// ReplicaSet. Pods of DaemonSet have owner reference directly to ReplicaSet.
+	// Delete all ReplicaSet-related data.
 	Pod             replicaset.ReplicaSetPod
 	DaemonSetStatus DaemonSetStatus
 }

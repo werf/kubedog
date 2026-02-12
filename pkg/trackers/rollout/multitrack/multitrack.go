@@ -37,7 +37,7 @@ type FailMode string
 const (
 	IgnoreAndContinueDeployProcess    FailMode = "IgnoreAndContinueDeployProcess"
 	FailWholeDeployProcessImmediately FailMode = "FailWholeDeployProcessImmediately"
-	// TODO(v2): get rid. Is an equivalent to FailWholeDeployProcessImmediately at the moment.
+	// TODO(major): get rid. Is an equivalent to FailWholeDeployProcessImmediately at the moment.
 	LegacyHopeUntilEndOfDeployProcess FailMode = "HopeUntilEndOfDeployProcess"
 )
 
@@ -77,7 +77,6 @@ type MultitrackSpec struct {
 	SkipLogs                  bool
 	SkipLogsForContainers     []string
 	ShowLogsOnlyForContainers []string
-	// ShowLogsUntil             DeployCondition TODO
 
 	ShowServiceMessages bool
 }

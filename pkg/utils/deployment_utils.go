@@ -203,8 +203,6 @@ func FindOldReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaS
 // because only the controller itself should do that.
 // However, it does filter out anything whose ControllerRef doesn't match.
 func ListReplicaSets(deployment *appsv1.Deployment, getRSList rsListFunc) ([]*appsv1.ReplicaSet, error) {
-	// TODO: Right now we list replica sets by their labels. We should list them by selector, i.e. the replica set's selector
-	//       should be a superset of the deployment's selector, see https://github.com/kubernetes/kubernetes/issues/19830.
 	namespace := deployment.Namespace
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {

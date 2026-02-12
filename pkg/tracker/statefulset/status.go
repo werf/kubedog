@@ -41,7 +41,6 @@ func NewStatefulSetStatus(object *appsv1.StatefulSet, statusGeneration uint64, i
 		WarningMessages:   warningMessages,
 	}
 
-	// TODO: share common code from deploy, ds and sts
 processingPodsStatuses:
 	for k, v := range podsStatuses {
 		res.Pods[k] = v

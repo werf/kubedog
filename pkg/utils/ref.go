@@ -35,7 +35,6 @@ func GetReference(obj runtime.Object) (*corev1.ObjectReference, error) {
 	// if we are building an object reference to something not yet persisted, we should fallback to scheme
 	kind := gvk.Kind
 	if len(kind) == 0 {
-		// TODO: this is wrong
 		gvks, _, err := scheme.ObjectKinds(obj)
 		if err != nil {
 			return nil, err
