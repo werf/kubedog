@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.14.0](https://www.github.com/werf/kubedog/compare/v0.13.0...v0.14.0) (2026-02-17)
+
+
+### Features
+
+* **crs:** add tracking rules for new custom resources ([2491f12](https://www.github.com/werf/kubedog/commit/2491f12b130a151b6c88b786887cdf88d6db3b5c))
+* greatly decrease Kubernetes apiserver load ([40930a9](https://www.github.com/werf/kubedog/commit/40930a9671a94ea79467579a54a55bd749fb4831))
+* **kube:** add support for kube token ([#387](https://www.github.com/werf/kubedog/issues/387)) ([d2aee7a](https://www.github.com/werf/kubedog/commit/d2aee7a0bd596aa01a8feee0a21073bcf3a0317f))
+* **rules:** add rule for bitnami sealed secrets ([6948d26](https://www.github.com/werf/kubedog/commit/6948d26b3ec6589a0e9d28b340c312c041f8c9fa))
+* **rules:** add rules for kyverno policy and cluster policy ([#361](https://www.github.com/werf/kubedog/issues/361)) ([9511e8d](https://www.github.com/werf/kubedog/commit/9511e8dea1052f41749b82fdfab2fcf033a64cc8))
+* **rules:** add tracking rules for longhorn resources ([#374](https://www.github.com/werf/kubedog/issues/374)) ([f394e96](https://www.github.com/werf/kubedog/commit/f394e96f433a62d91702496efe4e07ff989187e0))
+* **rules:** add tracking rules for prometheus resources ([#373](https://www.github.com/werf/kubedog/issues/373)) ([b80f0b6](https://www.github.com/werf/kubedog/commit/b80f0b64e912b8fc6ebe054cc441baeb5429c680))
+* SaveLogsOnlyForNumberOfContainers option ([d16322b](https://www.github.com/werf/kubedog/commit/d16322b2937684487f5f4fa79cc5fd36292a67b1))
+* **tracker:** pass DynamicReadinessTrackerOptions.IgnoreLogs option down to pod tracker ([94b0a93](https://www.github.com/werf/kubedog/commit/94b0a931853d0508c190ac7e2664bfb322e94779))
+
+
+### Bug Fixes
+
+* add standalone pod tracking ([119a05f](https://www.github.com/werf/kubedog/commit/119a05f598bd3285a41475003441183457f18c36))
+* allow generic tracker static rules for empty string values ([7c68c9c](https://www.github.com/werf/kubedog/commit/7c68c9cbed842e4579d352269f3a5ffeec10f083))
+* consider init container error on tracking ([5da2812](https://www.github.com/werf/kubedog/commit/5da2812db2329e8da091c7eb1afca1ae86e2af3b))
+* disable potentially problematic resource tracking rules ([a3c45a7](https://www.github.com/werf/kubedog/commit/a3c45a7ee17d69da5d5bbca808c238d1cc15a56b))
+* docker hub creds might leak in pod events ([25b3a13](https://www.github.com/werf/kubedog/commit/25b3a13e42fe5681ea19de4709faa144c506faa3))
+* error not returned if context canceled ([6ffc5a1](https://www.github.com/werf/kubedog/commit/6ffc5a117ada8447acd9204d381215ab038b9395))
+* external secrets readying if external secret has no status ([cd33f46](https://www.github.com/werf/kubedog/commit/cd33f4634a6e1c5fb36d7bac18dec48b7f3e1727))
+* fix false positive ([#370](https://www.github.com/werf/kubedog/issues/370)) ([88394a2](https://www.github.com/werf/kubedog/commit/88394a2c5a0059e7a2102bc5948f4eaf9fe90256))
+* improve context cancellation handling and logging ([0ea6140](https://www.github.com/werf/kubedog/commit/0ea61405d2d475646ebf81f8c9484e73b4761f85))
+* **kube:** correctly resolve client config per context ([#388](https://www.github.com/werf/kubedog/issues/388)) ([5d3f8c0](https://www.github.com/werf/kubedog/commit/5d3f8c0f1827939e0543fdb3ebc200cd5ef405dc))
+* leaking goroutines in dynamic tracker ([78ba12f](https://www.github.com/werf/kubedog/commit/78ba12ff7311314214f9c05125059f7ceaf1be5b))
+* no logs collected ([d5883c1](https://www.github.com/werf/kubedog/commit/d5883c1320659637d528bb9c2d225f44ef162bd6))
+* panic "validate rules file" ([acff6da](https://www.github.com/werf/kubedog/commit/acff6dace2cce2c193ad93f3441a7e33e5ad3281))
+* panic if apiserver connection lost ([6356856](https://www.github.com/werf/kubedog/commit/6356856682e6d727627da53255157866a9607f31))
+* retry logs streaming after 3.5 hours to workaround 4h kubelet limit ([c7a4f0b](https://www.github.com/werf/kubedog/commit/c7a4f0b5b2c346dd30be66e672e5c4a799fe565e))
+
 ## [0.13.0](https://www.github.com/werf/kubedog/compare/v0.12.3...v0.13.0) (2025-01-22)
 
 
