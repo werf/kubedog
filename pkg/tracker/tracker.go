@@ -3,14 +3,12 @@ package tracker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 var ErrStopTrack = errors.New("stop tracking now")
@@ -50,23 +48,3 @@ type Options struct {
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 }
 
-type ResourceError struct {
-	msg string
-}
-
-func (r *ResourceError) Error() string {
-	return r.msg
-}
-
-func ResourceErrorf(format string, a ...interface{}) error {
-	return &ResourceError{
-		msg: fmt.Sprintf(format, a...),
-	}
-}
-
-func AdaptInformerError(err error) error {
-	if errors.Is(err, wait.ErrWaitTimeout) {
-		return nil
-	}
-	return err
-}

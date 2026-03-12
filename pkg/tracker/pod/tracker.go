@@ -18,12 +18,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/werf/kubedog/pkg/display"
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
+	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 var errLogStreamingTimeout = errors.New("log streaming timeout reached")
@@ -35,7 +34,7 @@ type ContainerError struct {
 
 type ContainerLogChunk struct {
 	ContainerName string
-	LogLines      []display.LogLine
+	LogLines      []log.LogLine
 }
 
 type PodLogChunk struct {
@@ -175,7 +174,7 @@ func (pod *Tracker) Start(ctx context.Context) error {
 					pod.ContainerTrackerStates[containerName] = newState
 					ch <- newState
 
-					if debug.Debug() {
+					if log.Debug() {
 						fmt.Printf("pod/%s container/%s state changed %v -> %v\n", pod.ResourceName, containerName, oldState, newState)
 					}
 				}
@@ -190,7 +189,7 @@ func (pod *Tracker) Start(ctx context.Context) error {
 			status := PodStatus{}
 			pod.LastStatus = status
 
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("Pod %q deleted status: %#v\n", pod.ResourceName, status)
 			}
 
@@ -225,13 +224,13 @@ func (pod *Tracker) Start(ctx context.Context) error {
 				defer cleanupFn()
 			}
 		case <-ctx.Done():
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("Pod `%s` tracker context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
 
 			return nil
 		case err := <-pod.errors:
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("pod tracker %s error received! err=%v\n", pod.ResourceName, err)
 			}
 
@@ -257,7 +256,7 @@ func (pod *Tracker) handleRegularFailure(reason string) {
 }
 
 func (pod *Tracker) handleProbeTriggeredRestart(event event.ProbeTriggeredRestart) {
-	if debug.Debug() {
+	if log.Debug() {
 		fmt.Printf("Container %q of pod %q processing ProbeTriggeredRestart event\n",
 			pod.ResourceName, event.ContainerName)
 	}
@@ -279,14 +278,14 @@ func (pod *Tracker) handleReadinessProbeFailure(event event.ReadinessProbeFailur
 	}
 
 	if readinessProbe.IsFailureShouldBeIgnoredNow() {
-		if debug.Debug() {
+		if log.Debug() {
 			fmt.Printf("Container %q of pod %q ignores ReadinessProbeFailure: %s\n",
 				pod.ResourceName, event.ContainerName, event.Message)
 		}
 		return
 	}
 
-	if debug.Debug() {
+	if log.Debug() {
 		fmt.Printf("Container %q of pod %q processing ReadinessProbeFailure: %s\n",
 			pod.ResourceName, event.ContainerName, event.Message)
 	}
@@ -418,7 +417,7 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 				pod.ContainerTrackerStates[cs.Name] = newState
 				pod.ContainerTrackerStateChanges[cs.Name] <- newState
 
-				if debug.Debug() {
+				if log.Debug() {
 					fmt.Printf("pod/%s container/%s state changed %v -> %v\n", pod.ResourceName, cs.Name, oldState, newState)
 				}
 			}
@@ -456,7 +455,7 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 		n, err := readCloser.Read(chunkBuf)
 
 		if n > 0 {
-			chunkLines := make([]display.LogLine, 0)
+			chunkLines := make([]log.LogLine, 0)
 			for i := 0; i < n; i++ {
 				bt := chunkBuf[i]
 
@@ -466,7 +465,7 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 
 					lineParts := strings.SplitN(line, " ", 2)
 					if len(lineParts) == 2 {
-						chunkLines = append(chunkLines, display.LogLine{Timestamp: lineParts[0], Message: lineParts[1]})
+						chunkLines = append(chunkLines, log.LogLine{Timestamp: lineParts[0], Message: lineParts[1]})
 					}
 
 					continue
@@ -491,7 +490,7 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 
 		select {
 		case <-ctx.Done():
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("Follow container logs for pod %q context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
 
@@ -527,7 +526,7 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 				}
 
 				if err := pod.followContainerLogs(ctx, containerName, sinceTime); err != nil {
-					if debug.Debug() {
+					if log.Debug() {
 						fmt.Fprintf(os.Stderr, "pod/%s container/%s logs streaming error: %s\n", pod.ResourceName, containerName, err)
 					}
 				}
@@ -542,7 +541,7 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 			}
 
 		case <-ctx.Done():
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("Tracking container for pod `%s` context canceled: %s\n", pod.ResourceName, context.Cause(ctx))
 			}
 

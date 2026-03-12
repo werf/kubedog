@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 )
 
 type ConcurrentInformerFactoryOptions struct{}

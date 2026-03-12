@@ -13,10 +13,10 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
-	"github.com/werf/kubedog/pkg/tracker/debug"
-	"github.com/werf/kubedog/pkg/tracker/resid"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog/pkg/log"
+	"github.com/werf/kubedog/pkg/resid"
 )
 
 const ResourceStatusStabilizingDuration time.Duration = 2 * time.Second
@@ -123,7 +123,7 @@ func (t *Tracker) Track(ctx context.Context, noActivityTimeout time.Duration, ad
 		case <-time.After(noActivityTimeout):
 			failedCh <- NewFailedResourceStatus(fmt.Sprintf("marking resource as failed because no activity for %s", noActivityTimeout))
 		case <-ctx.Done():
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("`%s` tracker context canceled: %s\n", t.ResourceID, context.Cause(ctx))
 			}
 

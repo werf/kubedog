@@ -16,10 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
+	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 type ProbeTriggeredRestart struct {
@@ -185,7 +185,7 @@ func (e *EventInformer) handleEvent(event *corev1.Event) {
 
 	msg := fmt.Sprintf("%s: %s", event.Reason, event.Message)
 
-	if debug.Debug() {
+	if log.Debug() {
 		fmt.Printf("  %s got normal event: %s\n", e.FullResourceName, msg)
 	}
 
@@ -206,7 +206,7 @@ func (e *EventInformer) handleRegularEvent(event *corev1.Event, msg string) {
 	}
 
 	if strings.Contains(event.Reason, "Failed") {
-		if debug.Debug() {
+		if log.Debug() {
 			fmt.Printf("got FAILED EVENT!!! %s\n", msg)
 		}
 		e.Failures <- msg

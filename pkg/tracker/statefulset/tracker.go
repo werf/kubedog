@@ -16,13 +16,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
+	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/tracker/event"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 	"github.com/werf/kubedog/pkg/utils"
 )
 
@@ -280,7 +280,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			}
 
 		case <-ctx.Done():
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("Statefulset `%s` tracker context canceled: %s\n", d.ResourceName, context.Cause(ctx))
 			}
 

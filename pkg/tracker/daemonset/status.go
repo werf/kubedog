@@ -100,19 +100,3 @@ processingPodsStatuses:
 	return res
 }
 
-// DaemonSetRolloutStatus returns a message describing daemon set status, and a bool value indicating if the status is considered done.
-func DaemonSetRolloutStatus(daemon *appsv1.DaemonSet) (string, bool, error) {
-	if daemon.Spec.UpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
-		return "", true, fmt.Errorf("rollout status is only available for %s strategy type", appsv1.RollingUpdateDaemonSetStrategyType)
-	}
-	if daemon.Generation <= daemon.Status.ObservedGeneration {
-		if daemon.Status.UpdatedNumberScheduled < daemon.Status.DesiredNumberScheduled {
-			return fmt.Sprintf("Waiting for daemon set %q rollout to finish: %d out of %d new pods have been updated...\n", daemon.Name, daemon.Status.UpdatedNumberScheduled, daemon.Status.DesiredNumberScheduled), false, nil
-		}
-		if daemon.Status.NumberAvailable < daemon.Status.DesiredNumberScheduled {
-			return fmt.Sprintf("Waiting for daemon set %q rollout to finish: %d of %d updated pods are available...\n", daemon.Name, daemon.Status.NumberAvailable, daemon.Status.DesiredNumberScheduled), false, nil
-		}
-		return fmt.Sprintf("daemon set %q successfully rolled out\n", daemon.Name), true, nil
-	}
-	return "Waiting for daemon set spec update to be observed...\n", false, nil
-}
