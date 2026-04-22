@@ -372,6 +372,11 @@ func SilenceKlogV2(ctx context.Context) error {
 func SilenceKlog(ctx context.Context) error {
 	fs := flag.NewFlagSet("klog", flag.PanicOnError)
 	klog.InitFlags(fs)
+	// Opt into the new klog behavior so that -stderrthreshold is honored even
+	// when -logtostderr=true (the default).
+	// Ref: kubernetes/klog#212, kubernetes/klog#432
+	_ = fs.Set("legacy_stderr_threshold_behavior", "false")
+	_ = fs.Set("stderrthreshold", "INFO")
 
 	if err := fs.Set("logtostderr", "false"); err != nil {
 		return err
