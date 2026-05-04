@@ -138,6 +138,12 @@ type GetAllContextsClientsOptions struct {
 	APIServerURL string
 	Insecure     bool
 	CADataBase64 string
+
+	// ScanNamespaces is used in in-cluster mode only.
+	// When set, creates one virtual context per namespace so that
+	// scan-context-namespace-only scans all listed namespaces instead of
+	// just the pod's own namespace.
+	ScanNamespaces []string
 }
 
 type ContextClient struct {
@@ -160,6 +166,9 @@ func GetAllContextsClients(opts GetAllContextsClientsOptions) ([]*ContextClient,
 	}
 
 	if hasInClusterConfig() {
+		if len(opts.ScanNamespaces) > 0 {
+			return getInClusterContextClientsForNamespaces(opts.ScanNamespaces)
+		}
 		contextClient, err := getInClusterContextClient()
 		if err != nil {
 			return nil, err
@@ -398,7 +407,10 @@ func getInClusterConfig() (*KubeConfig, error) {
 	if data, err := os.ReadFile(kubeNamespaceFilePath); err != nil {
 		return nil, fmt.Errorf("in-cluster configuration problem: cannot determine default kubernetes namespace: error reading %s: %w", kubeNamespaceFilePath, err)
 	} else {
-		res.DefaultNamespace = string(data)
+		res.DefaultNamespace = strings.TrimSpace(string(data))
+		if res.DefaultNamespace == "" {
+			return nil, fmt.Errorf("in-cluster configuration problem: cannot determine default kubernetes namespace: empty namespace in %s", kubeNamespaceFilePath)
+		}
 	}
 
 	return res, nil
@@ -420,6 +432,32 @@ func getInClusterContextClient() (*ContextClient, error) {
 		ContextNamespace: kubeConfig.DefaultNamespace,
 		Client:           clientset,
 	}, nil
+}
+
+// getInClusterContextClientsForNamespaces creates one virtual ContextClient per
+// namespace using the same in-cluster ServiceAccount credentials.
+// This allows scan-context-namespace-only to cover multiple namespaces without
+// requiring a kubeconfig or cluster-wide permissions.
+func getInClusterContextClientsForNamespaces(namespaces []string) ([]*ContextClient, error) {
+	kubeConfig, err := getInClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	clientset, err := kubernetes.NewForConfig(kubeConfig.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	var clients []*ContextClient
+	for _, ns := range namespaces {
+		clients = append(clients, &ContextClient{
+			ContextName:      fmt.Sprintf("inClusterContext/%s", ns),
+			ContextNamespace: ns,
+			Client:           clientset,
+		})
+	}
+	return clients, nil
 }
 
 func GroupVersionResourceByKind(client kubernetes.Interface, kind string) (schema.GroupVersionResource, error) {
