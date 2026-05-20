@@ -100,15 +100,17 @@ func NewDynamicReadinessTracker(
 		resourceGVK = ts.GroupVersionKind()
 	})
 
-	if namespaced, err := util.IsNamespaced(resourceGVK, mapper); err != nil {
+	lowercaseGVK := util.LowercaseGVK(resourceGVK)
+
+	if namespaced, err := util.IsNamespaced(lowercaseGVK, mapper); err != nil {
 		return nil, fmt.Errorf("check if namespaced: %w", err)
 	} else if !namespaced {
 		resourceNamespace = ""
 	}
 
 	var tracker any
-	switch resourceGVK.GroupKind() {
-	case schema.GroupKind{Group: "apps", Kind: "Deployment"}, schema.GroupKind{Group: "extensions", Kind: "Deployment"}:
+	switch lowercaseGVK.GroupKind() {
+	case schema.GroupKind{Group: "apps", Kind: "deployment"}, schema.GroupKind{Group: "extensions", Kind: "deployment"}:
 		tracker = deployment.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
@@ -117,7 +119,7 @@ func NewDynamicReadinessTracker(
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
-	case schema.GroupKind{Group: "apps", Kind: "DaemonSet"}, schema.GroupKind{Group: "extensions", Kind: "DaemonSet"}:
+	case schema.GroupKind{Group: "apps", Kind: "daemonset"}, schema.GroupKind{Group: "extensions", Kind: "daemonset"}:
 		tracker = daemonset.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
@@ -126,14 +128,14 @@ func NewDynamicReadinessTracker(
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
-	case schema.GroupKind{Group: "flagger.app", Kind: "Canary"}:
+	case schema.GroupKind{Group: "flagger.app", Kind: "canary"}:
 		tracker = canary.NewTracker(resourceName, resourceNamespace, staticClient, dynamicClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
-	case schema.GroupKind{Group: "apps", Kind: "StatefulSet"}:
+	case schema.GroupKind{Group: "apps", Kind: "statefulset"}:
 		tracker = statefulset.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
@@ -142,7 +144,7 @@ func NewDynamicReadinessTracker(
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
-	case schema.GroupKind{Group: "batch", Kind: "Job"}:
+	case schema.GroupKind{Group: "batch", Kind: "job"}:
 		tracker = job.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
@@ -151,13 +153,13 @@ func NewDynamicReadinessTracker(
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 		})
-	case schema.GroupKind{Group: "", Kind: "Pod"}:
+	case schema.GroupKind{Group: "", Kind: "pod"}:
 		tracker = pod.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, pod.Options{
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
 			IgnoreLogs:                               opts.IgnoreLogs,
 		})
 	default:
-		resid := resid.NewResourceID(resourceName, resourceGVK, resid.NewResourceIDOptions{
+		resid := resid.NewResourceID(resourceName, lowercaseGVK, resid.NewResourceIDOptions{
 			Namespace: resourceNamespace,
 		})
 

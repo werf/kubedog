@@ -76,12 +76,14 @@ func (t *DynamicPresenceTracker) Track(ctx context.Context) error {
 		groupVersionKind = ts.GroupVersionKind()
 	})
 
-	namespaced, err := util.IsNamespaced(groupVersionKind, t.mapper)
+	lowercaseGVK := util.LowercaseGVK(groupVersionKind)
+
+	namespaced, err := util.IsNamespaced(lowercaseGVK, t.mapper)
 	if err != nil {
 		return fmt.Errorf("check if namespaced: %w", err)
 	}
 
-	gvr, err := util.GVRFromGVK(groupVersionKind, t.mapper)
+	gvr, err := util.GVRFromGVK(lowercaseGVK, t.mapper)
 	if err != nil {
 		return fmt.Errorf("get GroupVersionResource: %w", err)
 	}
