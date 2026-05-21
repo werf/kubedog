@@ -24,8 +24,9 @@ type DynamicAbsenceTracker struct {
 	dynamicClient   dynamic.Interface
 	mapper          meta.ResettableRESTMapper
 
-	timeout    time.Duration
-	pollPeriod time.Duration
+	timeout                    time.Duration
+	pollPeriod                 time.Duration
+	caseInsensitiveGVKMatching bool
 }
 
 func NewDynamicAbsenceTracker(
@@ -44,18 +45,20 @@ func NewDynamicAbsenceTracker(
 	}
 
 	return &DynamicAbsenceTracker{
-		taskState:       taskState,
-		informerFactory: informerFactory,
-		dynamicClient:   dynamicClient,
-		mapper:          mapper,
-		timeout:         timeout,
-		pollPeriod:      pollPeriod,
+		taskState:                  taskState,
+		informerFactory:            informerFactory,
+		dynamicClient:              dynamicClient,
+		mapper:                     mapper,
+		timeout:                    timeout,
+		pollPeriod:                 pollPeriod,
+		caseInsensitiveGVKMatching: opts.CaseInsensitiveGVKMatching,
 	}
 }
 
 type DynamicAbsenceTrackerOptions struct {
-	Timeout    time.Duration
-	PollPeriod time.Duration
+	Timeout                    time.Duration
+	PollPeriod                 time.Duration
+	CaseInsensitiveGVKMatching bool
 }
 
 func (t *DynamicAbsenceTracker) Track(ctx context.Context) error {
@@ -70,14 +73,17 @@ func (t *DynamicAbsenceTracker) Track(ctx context.Context) error {
 		groupVersionKind = ts.GroupVersionKind()
 	})
 
-	lowercaseGVK := util.LowercaseGVK(groupVersionKind)
+	lookupGVK := groupVersionKind
+	if t.caseInsensitiveGVKMatching {
+		lookupGVK = util.LowercaseGVK(groupVersionKind)
+	}
 
-	namespaced, err := util.IsNamespaced(lowercaseGVK, t.mapper)
+	namespaced, err := util.IsNamespaced(lookupGVK, t.mapper)
 	if err != nil {
 		return fmt.Errorf("check if namespaced: %w", err)
 	}
 
-	gvr, err := util.GVRFromGVK(lowercaseGVK, t.mapper)
+	gvr, err := util.GVRFromGVK(lookupGVK, t.mapper)
 	if err != nil {
 		return fmt.Errorf("get GroupVersionResource: %w", err)
 	}

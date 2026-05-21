@@ -100,16 +100,19 @@ func NewDynamicReadinessTracker(
 		resourceGVK = ts.GroupVersionKind()
 	})
 
-	lowercaseGVK := util.LowercaseGVK(resourceGVK)
+	lookupGVK := resourceGVK
+	if opts.CaseInsensitiveGVKMatching {
+		lookupGVK = util.LowercaseGVK(resourceGVK)
+	}
 
-	if namespaced, err := util.IsNamespaced(lowercaseGVK, mapper); err != nil {
+	if namespaced, err := util.IsNamespaced(lookupGVK, mapper); err != nil {
 		return nil, fmt.Errorf("check if namespaced: %w", err)
 	} else if !namespaced {
 		resourceNamespace = ""
 	}
 
 	var tracker any
-	switch lowercaseGVK.GroupKind() {
+	switch lookupGVK.GroupKind() {
 	case schema.GroupKind{Group: "apps", Kind: "deployment"}, schema.GroupKind{Group: "extensions", Kind: "deployment"}:
 		tracker = deployment.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
@@ -159,7 +162,7 @@ func NewDynamicReadinessTracker(
 			IgnoreLogs:                               opts.IgnoreLogs,
 		})
 	default:
-		resid := resid.NewResourceID(resourceName, lowercaseGVK, resid.NewResourceIDOptions{
+		resid := resid.NewResourceID(resourceName, lookupGVK, resid.NewResourceIDOptions{
 			Namespace: resourceNamespace,
 		})
 
@@ -193,6 +196,7 @@ type DynamicReadinessTrackerOptions struct {
 	NoActivityTimeout                        time.Duration
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 	CaptureLogsFromTime                      time.Time
+	CaseInsensitiveGVKMatching               bool
 	SaveLogsOnlyForNumberOfReplicas          int
 	SaveLogsOnlyForContainers                []string
 	SaveLogsByRegex                          *regexp.Regexp
