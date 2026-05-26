@@ -47,4 +47,3 @@ type Options struct {
 	IgnoreLogs                               bool
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 }
-

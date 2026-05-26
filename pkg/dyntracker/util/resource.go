@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -27,6 +28,14 @@ func GVRFromGVK(groupVersionKind schema.GroupVersionKind, mapper meta.Resettable
 	}
 
 	return mapping.Resource, nil
+}
+
+func LowercaseGVK(gvk schema.GroupVersionKind) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   strings.ToLower(gvk.Group),
+		Version: strings.ToLower(gvk.Version),
+		Kind:    strings.ToLower(gvk.Kind),
+	}
 }
 
 func ResourceHumanID(name, namespace string, groupVersionKind schema.GroupVersionKind, mapper meta.ResettableRESTMapper) string {

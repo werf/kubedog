@@ -199,4 +199,3 @@ func (indicator *Int64GreaterOrEqualConditionIndicator) FormatTableElem(prevIndi
 
 	return res
 }
-
