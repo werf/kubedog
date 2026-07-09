@@ -27,6 +27,8 @@ import (
 
 var errLogStreamingTimeout = errors.New("log streaming timeout reached")
 
+const containerLogLineLengthLimit = 64 * 1024
+
 type ContainerError struct {
 	Message       string
 	ContainerName string
@@ -450,6 +452,7 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 
 	chunkBuf := make([]byte, 1024*64)
 	lineBuf := make([]byte, 0, 1024*4)
+	var lineTruncated bool
 
 	for {
 		n, err := readCloser.Read(chunkBuf)
@@ -463,11 +466,21 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 					line := string(lineBuf)
 					lineBuf = lineBuf[:0]
 
+					if lineTruncated {
+						line += fmt.Sprintf(" [truncated by kubedog: line exceeded %d bytes]", containerLogLineLengthLimit)
+						lineTruncated = false
+					}
+
 					lineParts := strings.SplitN(line, " ", 2)
 					if len(lineParts) == 2 {
 						chunkLines = append(chunkLines, log.LogLine{Timestamp: lineParts[0], Message: lineParts[1]})
 					}
 
+					continue
+				}
+
+				if len(lineBuf) >= containerLogLineLengthLimit {
+					lineTruncated = true
 					continue
 				}
 
