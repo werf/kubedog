@@ -13,9 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 	"github.com/werf/kubedog/pkg/utils"
 )
 

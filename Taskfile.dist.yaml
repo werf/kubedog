@@ -25,11 +25,3 @@ tasks:
           git signatures show {{.CLI_ARGS}} $ref
         done
       - git signatures push {{.CLI_ARGS}}
-
-  build:
-    desc: "Build kubedog binary file"
-    cmd: go build github.com/werf/kubedog/cmd/kubedog
-
-  install:
-    desc: "Install kubedog"
-    cmd: go install github.com/werf/kubedog/cmd/kubedog
