@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
@@ -24,6 +25,11 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
 	"github.com/werf/kubedog/pkg/utils"
 )
+
+// replicaSetFailedCreateReason is the reason the ReplicaSet controller sets on
+// the ReplicaSetReplicaFailure condition when it cannot create pods, e.g.
+// because a namespace quota is exceeded.
+const replicaSetFailedCreateReason = "FailedCreate"
 
 type ReplicaSetAddedReport struct {
 	ReplicaSet       replicaset.ReplicaSet
@@ -47,11 +53,12 @@ type Tracker struct {
 	Conditions        []string
 	NewReplicaSetName string
 
-	knownReplicaSets map[string]*appsv1.ReplicaSet
-	lastObject       *appsv1.Deployment
-	failedReason     string
-	podStatuses      map[string]pod.PodStatus
-	rsNameByPod      map[string]string
+	knownReplicaSets           map[string]*appsv1.ReplicaSet
+	lastObject                 *appsv1.Deployment
+	failedReason               string
+	reportedReplicaSetFailures map[types.UID]string
+	podStatuses                map[string]pod.PodStatus
+	rsNameByPod                map[string]string
 
 	ignoreLogs                               bool
 	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
@@ -109,9 +116,10 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, informerFacto
 		PodLogChunk:     make(chan *replicaset.ReplicaSetPodLogChunk, 1000),
 		PodError:        make(chan PodErrorReport),
 
-		knownReplicaSets: make(map[string]*appsv1.ReplicaSet),
-		podStatuses:      make(map[string]pod.PodStatus),
-		rsNameByPod:      make(map[string]string),
+		knownReplicaSets:           make(map[string]*appsv1.ReplicaSet),
+		reportedReplicaSetFailures: make(map[types.UID]string),
+		podStatuses:                make(map[string]pod.PodStatus),
+		rsNameByPod:                make(map[string]string),
 
 		ignoreLogs:                               opts.IgnoreLogs,
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
@@ -155,16 +163,23 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				return err
 			}
 			defer cleanupFn()
+			if err := d.handleNewReplicaSetFailure(); err != nil {
+				return err
+			}
 		case object := <-d.resourceModified:
 			cleanupFn, err := d.handleDeploymentState(ctx, object)
 			if err != nil {
 				return err
 			}
 			defer cleanupFn()
+			if err := d.handleNewReplicaSetFailure(); err != nil {
+				return err
+			}
 		case <-d.resourceDeleted:
 			d.State = tracker.ResourceDeleted
 			d.lastObject = nil
 			d.knownReplicaSets = make(map[string]*appsv1.ReplicaSet)
+			d.reportedReplicaSetFailures = make(map[types.UID]string)
 			d.podStatuses = make(map[string]pod.PodStatus)
 			d.rsNameByPod = make(map[string]string)
 			d.TrackedPodsNames = nil
@@ -173,21 +188,17 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 		case failure := <-d.resourceFailed:
 			switch failure := failure.(type) {
 			case string:
-				d.State = tracker.ResourceFailed
-				d.failedReason = failure
-
-				var status DeploymentStatus
-				if d.lastObject != nil {
-					d.StatusGeneration++
-					newPodsNames, err := d.getNewPodsNames()
-					if err != nil {
-						return err
-					}
-					status = NewDeploymentStatus(d.lastObject, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, d.podStatuses, newPodsNames)
-				} else {
-					status = DeploymentStatus{IsFailed: true, FailedReason: failure}
+				// Failures are reported by the events informer, which is
+				// stopped only when Track returns. With no live object there is
+				// no status to report the failure on, and the failure itself
+				// belongs to an already deleted object.
+				if d.lastObject == nil {
+					break
 				}
-				d.Failed <- status
+
+				if err := d.handleResourceFailure(failure); err != nil {
+					return err
+				}
 			default:
 				panic(fmt.Errorf("unexpected type %T", failure))
 			}
@@ -199,9 +210,6 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rs.Name)
 				if err != nil {
 					return err
-				}
-				if len(d.knownReplicaSets) == 0 {
-					rsNew = true
 				}
 
 				d.StatusGeneration++
@@ -218,13 +226,34 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 					},
 					DeploymentStatus: status,
 				}
+
+				if err := d.handleNewReplicaSetFailure(); err != nil {
+					return err
+				}
 			}
 
 		case rs := <-d.replicaSetModified:
-			d.knownReplicaSets[rs.Name] = rs
+			// Additions, modifications and deletions are delivered over
+			// separate channels, so a modification of an already replaced
+			// ReplicaSet may be observed after addition of its same-named
+			// successor: applying it would resurrect the dead incarnation.
+			if known, found := d.knownReplicaSets[rs.Name]; !found || known.UID == rs.UID {
+				d.knownReplicaSets[rs.Name] = rs
+
+				if d.lastObject != nil {
+					if err := d.handleNewReplicaSetFailure(); err != nil {
+						return err
+					}
+				}
+			}
 
 		case rs := <-d.replicaSetDeleted:
-			delete(d.knownReplicaSets, rs.Name)
+			// Same reordering hazard as for modifications: dropping the
+			// ReplicaSet by name alone would lose the live successor.
+			if known, found := d.knownReplicaSets[rs.Name]; found && known.UID == rs.UID {
+				delete(d.knownReplicaSets, rs.Name)
+			}
+			delete(d.reportedReplicaSetFailures, rs.UID)
 
 		case pod := <-d.podAddedRelay:
 			rsName := utils.GetPodReplicaSetName(pod)
@@ -660,4 +689,75 @@ func (d *Tracker) runEventsInformer(ctx context.Context, resource interface{}) (
 	eventInformer := event.NewEventInformer(&d.Tracker, resource)
 	eventInformer.WithChannels(d.EventMsg, d.resourceFailed, d.errors)
 	return eventInformer.Run(ctx)
+}
+
+func (d *Tracker) handleResourceFailure(reason string) error {
+	d.State = tracker.ResourceFailed
+	d.failedReason = reason
+
+	d.StatusGeneration++
+	newPodsNames, err := d.getNewPodsNames()
+	if err != nil {
+		return err
+	}
+	d.Failed <- NewDeploymentStatus(d.lastObject, d.StatusGeneration, d.State == tracker.ResourceFailed, d.failedReason, d.podStatuses, newPodsNames)
+
+	return nil
+}
+
+// handleNewReplicaSetFailure fails the tracking as soon as the ReplicaSet the
+// Deployment is currently rolling out cannot create its pods.
+//
+// ReplicaSets of previous rollouts are skipped: their failures must not fail the
+// current rollout. A failure is reported once per ReplicaSet incarnation and
+// reason and is rearmed once the ReplicaSet controller clears the condition, so
+// a ReplicaSet that recovered and then failed again is reported anew.
+func (d *Tracker) handleNewReplicaSetFailure() error {
+	if d.lastObject == nil {
+		return nil
+	}
+
+	newReplicaSet, err := utils.FindNewReplicaSet(d.lastObject, lo.Values(d.knownReplicaSets))
+	if err != nil {
+		return err
+	}
+	if newReplicaSet == nil {
+		return nil
+	}
+
+	failure, failed := replicaSetFailure(newReplicaSet)
+	if !failed {
+		delete(d.reportedReplicaSetFailures, newReplicaSet.UID)
+		return nil
+	}
+
+	// The message carries volatile details, e.g. the quota usage at the moment the
+	// pod was rejected, so only the reason takes part in the deduplication.
+	if d.reportedReplicaSetFailures[newReplicaSet.UID] == failure.Reason {
+		return nil
+	}
+	d.reportedReplicaSetFailures[newReplicaSet.UID] = failure.Reason
+
+	return d.handleResourceFailure(fmt.Sprintf("%s: %s", failure.Reason, failure.Message))
+}
+
+// replicaSetFailure returns the condition set by the ReplicaSet controller when it
+// failed to create pods for the ReplicaSet.
+//
+// Unlike a Warning event, the ReplicaSetReplicaFailure condition is durable state:
+// the controller sets it while pod creation keeps failing and removes it as soon as
+// creation succeeds, so no event baseline is needed. FailedDelete is not fatal for a
+// rollout and is ignored here, just like the events informer ignores it.
+func replicaSetFailure(rs *appsv1.ReplicaSet) (appsv1.ReplicaSetCondition, bool) {
+	for _, condition := range rs.Status.Conditions {
+		if condition.Type != appsv1.ReplicaSetReplicaFailure ||
+			condition.Status != corev1.ConditionTrue ||
+			condition.Reason != replicaSetFailedCreateReason {
+			continue
+		}
+
+		return condition, true
+	}
+
+	return appsv1.ReplicaSetCondition{}, false
 }
