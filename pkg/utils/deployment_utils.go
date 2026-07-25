@@ -7,21 +7,44 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// FindNewReplicaSet returns the ReplicaSet the Deployment is currently rolling out.
+//
+// Only ReplicaSets controlled by the Deployment are considered: label selectors are
+// not unique, so a ReplicaSet of another Deployment or of a previous incarnation of
+// this one may match both the labels and the pod template.
 func FindNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) (*appsv1.ReplicaSet, error) {
 	newRSTemplate := GetNewReplicaSetTemplate(deployment)
-	sort.Sort(ReplicaSetsByCreationTimestamp(rsList))
-	for i := range rsList {
-		if EqualIgnoreHash(rsList[i].Spec.Template, newRSTemplate) {
+	ownedRSList := controlledReplicaSets(deployment, rsList)
+	sort.Sort(ReplicaSetsByCreationTimestamp(ownedRSList))
+	for i := range ownedRSList {
+		if EqualIgnoreHash(ownedRSList[i].Spec.Template, newRSTemplate) {
 			// In rare cases, such as after cluster upgrades, Deployment may end up with
 			// having more than one new ReplicaSets that have the same template as its template,
 			// see https://github.com/kubernetes/kubernetes/issues/40415
 			// We deterministically choose the oldest new ReplicaSet.
-			return rsList[i], nil
+			return ownedRSList[i], nil
 		}
 	}
 	return nil, nil
+}
+
+// controlledReplicaSets keeps only the ReplicaSets whose controller reference points
+// at the given Deployment. A ReplicaSet without a controller reference is not
+// adopted, just like the Deployment controller itself does not adopt one.
+func controlledReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) []*appsv1.ReplicaSet {
+	ownedRSList := make([]*appsv1.ReplicaSet, 0, len(rsList))
+	for _, rs := range rsList {
+		if rs == nil || !metav1.IsControlledBy(rs, deployment) {
+			continue
+		}
+
+		ownedRSList = append(ownedRSList, rs)
+	}
+
+	return ownedRSList
 }
 
 func IsReplicaSetNew(deployment *appsv1.Deployment, rsMap map[string]*appsv1.ReplicaSet, rsName string) (bool, error) {
