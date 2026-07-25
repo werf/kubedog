@@ -200,6 +200,23 @@ func TestTrack_FailsOnReplicaFailureWithEventsDisabled(t *testing.T) {
 	}
 }
 
+func TestTrack_ReportsEventFailureAsCounted(t *testing.T) {
+	h := newHarness(t, harnessConfig{
+		dynamicSeed: []runtime.Object{newNotReadyDeployment()},
+	})
+
+	if _, err := h.waitFor("Added", 10*time.Second, nil); err != nil {
+		t.Fatalf("wait for Added: %v", err)
+	}
+
+	const marker = "marker-counted-event-failure"
+	h.tracker.TestOnlyInjectResourceFailure(marker)
+
+	if _, err := h.waitFor("Failed", 10*time.Second, failedWithMode(marker, deployment.FailureModeCounted)); err != nil {
+		t.Fatalf("event failure must remain subject to the error budget: %v", err)
+	}
+}
+
 func TestTrack_FailsOnRecreatedReplicaSetWithSameNameNewUID(t *testing.T) {
 	h := newHarness(t, harnessConfig{
 		dynamicSeed: []runtime.Object{newNotReadyDeployment()},

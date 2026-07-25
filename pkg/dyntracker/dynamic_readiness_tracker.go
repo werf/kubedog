@@ -1185,6 +1185,9 @@ func (t *DynamicReadinessTracker) handleDeploymentStatus(status *deployment.Depl
 	if status.IsFailed {
 		taskState.ResourceState(taskState.Name(), taskState.Namespace(), taskState.GroupVersionKind()).RWTransaction(func(rs *statestore.ResourceState) {
 			rs.AddError(errors.New(status.FailedReason), "", time.Now())
+			if status.FailureMode == deployment.FailureModeFatal {
+				rs.SetStatus(statestore.ResourceStatusFailed)
+			}
 		})
 	}
 }
