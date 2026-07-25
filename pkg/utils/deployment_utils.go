@@ -11,10 +11,8 @@ import (
 )
 
 // FindNewReplicaSet returns the ReplicaSet the Deployment is currently rolling out.
-//
-// Only ReplicaSets controlled by the Deployment are considered: label selectors are
-// not unique, so a ReplicaSet of another Deployment or of a previous incarnation of
-// this one may match both the labels and the pod template.
+// Only controlled ReplicaSets are considered: label selectors are not unique, so a
+// ReplicaSet of another Deployment may match both the labels and the pod template.
 func FindNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) (*appsv1.ReplicaSet, error) {
 	newRSTemplate := GetNewReplicaSetTemplate(deployment)
 	ownedRSList := controlledReplicaSets(deployment, rsList)
@@ -31,9 +29,9 @@ func FindNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSe
 	return nil, nil
 }
 
-// controlledReplicaSets keeps only the ReplicaSets whose controller reference points
-// at the given Deployment. A ReplicaSet without a controller reference is not
-// adopted, just like the Deployment controller itself does not adopt one.
+// controlledReplicaSets keeps only the ReplicaSets owned by the Deployment. Adoption of an
+// orphan is left to the Deployment controller: tracking one before it happens would report
+// a ReplicaSet that may never become ours.
 func controlledReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) []*appsv1.ReplicaSet {
 	ownedRSList := make([]*appsv1.ReplicaSet, 0, len(rsList))
 	for _, rs := range rsList {

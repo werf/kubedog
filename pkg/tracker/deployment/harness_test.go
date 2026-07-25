@@ -49,7 +49,8 @@ type observation struct {
 }
 
 type harnessConfig struct {
-	dynamicSeed []runtime.Object
+	dynamicSeed          []runtime.Object
+	prepareDynamicClient func(*dynamicfake.FakeDynamicClient)
 }
 
 type harness struct {
@@ -72,6 +73,9 @@ func newHarness(t *testing.T, cfg harnessConfig) *harness {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	dynClient := dynamicfake.NewSimpleDynamicClient(k8sscheme.Scheme, cfg.dynamicSeed...)
+	if cfg.prepareDynamicClient != nil {
+		cfg.prepareDynamicClient(dynClient)
+	}
 	kubeClient := k8sfake.NewSimpleClientset()
 
 	watchErrCh := make(chan error, 100)
@@ -257,6 +261,19 @@ func (h *harness) deleteObject(t *testing.T, gvr schema.GroupVersionResource, na
 	}
 }
 
+// injectReplicaSetDeletedAndWait delivers a ReplicaSet deletion straight to the
+// tracker and returns only after the tracker has handled it. Deletions are
+// idempotent, so the barrier is built by overfilling the channel: for a capacity
+// of N, send N+1 returns once the tracker received the first deletion, and send
+// N+2 returns once it received the second one, which can only happen after the
+// first one was handled to completion.
+func (h *harness) injectReplicaSetDeletedAndWait(t *testing.T, rs *appsv1.ReplicaSet) {
+	t.Helper()
+	for i := 0; i < h.tracker.TestOnlyReplicaSetDeletedChanCap()+2; i++ {
+		h.tracker.TestOnlyInjectReplicaSetDeleted(rs.DeepCopy())
+	}
+}
+
 func baseSelector() *metav1.LabelSelector {
 	return &metav1.LabelSelector{MatchLabels: map[string]string{"app": "demo"}}
 }
@@ -281,6 +298,17 @@ func newNotReadyDeployment() *appsv1.Deployment {
 		},
 		Status: appsv1.DeploymentStatus{ObservedGeneration: 1},
 	}
+}
+
+func newReadyDeployment() *appsv1.Deployment {
+	dep := newNotReadyDeployment()
+	dep.Status = appsv1.DeploymentStatus{
+		ObservedGeneration: 1,
+		Replicas:           1,
+		UpdatedReplicas:    1,
+		AvailableReplicas:  1,
+	}
+	return dep
 }
 
 func newReplicaSet(name string, uid types.UID) *appsv1.ReplicaSet {
@@ -316,11 +344,15 @@ func withReplicaFailure(rs *appsv1.ReplicaSet, reason, marker string) *appsv1.Re
 }
 
 func failedWithMarker(marker string) func(observation) bool {
+	return failedWithMode(marker, deployment.FailureModeFatal)
+}
+
+func failedWithMode(marker string, mode deployment.FailureMode) func(observation) bool {
 	return func(ev observation) bool {
 		status, ok := ev.Data.(deployment.DeploymentStatus)
 		if !ok {
 			return false
 		}
-		return status.IsFailed && strings.Contains(status.FailedReason, marker)
+		return status.IsFailed && status.FailureMode == mode && strings.Contains(status.FailedReason, marker)
 	}
 }
