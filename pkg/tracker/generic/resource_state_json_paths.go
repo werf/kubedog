@@ -18,8 +18,6 @@ type ResourceStatusJSONPathCondition struct {
 	ReadyValues   []string
 	PendingValues []string
 	FailedValues  []string
-
-	CurrentValue string
 }
 
 func initResourceStatusJSONPathsByPriority() {

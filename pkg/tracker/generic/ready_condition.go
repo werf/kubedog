@@ -14,6 +14,7 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *i
 	groupKind := object.GroupVersionKind().GroupKind()
 
 	var matchedCondition *ResourceStatusJSONPathCondition
+	var matchedValue string
 	for _, condition := range ResourceStatusJSONPathConditions {
 		exactCondition := condition.GroupKind != nil
 
@@ -29,7 +30,7 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *i
 			}
 
 			matchedCondition = condition
-			matchedCondition.CurrentValue = currentValue
+			matchedValue = currentValue
 			break
 		} else {
 			currentValue, found, err := utils.JSONPath(condition.JSONPath, object.UnstructuredContent())
@@ -43,7 +44,7 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *i
 
 			if lo.Contains(knownValues, currentValue) {
 				matchedCondition = condition
-				matchedCondition.CurrentValue = currentValue
+				matchedValue = currentValue
 				break
 			}
 		}
@@ -54,10 +55,10 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *i
 	}
 
 	indicator = &indicators.StringEqualConditionIndicator{
-		Value: matchedCondition.CurrentValue,
+		Value: matchedValue,
 	}
-	indicator.SetReady(lo.Contains(matchedCondition.ReadyValues, matchedCondition.CurrentValue))
-	indicator.SetFailed(lo.Contains(matchedCondition.FailedValues, matchedCondition.CurrentValue))
+	indicator.SetReady(lo.Contains(matchedCondition.ReadyValues, matchedValue))
+	indicator.SetFailed(lo.Contains(matchedCondition.FailedValues, matchedValue))
 
 	return indicator, matchedCondition.HumanPath, nil
 }
