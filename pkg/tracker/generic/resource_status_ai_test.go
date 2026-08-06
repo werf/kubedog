@@ -3,7 +3,10 @@
 package generic
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -77,6 +80,61 @@ func TestAI_ImplicitReadyFallbackForUnknownResource(t *testing.T) {
 	assert.Nil(t, status.Indicator)
 }
 
+// The fallback diagnostic must stay debug-only: it is the normal path for the many
+// custom resources that legitimately have no status, so printing it by default would
+// be noise on every deploy.
+func TestAI_ImplicitReadyFallbackLogsOnlyInDebugMode(t *testing.T) {
+	statusless := "apiVersion: example.io/v1\nkind: Widget\nmetadata:\n  name: my-widget\n"
+	tracked := "apiVersion: example.io/v1\nkind: Widget\nmetadata:\n  name: tracked-widget\nstatus:\n  phase: Running\n"
+
+	for _, tc := range []struct {
+		name       string
+		debug      string
+		manifest   string
+		wantOutput bool
+	}{
+		{"debug off, no status field", "", statusless, false},
+		{"debug on, no status field", "1", statusless, true},
+		{"debug on, status field matched", "1", tracked, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("KUBEDOG_TRACKER_DEBUG", tc.debug)
+
+			output := captureStdout(t, func() {
+				_, err := NewResourceStatus(objectFromYAML(t, tc.manifest))
+				require.NoError(t, err)
+			})
+
+			if !tc.wantOutput {
+				assert.Empty(t, output)
+				return
+			}
+
+			assert.Equal(t, "`my-widget` no recognized status field found, considering ready immediately\n", output)
+		})
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+
+	original := os.Stdout
+	os.Stdout = writer
+	defer func() { os.Stdout = original }()
+
+	fn()
+	require.NoError(t, writer.Close())
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, reader)
+	require.NoError(t, err)
+
+	return buf.String()
+}
+
 func TestAI_ResourceStatusIsConcurrencySafe(t *testing.T) {
 	const iterations = 4000
 
@@ -115,6 +173,9 @@ func TestAI_ResourceStatusIsConcurrencySafe(t *testing.T) {
 			}
 			if !status.IsReady() {
 				pendingErrs <- "running resource reported not ready"
+			}
+			if status.Indicator.Value != "Running" {
+				pendingErrs <- fmt.Sprintf("running resource indicator value was %q", status.Indicator.Value)
 			}
 		}()
 	}

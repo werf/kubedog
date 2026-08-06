@@ -31,11 +31,20 @@ func TestAI_CaseInsensitiveTableExpandsOnlyConditionRules(t *testing.T) {
 	defaultTable := resourceStatusJSONPathConditions(false)
 	variantTable := resourceStatusJSONPathConditions(true)
 
+	// Compare by value, not by pointer: the two tables currently share the contrib and
+	// low-priority sub-slices, so a pointer comparison would pass tautologically and would
+	// not catch a future change that rebuilds those sections per table.
+	byValue := func(conditions []*ResourceStatusJSONPathCondition) []ResourceStatusJSONPathCondition {
+		return lo.Map(conditions, func(condition *ResourceStatusJSONPathCondition, _ int) ResourceStatusJSONPathCondition {
+			return *condition
+		})
+	}
+
 	exactDefault := lo.Filter(defaultTable, func(c *ResourceStatusJSONPathCondition, _ int) bool { return c.GroupKind != nil })
 	exactVariant := lo.Filter(variantTable, func(c *ResourceStatusJSONPathCondition, _ int) bool { return c.GroupKind != nil })
-	assert.Equal(t, exactDefault, exactVariant, "exact contrib rules must be identical in both tables")
+	assert.Equal(t, byValue(exactDefault), byValue(exactVariant), "exact contrib rules must be identical in both tables")
 
-	assert.Equal(t, valueRules(defaultTable), valueRules(variantTable),
+	assert.Equal(t, byValue(valueRules(defaultTable)), byValue(valueRules(variantTable)),
 		"the phase/state/health value rules and low-priority rules must be present, unchanged and in the same order in both tables")
 
 	assert.Len(t, conditionRules(defaultTable), 17)
@@ -46,7 +55,14 @@ func TestAI_CaseInsensitiveTableCoversEveryCasifyVariant(t *testing.T) {
 	registered := lo.Map(conditionRules(resourceStatusJSONPathConditions(true)),
 		func(condition *ResourceStatusJSONPathCondition, _ int) string { return condition.JSONPath })
 
-	for _, readyValue := range []string{"ready", "available", "healthy", "approved"} {
+	readyValues := []string{
+		"ready", "success", "succeeded", "complete", "completed", "finished", "finalized",
+		"done", "available", "running", "ok", "active", "live", "healthy", "started",
+		"initialized", "approved",
+	}
+	require.Len(t, readyValues, 17, "must cover every ready condition type the builder emits")
+
+	for _, readyValue := range readyValues {
 		for _, variant := range casify(readyValue) {
 			expected := fmt.Sprintf(`$.status.conditions[?(@.type==%q)].status`, variant)
 			assert.Contains(t, registered, expected, "missing rule for casing variant %q", variant)
