@@ -1,0 +1,131 @@
+//go:build ai_tests
+
+package generic
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/yaml"
+)
+
+func objectFromYAML(t *testing.T, manifest string) *unstructured.Unstructured {
+	t.Helper()
+
+	var content map[string]interface{}
+	require.NoError(t, yaml.Unmarshal([]byte(manifest), &content))
+
+	return &unstructured.Unstructured{Object: content}
+}
+
+const cnpgClusterHeader = "apiVersion: postgresql.cnpg.io/v1\nkind: Cluster\nmetadata:\n  name: test-pg\n"
+
+func TestAI_CNPGClusterReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		manifest string
+		ready    bool
+	}{
+		{"no status at all", cnpgClusterHeader, false},
+		{"Ready=False", cnpgClusterHeader + "status:\n  phase: Setting up primary\n  conditions:\n  - type: Ready\n    status: \"False\"\n", false},
+		{"Ready=Unknown", cnpgClusterHeader + "status:\n  conditions:\n  - type: Ready\n    status: \"Unknown\"\n", false},
+		{"only unrelated conditions", cnpgClusterHeader + "status:\n  conditions:\n  - type: ContinuousArchiving\n    status: \"True\"\n", false},
+		{"Ready=True", cnpgClusterHeader + "status:\n  phase: Cluster in healthy state\n  conditions:\n  - type: Ready\n    status: \"True\"\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			status, err := NewResourceStatus(objectFromYAML(t, tc.manifest))
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.ready, status.IsReady())
+			assert.False(t, status.IsFailed(), "Ready=False is the normal bootstrap state, never a failure")
+			assert.Equal(t, "status.conditions[type=Ready].status", status.HumanConditionPath())
+		})
+	}
+}
+
+func TestAI_CNPGClusterReadinessIgnoresCaseInsensitiveOption(t *testing.T) {
+	manifests := map[string]bool{
+		cnpgClusterHeader: false,
+		cnpgClusterHeader + "status:\n  conditions:\n  - type: Ready\n    status: \"False\"\n": false,
+		cnpgClusterHeader + "status:\n  conditions:\n  - type: Ready\n    status: \"True\"\n":  true,
+	}
+
+	for manifest, wantReady := range manifests {
+		for _, caseInsensitive := range []bool{false, true} {
+			status, err := NewResourceStatus(objectFromYAML(t, manifest), NewResourceStatusOptions{
+				CaseInsensitiveConditionTracking: caseInsensitive,
+			})
+			require.NoError(t, err)
+
+			assert.Equal(t, wantReady, status.IsReady(),
+				"the exact CNPG rule must be independent of the feature gate (caseInsensitive=%v)", caseInsensitive)
+		}
+	}
+}
+
+func TestAI_ImplicitReadyFallbackForUnknownResource(t *testing.T) {
+	status, err := NewResourceStatus(objectFromYAML(t, "apiVersion: example.io/v1\nkind: Widget\nmetadata:\n  name: w\n"))
+	require.NoError(t, err)
+
+	assert.True(t, status.IsReady(), "a resource with no recognized status field is considered ready immediately")
+	assert.Empty(t, status.HumanConditionPath())
+	assert.Nil(t, status.Indicator)
+}
+
+func TestAI_ResourceStatusIsConcurrencySafe(t *testing.T) {
+	const iterations = 4000
+
+	pending := objectFromYAML(t, "apiVersion: example.io/v1\nkind: Widget\nstatus:\n  phase: Pending\n")
+	running := objectFromYAML(t, "apiVersion: example.io/v1\nkind: Widget\nstatus:\n  phase: Running\n")
+
+	var wg sync.WaitGroup
+	pendingErrs := make(chan string, iterations*2)
+
+	for i := 0; i < iterations; i++ {
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+
+			status, err := NewResourceStatus(pending)
+			if err != nil {
+				pendingErrs <- fmt.Sprintf("pending: %s", err)
+				return
+			}
+			if status.IsReady() {
+				pendingErrs <- "pending resource reported ready"
+			}
+			if status.Indicator.Value != "Pending" {
+				pendingErrs <- fmt.Sprintf("pending resource indicator value was %q", status.Indicator.Value)
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+
+			status, err := NewResourceStatus(running)
+			if err != nil {
+				pendingErrs <- fmt.Sprintf("running: %s", err)
+				return
+			}
+			if !status.IsReady() {
+				pendingErrs <- "running resource reported not ready"
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(pendingErrs)
+
+	var failures []string
+	for failure := range pendingErrs {
+		failures = append(failures, failure)
+	}
+
+	assert.Empty(t, failures, "rules must not be mutated during evaluation: %s", strings.Join(failures, "; "))
+}
