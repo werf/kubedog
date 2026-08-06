@@ -212,3 +212,15 @@ rules:
         - "Unknown"
       failed:
         - "Error"
+  # https://github.com/cloudnative-pg/cloudnative-pg/blob/main/api/v1/cluster_types.go
+  - resourceGroup: "postgresql.cnpg.io"
+    resourceKind: "Cluster"
+    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []

@@ -5,6 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 )
 
@@ -22,6 +23,10 @@ func NewResourceStatus(object *unstructured.Unstructured) (*ResourceStatus, erro
 	resourceStatusIndicator, humanJSONPath, err := NewResourceStatusIndicator(object)
 	if err != nil {
 		return nil, fmt.Errorf("error getting resource status indicator: %w", err)
+	}
+
+	if resourceStatusIndicator == nil && log.Debug() {
+		fmt.Printf("`%s` no recognized status field found, considering ready immediately\n", object.GetName())
 	}
 
 	isFailed := resourceStatusIndicator != nil && resourceStatusIndicator.IsFailed()
