@@ -30,7 +30,7 @@ type ContribResourceStatusRules struct {
 	} `yaml:"rules"`
 }
 
-func buildContribResourceStatusRules() {
+func buildContribResourceStatusRules() []*ResourceStatusJSONPathCondition {
 	rulesJsonByte, err := yaml.ToJSON([]byte(contribResourceStatusRules))
 	if err != nil {
 		panic(fmt.Sprintf("convert rules yaml file to json: %s", err))
@@ -55,13 +55,14 @@ func buildContribResourceStatusRules() {
 		panic(fmt.Sprintf("unmarshal rules file: %s", err))
 	}
 
+	var conditions []*ResourceStatusJSONPathCondition
 	for _, rule := range rules.Rules {
 		var groupKind *schema.GroupKind
 		if rule.ResourceGroup != nil && rule.ResourceKind != nil {
 			groupKind = &schema.GroupKind{Group: *rule.ResourceGroup, Kind: *rule.ResourceKind}
 		}
 
-		ResourceStatusJSONPathConditions = append(ResourceStatusJSONPathConditions, &ResourceStatusJSONPathCondition{
+		conditions = append(conditions, &ResourceStatusJSONPathCondition{
 			GroupKind:     groupKind,
 			JSONPath:      rule.JSONPath,
 			HumanPath:     rule.HumanJSONPath,
@@ -70,4 +71,6 @@ func buildContribResourceStatusRules() {
 			FailedValues:  casify(rule.Conditions.Failed...),
 		})
 	}
+
+	return conditions
 }
