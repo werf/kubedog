@@ -47,7 +47,10 @@ func TestAI_CaseInsensitiveTableExpandsOnlyConditionRules(t *testing.T) {
 	assert.Equal(t, byValue(valueRules(defaultTable)), byValue(valueRules(variantTable)),
 		"the phase/state/health value rules and low-priority rules must be present, unchanged and in the same order in both tables")
 
-	assert.Len(t, conditionRules(defaultTable), 17)
+	// Deliberately hardcoded: this is the tripwire that forces a human to look if the set of
+	// ready condition types changes, since the variant-coverage test derives its expectations
+	// from this same table and would otherwise silently accept the new set.
+	assert.Len(t, conditionRules(defaultTable), 17, "one condition rule per ready type when case-insensitive matching is off")
 	assert.Greater(t, len(conditionRules(variantTable)), len(conditionRules(defaultTable)))
 }
 
@@ -55,12 +58,13 @@ func TestAI_CaseInsensitiveTableCoversEveryCasifyVariant(t *testing.T) {
 	registered := lo.Map(conditionRules(resourceStatusJSONPathConditions(true)),
 		func(condition *ResourceStatusJSONPathCondition, _ int) string { return condition.JSONPath })
 
-	readyValues := []string{
-		"ready", "success", "succeeded", "complete", "completed", "finished", "finalized",
-		"done", "available", "running", "ok", "active", "live", "healthy", "started",
-		"initialized", "approved",
-	}
-	require.Len(t, readyValues, 17, "must cover every ready condition type the builder emits")
+	// Derive the expected types from the default table rather than hardcoding them, so a
+	// ready type added to the builder is covered automatically instead of silently skipped.
+	readyValues := lo.Map(conditionRules(resourceStatusJSONPathConditions(false)),
+		func(condition *ResourceStatusJSONPathCondition, _ int) string {
+			return strings.TrimSuffix(strings.TrimPrefix(condition.HumanPath, "status.conditions[type="), "].status")
+		})
+	require.NotEmpty(t, readyValues)
 
 	for _, readyValue := range readyValues {
 		for _, variant := range casify(readyValue) {

@@ -120,13 +120,21 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	reader, writer, err := os.Pipe()
 	require.NoError(t, err)
+	t.Cleanup(func() { reader.Close() })
 
 	original := os.Stdout
 	os.Stdout = writer
-	defer func() { os.Stdout = original }()
 
-	fn()
-	require.NoError(t, writer.Close())
+	// Restore stdout and close the writer even if fn panics, so a failing test cannot leave
+	// the rest of the binary writing into a dead pipe.
+	func() {
+		defer func() {
+			os.Stdout = original
+			writer.Close()
+		}()
+
+		fn()
+	}()
 
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, reader)
