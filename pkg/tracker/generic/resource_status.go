@@ -19,8 +19,19 @@ type ResourceStatus struct {
 	humanConditionPath string
 }
 
-func NewResourceStatus(object *unstructured.Unstructured) (*ResourceStatus, error) {
-	resourceStatusIndicator, humanJSONPath, err := NewResourceStatusIndicator(object)
+type NewResourceStatusOptions struct {
+	CaseInsensitiveConditionTracking bool
+}
+
+func NewResourceStatus(object *unstructured.Unstructured, opts ...NewResourceStatusOptions) (*ResourceStatus, error) {
+	var opt NewResourceStatusOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	resourceStatusIndicator, humanJSONPath, err := NewResourceStatusIndicator(object, NewResourceStatusIndicatorOptions{
+		CaseInsensitiveConditionTracking: opt.CaseInsensitiveConditionTracking,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error getting resource status indicator: %w", err)
 	}
