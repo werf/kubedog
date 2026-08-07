@@ -49,12 +49,6 @@ type Tracker struct {
 	discoveryClient discovery.CachedDiscoveryInterface
 	mapper          meta.RESTMapper
 	informerFactory *util.Concurrent[*informer.InformerFactory]
-
-	caseInsensitiveConditionTracking bool
-}
-
-type NewTrackerOptions struct {
-	CaseInsensitiveConditionTracking bool
 }
 
 func NewTracker(
@@ -63,21 +57,14 @@ func NewTracker(
 	discClient discovery.CachedDiscoveryInterface,
 	informerFactory *util.Concurrent[*informer.InformerFactory],
 	mapper meta.RESTMapper,
-	opts ...NewTrackerOptions,
 ) *Tracker {
-	var opt NewTrackerOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-
 	return &Tracker{
-		ResourceID:                       resID,
-		lastState:                        TrackerStateInitial,
-		dynamicClient:                    dynClient,
-		discoveryClient:                  discClient,
-		mapper:                           mapper,
-		informerFactory:                  informerFactory,
-		caseInsensitiveConditionTracking: opt.CaseInsensitiveConditionTracking,
+		ResourceID:      resID,
+		lastState:       TrackerStateInitial,
+		dynamicClient:   dynClient,
+		discoveryClient: discClient,
+		mapper:          mapper,
+		informerFactory: informerFactory,
 	}
 }
 
@@ -189,9 +176,7 @@ func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstr
 		return
 	}
 
-	resourceStatus, err := NewResourceStatus(object, NewResourceStatusOptions{
-		CaseInsensitiveConditionTracking: t.caseInsensitiveConditionTracking,
-	})
+	resourceStatus, err := NewResourceStatus(object)
 	if err != nil {
 		return nil, fmt.Errorf("construct resource status: %w", err)
 	}

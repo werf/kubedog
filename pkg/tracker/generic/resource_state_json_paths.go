@@ -9,10 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var (
-	ResourceStatusJSONPathConditions                []*ResourceStatusJSONPathCondition
-	caseInsensitiveResourceStatusJSONPathConditions []*ResourceStatusJSONPathCondition
-)
+var ResourceStatusJSONPathConditions []*ResourceStatusJSONPathCondition
 
 type ResourceStatusJSONPathCondition struct {
 	GroupKind     *schema.GroupKind
@@ -24,31 +21,14 @@ type ResourceStatusJSONPathCondition struct {
 }
 
 func initResourceStatusJSONPathsByPriority() {
-	contribRules := buildContribResourceStatusRules()
-	lowPriorityConditions := buildLowPriorityConditions()
-
 	ResourceStatusJSONPathConditions = lo.Flatten([][]*ResourceStatusJSONPathCondition{
-		contribRules,
-		buildUniversalConditions(false),
-		lowPriorityConditions,
-	})
-
-	caseInsensitiveResourceStatusJSONPathConditions = lo.Flatten([][]*ResourceStatusJSONPathCondition{
-		contribRules,
-		buildUniversalConditions(true),
-		lowPriorityConditions,
+		buildContribResourceStatusRules(),
+		buildUniversalConditions(),
+		buildLowPriorityConditions(),
 	})
 }
 
-func resourceStatusJSONPathConditions(caseInsensitiveConditionTracking bool) []*ResourceStatusJSONPathCondition {
-	if caseInsensitiveConditionTracking {
-		return caseInsensitiveResourceStatusJSONPathConditions
-	}
-
-	return ResourceStatusJSONPathConditions
-}
-
-func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*ResourceStatusJSONPathCondition {
+func buildUniversalConditions() []*ResourceStatusJSONPathCondition {
 	var conditions []*ResourceStatusJSONPathCondition
 	readyValuesByPriority := []string{
 		"ready",
@@ -100,7 +80,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	}
 
 	for _, readyValue := range readyValuesByPriority {
-		for _, conditionType := range conditionTypesByPriority(readyValue, caseInsensitiveConditionTracking) {
+		for _, conditionType := range conditionTypesByPriority(readyValue) {
 			conditions = append(conditions, &ResourceStatusJSONPathCondition{
 				JSONPath:      fmt.Sprintf(`$.status.conditions[?(@.type==%q)].status`, conditionType),
 				HumanPath:     fmt.Sprintf("status.conditions[type=%s].status", conditionType),
@@ -211,11 +191,7 @@ func buildLowPriorityConditions() []*ResourceStatusJSONPathCondition {
 	return conditions
 }
 
-func conditionTypesByPriority(readyValue string, caseInsensitiveConditionTracking bool) []string {
-	if !caseInsensitiveConditionTracking {
-		return []string{casify(readyValue)[0]}
-	}
-
+func conditionTypesByPriority(readyValue string) []string {
 	return lo.Uniq(append([]string{caps.ToCamel(readyValue)}, casify(readyValue)...))
 }
 

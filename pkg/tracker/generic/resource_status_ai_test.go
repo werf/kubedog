@@ -51,26 +51,6 @@ func TestAI_CNPGClusterReadiness(t *testing.T) {
 	}
 }
 
-func TestAI_CNPGClusterReadinessIgnoresCaseInsensitiveOption(t *testing.T) {
-	manifests := map[string]bool{
-		cnpgClusterHeader: false,
-		cnpgClusterHeader + "status:\n  conditions:\n  - type: Ready\n    status: \"False\"\n": false,
-		cnpgClusterHeader + "status:\n  conditions:\n  - type: Ready\n    status: \"True\"\n":  true,
-	}
-
-	for manifest, wantReady := range manifests {
-		for _, caseInsensitive := range []bool{false, true} {
-			status, err := NewResourceStatus(objectFromYAML(t, manifest), NewResourceStatusOptions{
-				CaseInsensitiveConditionTracking: caseInsensitive,
-			})
-			require.NoError(t, err)
-
-			assert.Equal(t, wantReady, status.IsReady(),
-				"the exact CNPG rule must be independent of the feature gate (caseInsensitive=%v)", caseInsensitive)
-		}
-	}
-}
-
 func TestAI_ImplicitReadyFallbackForUnknownResource(t *testing.T) {
 	status, err := NewResourceStatus(objectFromYAML(t, "apiVersion: example.io/v1\nkind: Widget\nmetadata:\n  name: w\n"))
 	require.NoError(t, err)

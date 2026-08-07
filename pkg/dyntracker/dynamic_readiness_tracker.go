@@ -166,9 +166,7 @@ func NewDynamicReadinessTracker(
 			Namespace: resourceNamespace,
 		})
 
-		tracker = generic.NewTracker(resid, dynamicClient, discoveryClient, informerFactory, mapper, generic.NewTrackerOptions{
-			CaseInsensitiveConditionTracking: opts.CaseInsensitiveConditionTracking,
-		})
+		tracker = generic.NewTracker(resid, dynamicClient, discoveryClient, informerFactory, mapper)
 	}
 
 	return &DynamicReadinessTracker{
@@ -199,7 +197,6 @@ type DynamicReadinessTrackerOptions struct {
 	IgnoreReadinessProbeFailsByContainerName map[string]time.Duration
 	CaptureLogsFromTime                      time.Time
 	CaseInsensitiveGVKMatching               bool
-	CaseInsensitiveConditionTracking         bool
 	SaveLogsOnlyForNumberOfReplicas          int
 	SaveLogsOnlyForContainers                []string
 	SaveLogsByRegex                          *regexp.Regexp

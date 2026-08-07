@@ -10,21 +10,12 @@ import (
 	"github.com/werf/kubedog/pkg/utils"
 )
 
-type NewResourceStatusIndicatorOptions struct {
-	CaseInsensitiveConditionTracking bool
-}
-
-func NewResourceStatusIndicator(object *unstructured.Unstructured, opts ...NewResourceStatusIndicatorOptions) (indicator *indicators.StringEqualConditionIndicator, humanJSONPath string, err error) {
-	var opt NewResourceStatusIndicatorOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-
+func NewResourceStatusIndicator(object *unstructured.Unstructured) (indicator *indicators.StringEqualConditionIndicator, humanJSONPath string, err error) {
 	groupKind := object.GroupVersionKind().GroupKind()
 
 	var matchedCondition *ResourceStatusJSONPathCondition
 	var matchedValue string
-	for _, condition := range resourceStatusJSONPathConditions(opt.CaseInsensitiveConditionTracking) {
+	for _, condition := range ResourceStatusJSONPathConditions {
 		exactCondition := condition.GroupKind != nil
 
 		if exactCondition {
