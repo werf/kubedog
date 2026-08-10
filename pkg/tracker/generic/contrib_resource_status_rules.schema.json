@@ -12,11 +12,10 @@
       "items": {
         "type": "object",
         "dependencies": {
-          "resourceGroup": ["resourceKind"],
           "resourceKind": ["resourceGroup"]
         },
         "required": [
-          "jsonPath",
+          "jsonPaths",
           "humanJsonPath",
           "conditions"
         ],
@@ -29,9 +28,13 @@
             "type": "string",
             "minLength": 1
           },
-          "jsonPath": {
-            "type": "string",
-            "minLength": 1
+          "jsonPaths": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           },
           "humanJsonPath": {
             "type": "string",
