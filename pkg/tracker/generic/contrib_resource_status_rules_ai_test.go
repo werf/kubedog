@@ -77,7 +77,7 @@ func TestAI_ManagedServicesRuleIsGroupOnly(t *testing.T) {
 		`$.status.conditions[?(@.type=="Available")].status`,
 		`$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status`,
 	}, rule.JSONPaths)
-	assert.Equal(t, "status.conditions[type in (Available, LastValidConfigurationApplied)].status", rule.HumanPath)
+	assert.Equal(t, "status.conditions[type=Available|LastValidConfigurationApplied].status", rule.HumanPath)
 	assert.Empty(t, rule.FailedValues)
 }
 

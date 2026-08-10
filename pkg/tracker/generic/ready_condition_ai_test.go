@@ -49,7 +49,7 @@ func TestAI_ManagedServiceReadyWhenBothConditionsTrue(t *testing.T) {
 	assert.True(t, indicator.IsReady())
 	assert.False(t, indicator.IsFailed())
 	assert.Equal(t, "True, True", indicator.Value)
-	assert.Equal(t, "status.conditions[type in (Available, LastValidConfigurationApplied)].status", humanPath)
+	assert.Equal(t, "status.conditions[type=Available|LastValidConfigurationApplied].status", humanPath)
 }
 
 func TestAI_ManagedServiceNotReadyOnNonTrueCondition(t *testing.T) {
