@@ -249,7 +249,7 @@ rules:
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
       - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available|LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
     conditions:
       ready:
         - "True"
