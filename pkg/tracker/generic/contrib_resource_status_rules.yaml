@@ -3,10 +3,7 @@
 # their status. Custom rules to detect status of such resources are defined in this file.
 
 rules:
-  # Match the resource by its API group (without version). A rule with a resourceGroup but no
-  # resourceKind matches every resource in the group (exact, case-sensitive match), but only
-  # applies when at least one of its JSON Paths resolves; otherwise the resource falls through to
-  # the generic rules below. A rule with both matches that group and kind only.
+  # Match the resource by its API group (without version)
   - resourceGroup: "acid.zalan.do"
     # Match the resource by its kind (case insensitive)
     resourceKind: "postgresql"
@@ -245,7 +242,139 @@ rules:
         - "Unknown"
       failed: []
   # https://deckhouse.io/modules/managed-postgres/stable/cr.html
+  # Instance kinds only: the *Class and *Snapshot kinds in this group publish no conditions.
   - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Postgres"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Memcached"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Valkey"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Kafka"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Opensearch"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "HiveMetastore"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Clickhouse"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Starrocks"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Trino"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Cassandra"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Rabbit"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
       - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'

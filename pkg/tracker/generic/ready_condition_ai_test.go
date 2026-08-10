@@ -106,50 +106,59 @@ func TestAI_ManagedServicePendingWhenOneConditionMissing(t *testing.T) {
 	}
 }
 
-func TestAI_ManagedServiceWithoutNamedConditionsFallsThrough(t *testing.T) {
-	classObject := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "managed-services.deckhouse.io/v1alpha1",
-			"kind":       "PostgresClass",
-			"metadata":   map[string]interface{}{"name": "test"},
-			"status":     map[string]interface{}{},
-		},
-	}
+func TestAI_NonWhitelistedKindsInGroupAreNotTracked(t *testing.T) {
+	for _, kind := range []string{"PostgresClass", "ValkeyClass", "PostgresSnapshot", "SomeFutureKind"} {
+		t.Run(kind, func(t *testing.T) {
+			object := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "managed-services.deckhouse.io/v1alpha1",
+					"kind":       kind,
+					"metadata":   map[string]interface{}{"name": "test"},
+					"status":     map[string]interface{}{},
+				},
+			}
 
-	snapshotObject := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "managed-services.deckhouse.io/v1alpha1",
-			"kind":       "PostgresSnapshot",
-			"metadata":   map[string]interface{}{"name": "test"},
-			"status":     map[string]interface{}{"completedAt": "2026-08-01T00:00:00Z"},
-		},
-	}
-
-	otherConditionObject := managedServiceObject("Postgres", condition("ConfigurationValid", "True"))
-
-	for name, object := range map[string]*unstructured.Unstructured{
-		"class with empty status":     classObject,
-		"snapshot without conditions": snapshotObject,
-		"instance with other only":    otherConditionObject,
-	} {
-		t.Run(name, func(t *testing.T) {
 			indicator, humanPath, err := NewResourceStatusIndicator(object)
 			require.NoError(t, err)
 
-			assert.Nil(t, indicator, "must fall through instead of blocking on absent conditions")
+			assert.Nil(t, indicator, "kinds outside the whitelist must not be tracked by the rule")
 			assert.Empty(t, humanPath)
 		})
 	}
 }
 
-func TestAI_ManagedServiceMatchesUnknownKindInGroup(t *testing.T) {
-	object := managedServiceObject("Clickhouse", condition("Available", "True"), condition("LastValidConfigurationApplied", "True"))
+func TestAI_WhitelistedKindStaysPendingUntilConditionsAppear(t *testing.T) {
+	object := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "managed-services.deckhouse.io/v1alpha1",
+			"kind":       "Postgres",
+			"metadata":   map[string]interface{}{"name": "test"},
+			"status":     map[string]interface{}{},
+		},
+	}
 
-	indicator, _, err := NewResourceStatusIndicator(object)
+	indicator, humanPath, err := NewResourceStatusIndicator(object)
 	require.NoError(t, err)
-	require.NotNil(t, indicator)
+	require.NotNil(t, indicator, "a whitelisted kind is claimed even before its conditions appear")
 
-	assert.True(t, indicator.IsReady())
+	assert.False(t, indicator.IsReady(), "must not go implicitly ready before the operator reports")
+	assert.False(t, indicator.IsFailed())
+	assert.Empty(t, indicator.Value)
+	assert.Equal(t, "status.conditions[type=Available&&LastValidConfigurationApplied].status", humanPath)
+}
+
+func TestAI_EveryWhitelistedKindIsTracked(t *testing.T) {
+	for _, kind := range managedServicesWhitelistedKinds {
+		t.Run(kind, func(t *testing.T) {
+			object := managedServiceObject(kind, condition("Available", "True"), condition("LastValidConfigurationApplied", "True"))
+
+			indicator, _, err := NewResourceStatusIndicator(object)
+			require.NoError(t, err)
+			require.NotNil(t, indicator)
+
+			assert.True(t, indicator.IsReady())
+		})
+	}
 }
 
 func TestAI_ManagedServiceReadyWithLowercaseConditionStatus(t *testing.T) {

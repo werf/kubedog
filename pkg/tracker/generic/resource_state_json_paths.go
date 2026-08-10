@@ -16,7 +16,6 @@ var (
 
 type ResourceStatusJSONPathCondition struct {
 	GroupKind     *schema.GroupKind
-	Group         *string
 	JSONPaths     []string
 	HumanPath     string
 	ReadyValues   []string

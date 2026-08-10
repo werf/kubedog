@@ -33,20 +33,12 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured, opts ...NewRe
 			continue
 		}
 
-		if condition.Group != nil && *condition.Group != groupKind.Group {
-			continue
-		}
-
 		values, resolvedCount, err := resolveConditionJSONPaths(condition, object)
 		if err != nil {
 			return nil, "", err
 		}
 
-		if condition.Group != nil && resolvedCount == 0 {
-			continue
-		}
-
-		if condition.GroupKind == nil && condition.Group == nil {
+		if condition.GroupKind == nil {
 			knownValues := lo.Union(condition.ReadyValues, condition.PendingValues, condition.FailedValues)
 
 			if resolvedCount != len(values) || !lo.EveryBy(values, func(value string) bool {

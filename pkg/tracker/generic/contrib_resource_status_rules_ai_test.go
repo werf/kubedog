@@ -11,6 +11,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
+var managedServicesWhitelistedKinds = []string{
+	"Postgres",
+	"Memcached",
+	"Valkey",
+	"Kafka",
+	"Opensearch",
+	"HiveMetastore",
+	"Clickhouse",
+	"Starrocks",
+	"Trino",
+	"Cassandra",
+	"Rabbit",
+}
+
 type goldenRule struct {
 	group       string
 	kind        string
@@ -51,7 +65,6 @@ func TestAI_ContribRulesPreserveExistingBehavior(t *testing.T) {
 		rule := rules[i]
 
 		require.NotNil(t, rule.GroupKind, "rule %d must stay kind-scoped", i)
-		assert.Nil(t, rule.Group, "rule %d must not become group-only", i)
 		assert.Equal(t, golden.group, rule.GroupKind.Group, "rule %d group", i)
 		assert.Equal(t, golden.kind, rule.GroupKind.Kind, "rule %d kind", i)
 
@@ -65,20 +78,27 @@ func TestAI_ContribRulesPreserveExistingBehavior(t *testing.T) {
 	}
 }
 
-func TestAI_ManagedServicesRuleIsGroupOnly(t *testing.T) {
+func TestAI_ManagedServicesRulesCoverWhitelistedKinds(t *testing.T) {
 	rules := buildContribResourceStatusRules()
 
-	rule := rules[len(rules)-1]
+	managedServiceKinds := make([]string, 0, len(managedServicesWhitelistedKinds))
+	for _, rule := range rules {
+		if rule.GroupKind == nil || rule.GroupKind.Group != "managed-services.deckhouse.io" {
+			continue
+		}
 
-	require.Nil(t, rule.GroupKind)
-	require.NotNil(t, rule.Group)
-	assert.Equal(t, "managed-services.deckhouse.io", *rule.Group)
-	assert.Equal(t, []string{
-		`$.status.conditions[?(@.type=="Available")].status`,
-		`$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status`,
-	}, rule.JSONPaths)
-	assert.Equal(t, "status.conditions[type=Available&&LastValidConfigurationApplied].status", rule.HumanPath)
-	assert.Empty(t, rule.FailedValues)
+		managedServiceKinds = append(managedServiceKinds, rule.GroupKind.Kind)
+
+		assert.Equal(t, []string{
+			`$.status.conditions[?(@.type=="Available")].status`,
+			`$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status`,
+		}, rule.JSONPaths, "kind %s paths", rule.GroupKind.Kind)
+		assert.Equal(t, "status.conditions[type=Available&&LastValidConfigurationApplied].status", rule.HumanPath, "kind %s human path", rule.GroupKind.Kind)
+		assert.Equal(t, casify("True"), rule.ReadyValues, "kind %s ready values", rule.GroupKind.Kind)
+		assert.Empty(t, rule.FailedValues, "kind %s must treat False as progressing", rule.GroupKind.Kind)
+	}
+
+	assert.ElementsMatch(t, managedServicesWhitelistedKinds, managedServiceKinds)
 }
 
 func validateRuleDocument(t *testing.T, document string) *gojsonschema.Result {
@@ -96,14 +116,16 @@ func validateRuleDocument(t *testing.T, document string) *gojsonschema.Result {
 	return result
 }
 
-func TestAI_SchemaAcceptsGroupOnlyAndGroupKindRules(t *testing.T) {
+func TestAI_SchemaAcceptsMultiPathRules(t *testing.T) {
 	for name, document := range map[string]string{
-		"group only": `
+		"several paths": `
 rules:
   - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Postgres"
     jsonPaths:
       - "$.status.conditions[?(@.type=='Available')].status"
-    humanJsonPath: "status.conditions[type=Available].status"
+      - "$.status.conditions[?(@.type=='LastValidConfigurationApplied')].status"
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
     conditions:
       ready: ["True"]
       progressing: ["False"]
@@ -136,6 +158,7 @@ func TestAI_SchemaRejectsInvalidRules(t *testing.T) {
 			document: `
 rules:
   - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Postgres"
     jsonPaths: []
     humanJsonPath: "status"
     conditions:
@@ -143,6 +166,19 @@ rules:
       progressing: ["False"]
 `,
 			expectedField: "jsonPaths",
+		},
+		"bare resource group": {
+			document: `
+rules:
+  - resourceGroup: "managed-services.deckhouse.io"
+    jsonPaths:
+      - "$.status.phase"
+    humanJsonPath: "status.phase"
+    conditions:
+      ready: ["True"]
+      progressing: ["False"]
+`,
+			expectedField: "resourceKind",
 		},
 		"bare resource kind": {
 			document: `

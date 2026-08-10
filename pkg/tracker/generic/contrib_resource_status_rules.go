@@ -58,16 +58,12 @@ func buildContribResourceStatusRules() []*ResourceStatusJSONPathCondition {
 	var conditions []*ResourceStatusJSONPathCondition
 	for _, rule := range rules.Rules {
 		var groupKind *schema.GroupKind
-		var group *string
 		if rule.ResourceGroup != nil && rule.ResourceKind != nil {
 			groupKind = &schema.GroupKind{Group: *rule.ResourceGroup, Kind: *rule.ResourceKind}
-		} else if rule.ResourceGroup != nil {
-			group = rule.ResourceGroup
 		}
 
 		conditions = append(conditions, &ResourceStatusJSONPathCondition{
 			GroupKind:     groupKind,
-			Group:         group,
 			JSONPaths:     rule.JSONPaths,
 			HumanPath:     rule.HumanJSONPath,
 			ReadyValues:   casify(rule.Conditions.Ready...),

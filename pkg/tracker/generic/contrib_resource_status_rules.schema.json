@@ -12,6 +12,7 @@
       "items": {
         "type": "object",
         "dependencies": {
+          "resourceGroup": ["resourceKind"],
           "resourceKind": ["resourceGroup"]
         },
         "required": [
