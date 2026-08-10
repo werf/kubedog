@@ -7,10 +7,12 @@ rules:
   - resourceGroup: "acid.zalan.do"
     # Match the resource by its kind (case insensitive)
     resourceKind: "postgresql"
-    # JSON Path to match the single field in the resource live manifest (get the manifest via
-    # `kubectl get -o json`). This is the field that we will monitor to determine the resource
-    # status.
-    jsonPath: "$.status.PostgresClusterStatus"
+    # JSON Paths to match fields in the resource live manifest (get the manifest via
+    # `kubectl get -o json`). These are the fields that we will monitor to determine the resource
+    # status. The resource is ready only when every path resolves and every value is "ready", and
+    # failed as soon as any value is "failed".
+    jsonPaths:
+      - "$.status.PostgresClusterStatus"
     # JSON Path in more human-readable form, used only in deploy logs to inform the user of the
     # field that we are monitoring. Anything can be here, it does not need to be a valid JSON
     # path, but it should be informative.
@@ -38,7 +40,8 @@ rules:
         - "DeleteFailed"
   - resourceGroup: "external-secrets.io"
     resourceKind: "ExternalSecret"
-    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Ready")].status'
     humanJsonPath: "status.conditions[type=Ready].status"
     conditions:
       ready:
@@ -50,7 +53,8 @@ rules:
   # https://github.com/bitnami-labs/sealed-secrets/blob/main/pkg/apis/sealedsecrets/v1alpha1/types.go
   - resourceGroup: "bitnami.com"
     resourceKind: "SealedSecret"
-    jsonPath: "$.status.conditions[?(@.type=='Synced')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Synced')].status"
     humanJsonPath: "status.conditions[type=Synced].status"
     conditions:
       ready:
@@ -62,7 +66,8 @@ rules:
   # https://github.com/kyverno/kyverno/blob/main/api/kyverno/v1/policy_status.go
   - resourceGroup: "kyverno.io"
     resourceKind: "Policy"
-    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Ready')].status"
     humanJsonPath: "status.conditions[type=Ready].status"
     conditions:
       ready:
@@ -73,7 +78,8 @@ rules:
       failed: []
   - resourceGroup: "kyverno.io"
     resourceKind: "ClusterPolicy"
-    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Ready')].status"
     humanJsonPath: "status.conditions[type=Ready].status"
     conditions:
       ready:
@@ -85,7 +91,8 @@ rules:
   # https://github.com/argoproj/gitops-engine/blob/master/pkg/health/health.go#L12
   - resourceGroup: "argoproj.io"
     resourceKind: "Application"
-    jsonPath: "$.status.health.status"
+    jsonPaths:
+      - "$.status.health.status"
     humanJsonPath: "status.health.status"
     conditions:
       ready:
@@ -100,7 +107,8 @@ rules:
   # https://github.com/argoproj/argo-cd/blob/master/pkg/apis/application/v1alpha1/applicationset_types.go#L807
   - resourceGroup: "argoproj.io"
     resourceKind: "ApplicationSet"
-    jsonPath: "$.status.conditions[?(@.type=='ResourcesUpToDate')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='ResourcesUpToDate')].status"
     humanJsonPath: "status.conditions[type=ResourcesUpToDate].status"
     conditions:
       ready:
@@ -112,7 +120,8 @@ rules:
   # https://github.com/cert-manager/cert-manager/blob/c21f257a1c2067dfb5a842ffe98235326456224c/pkg/apis/certmanager/v1/types_certificate.go#L669
   - resourceGroup: "cert-manager.io"
     resourceKind: "Certificate"
-    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Ready")].status'
     humanJsonPath: "status.conditions[type=Ready].status"
     conditions:
       ready:
@@ -124,7 +133,8 @@ rules:
   # https://github.com/fluxcd/helm-controller/blob/main/api/v2/helmrelease_types.go#L971
   - resourceGroup: "helm.toolkit.fluxcd.io"
     resourceKind: "HelmRelease"
-    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Ready')].status"
     humanJsonPath: "status.conditions[type=Ready].status"
     conditions:
       ready:
@@ -136,7 +146,8 @@ rules:
   # https://github.com/fluxcd/kustomize-controller/blob/main/api/v1/kustomization_types.go#L277
   - resourceGroup: "kustomize.toolkit.fluxcd.io"
     resourceKind: "Kustomization"
-    jsonPath: "$.status.conditions[?(@.type=='Ready')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Ready')].status"
     humanJsonPath: "status.conditions[type=Ready].status"
     conditions:
       ready:
@@ -148,7 +159,8 @@ rules:
   # http://github.com/prometheus-operator/prometheus-operator/blob/main/pkg/apis/monitoring/v1/types.go#L228
   - resourceGroup: "monitoring.coreos.com"
     resourceKind: "Prometheus"
-    jsonPath: "$.status.conditions[?(@.type=='Available')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Available')].status"
     humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
@@ -160,7 +172,8 @@ rules:
       failed: []
   - resourceGroup: "monitoring.coreos.com"
     resourceKind: "Alertmanager"
-    jsonPath: "$.status.conditions[?(@.type=='Available')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Available')].status"
     humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
@@ -172,7 +185,8 @@ rules:
       failed: []
   - resourceGroup: "monitoring.coreos.com"
     resourceKind: "ThanosRuler"
-    jsonPath: "$.status.conditions[?(@.type=='Available')].status"
+    jsonPaths:
+      - "$.status.conditions[?(@.type=='Available')].status"
     humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
@@ -185,7 +199,8 @@ rules:
   #https://github.com/longhorn/longhorn-manager/blob/master/k8s/pkg/apis/longhorn/v1beta2/volume.go
   - resourceGroup: "longhorn.io"
     resourceKind: "Volume"
-    jsonPath: "$.status.state"
+    jsonPaths:
+      - "$.status.state"
     humanJsonPath: "status.state"
     conditions:
       ready:
@@ -200,7 +215,8 @@ rules:
   #https://github.com/longhorn/longhorn-manager/blob/master/k8s/pkg/apis/longhorn/v1beta2/backup.go
   - resourceGroup: "longhorn.io"
     resourceKind: "Backup"
-    jsonPath: "$.status.state"
+    jsonPaths:
+      - "$.status.state"
     humanJsonPath: "status.state"
     conditions:
       ready:
@@ -215,8 +231,154 @@ rules:
   # https://github.com/cloudnative-pg/cloudnative-pg/blob/main/api/v1/cluster_types.go
   - resourceGroup: "postgresql.cnpg.io"
     resourceKind: "Cluster"
-    jsonPath: '$.status.conditions[?(@.type=="Ready")].status'
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Ready")].status'
     humanJsonPath: "status.conditions[type=Ready].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  # https://deckhouse.io/modules/managed-postgres/stable/cr.html
+  # Instance kinds only: the *Class and *Snapshot kinds in this group publish no conditions.
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Postgres"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Memcached"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Valkey"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Kafka"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Opensearch"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "HiveMetastore"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Clickhouse"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Starrocks"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Trino"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Cassandra"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    conditions:
+      ready:
+        - "True"
+      progressing:
+        - "False"
+        - "Unknown"
+      failed: []
+  - resourceGroup: "managed-services.deckhouse.io"
+    resourceKind: "Rabbit"
+    jsonPaths:
+      - '$.status.conditions[?(@.type=="Available")].status'
+      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
+    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
     conditions:
       ready:
         - "True"

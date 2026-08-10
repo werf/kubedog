@@ -16,7 +16,7 @@ var (
 
 type ResourceStatusJSONPathCondition struct {
 	GroupKind     *schema.GroupKind
-	JSONPath      string
+	JSONPaths     []string
 	HumanPath     string
 	ReadyValues   []string
 	PendingValues []string
@@ -102,7 +102,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	for _, readyValue := range readyValuesByPriority {
 		for _, conditionType := range conditionTypesByPriority(readyValue, caseInsensitiveConditionTracking) {
 			conditions = append(conditions, &ResourceStatusJSONPathCondition{
-				JSONPath:      fmt.Sprintf(`$.status.conditions[?(@.type==%q)].status`, conditionType),
+				JSONPaths:     []string{fmt.Sprintf(`$.status.conditions[?(@.type==%q)].status`, conditionType)},
 				HumanPath:     fmt.Sprintf("status.conditions[type=%s].status", conditionType),
 				ReadyValues:   casify("true"),
 				PendingValues: casify("false", "unknown"),
@@ -111,7 +111,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	}
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.phase`,
+		JSONPaths:     []string{`$.status.phase`},
 		HumanPath:     "status.phase",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -119,7 +119,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.currentPhase`,
+		JSONPaths:     []string{`$.status.currentPhase`},
 		HumanPath:     "status.currentPhase",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -127,7 +127,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.state`,
+		JSONPaths:     []string{`$.status.state`},
 		HumanPath:     "status.state",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -135,7 +135,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.currentState`,
+		JSONPaths:     []string{`$.status.currentState`},
 		HumanPath:     "status.currentState",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -143,7 +143,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.status`,
+		JSONPaths:     []string{`$.status.status`},
 		HumanPath:     "status.status",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -151,7 +151,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.currentStatus`,
+		JSONPaths:     []string{`$.status.currentStatus`},
 		HumanPath:     "status.currentStatus",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -159,7 +159,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.health`,
+		JSONPaths:     []string{`$.status.health`},
 		HumanPath:     "status.health",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -167,7 +167,7 @@ func buildUniversalConditions(caseInsensitiveConditionTracking bool) []*Resource
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.currentHealth`,
+		JSONPaths:     []string{`$.status.currentHealth`},
 		HumanPath:     "status.currentHealth",
 		ReadyValues:   casify(readyValuesByPriority...),
 		PendingValues: casify(pendingValuesByPriority...),
@@ -181,28 +181,28 @@ func buildLowPriorityConditions() []*ResourceStatusJSONPathCondition {
 	var conditions []*ResourceStatusJSONPathCondition
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.state`,
+		JSONPaths:     []string{`$.status.state`},
 		HumanPath:     "status.state",
 		ReadyValues:   casify("valid"),
 		PendingValues: casify("invalid", "unknown"),
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.currentState`,
+		JSONPaths:     []string{`$.status.currentState`},
 		HumanPath:     "status.currentState",
 		ReadyValues:   casify("valid"),
 		PendingValues: casify("invalid", "unknown"),
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.health`,
+		JSONPaths:     []string{`$.status.health`},
 		HumanPath:     "status.health",
 		ReadyValues:   casify("green"),
 		PendingValues: casify("yellow", "red", "unknown"),
 	})
 
 	conditions = append(conditions, &ResourceStatusJSONPathCondition{
-		JSONPath:      `$.status.currentHealth`,
+		JSONPaths:     []string{`$.status.currentHealth`},
 		HumanPath:     "status.currentHealth",
 		ReadyValues:   casify("green"),
 		PendingValues: casify("yellow", "red", "unknown"),

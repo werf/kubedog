@@ -18,10 +18,10 @@ var contribResourceStatusRules string
 
 type ContribResourceStatusRules struct {
 	Rules []struct {
-		ResourceGroup *string `yaml:"resourceGroup"`
-		ResourceKind  *string `yaml:"resourceKind"`
-		JSONPath      string  `yaml:"jsonPath"`
-		HumanJSONPath string  `yaml:"humanJsonPath"`
+		ResourceGroup *string  `yaml:"resourceGroup"`
+		ResourceKind  *string  `yaml:"resourceKind"`
+		JSONPaths     []string `yaml:"jsonPaths"`
+		HumanJSONPath string   `yaml:"humanJsonPath"`
 		Conditions    struct {
 			Ready       []string `yaml:"ready"`
 			Progressing []string `yaml:"progressing"`
@@ -64,7 +64,7 @@ func buildContribResourceStatusRules() []*ResourceStatusJSONPathCondition {
 
 		conditions = append(conditions, &ResourceStatusJSONPathCondition{
 			GroupKind:     groupKind,
-			JSONPath:      rule.JSONPath,
+			JSONPaths:     rule.JSONPaths,
 			HumanPath:     rule.HumanJSONPath,
 			ReadyValues:   casify(rule.Conditions.Ready...),
 			PendingValues: casify(rule.Conditions.Progressing...),
