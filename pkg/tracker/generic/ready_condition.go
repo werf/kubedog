@@ -66,17 +66,22 @@ func NewResourceStatusIndicator(object *unstructured.Unstructured, opts ...NewRe
 		return nil, "", nil
 	}
 
-	indicator = &indicators.StringEqualConditionIndicator{
-		Value: formatConditionValues(matchedValues, matchedResolvedCount),
+	return newConditionIndicator(matchedCondition, matchedValues, matchedResolvedCount), matchedCondition.HumanPath, nil
+}
+
+func newConditionIndicator(condition *ResourceStatusJSONPathCondition, values []string, resolvedCount int) *indicators.StringEqualConditionIndicator {
+	indicator := &indicators.StringEqualConditionIndicator{
+		Value: formatConditionValues(values, resolvedCount),
 	}
-	indicator.SetReady(matchedResolvedCount == len(matchedValues) && lo.EveryBy(matchedValues, func(value string) bool {
-		return lo.Contains(matchedCondition.ReadyValues, value)
+
+	indicator.SetReady(resolvedCount == len(values) && lo.EveryBy(values, func(value string) bool {
+		return lo.Contains(condition.ReadyValues, value)
 	}))
-	indicator.SetFailed(lo.SomeBy(matchedValues, func(value string) bool {
-		return lo.Contains(matchedCondition.FailedValues, value)
+	indicator.SetFailed(lo.SomeBy(values, func(value string) bool {
+		return lo.Contains(condition.FailedValues, value)
 	}))
 
-	return indicator, matchedCondition.HumanPath, nil
+	return indicator
 }
 
 func resolveConditionJSONPaths(condition *ResourceStatusJSONPathCondition, object *unstructured.Unstructured) ([]string, int, error) {

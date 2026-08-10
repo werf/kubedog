@@ -201,37 +201,43 @@ func TestAI_UnrelatedResourceStillMatchedByHeuristics(t *testing.T) {
 }
 
 func TestAI_FailedValueTakesPrecedenceOverReady(t *testing.T) {
-	group := "example.com"
 	rule := &ResourceStatusJSONPathCondition{
-		Group: &group,
-		JSONPaths: []string{
-			`$.status.conditions[?(@.type=="A")].status`,
-			`$.status.conditions[?(@.type=="B")].status`,
-		},
-		HumanPath:    "status",
 		ReadyValues:  casify("True"),
 		FailedValues: casify("False"),
 	}
 
-	object := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "example.com/v1",
-			"kind":       "Widget",
-			"status": map[string]interface{}{
-				"conditions": []interface{}{
-					condition("A", "True"),
-					condition("B", "False"),
-				},
-			},
-		},
+	indicator := newConditionIndicator(rule, []string{"True", "False"}, 2)
+
+	assert.True(t, indicator.IsFailed(), "a failed value must win over the other path being ready")
+	assert.False(t, indicator.IsReady())
+	assert.Equal(t, "True, False", indicator.Value)
+}
+
+func TestAI_VerdictRequiresEveryPathReadyAndResolved(t *testing.T) {
+	rule := &ResourceStatusJSONPathCondition{
+		ReadyValues:   casify("True"),
+		PendingValues: casify("False"),
 	}
 
-	values, resolvedCount, err := resolveConditionJSONPaths(rule, object)
-	require.NoError(t, err)
+	for name, testCase := range map[string]struct {
+		values        []string
+		resolvedCount int
+		expectedReady bool
+		expectedValue string
+	}{
+		"every path ready":     {values: []string{"True", "True"}, resolvedCount: 2, expectedReady: true, expectedValue: "True, True"},
+		"one path progressing": {values: []string{"True", "False"}, resolvedCount: 2, expectedReady: false, expectedValue: "True, False"},
+		"one path unresolved":  {values: []string{"True", ""}, resolvedCount: 1, expectedReady: false, expectedValue: "True, -"},
+		"all paths unresolved": {values: []string{"", ""}, resolvedCount: 0, expectedReady: false, expectedValue: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			indicator := newConditionIndicator(rule, testCase.values, testCase.resolvedCount)
 
-	require.Equal(t, 2, resolvedCount)
-	assert.Equal(t, []string{"True", "False"}, values)
-	assert.Equal(t, "True, False", formatConditionValues(values, resolvedCount))
+			assert.Equal(t, testCase.expectedReady, indicator.IsReady())
+			assert.False(t, indicator.IsFailed())
+			assert.Equal(t, testCase.expectedValue, indicator.Value)
+		})
+	}
 }
 
 func TestAI_ConcurrentEvaluationIsDeterministic(t *testing.T) {
