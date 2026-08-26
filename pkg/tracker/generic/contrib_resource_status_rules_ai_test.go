@@ -91,9 +91,8 @@ func TestAI_ManagedServicesRulesCoverWhitelistedKinds(t *testing.T) {
 
 		assert.Equal(t, []string{
 			`$.status.conditions[?(@.type=="Available")].status`,
-			`$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status`,
 		}, rule.JSONPaths, "kind %s paths", rule.GroupKind.Kind)
-		assert.Equal(t, "status.conditions[type=Available&&LastValidConfigurationApplied].status", rule.HumanPath, "kind %s human path", rule.GroupKind.Kind)
+		assert.Equal(t, "status.conditions[type=Available].status", rule.HumanPath, "kind %s human path", rule.GroupKind.Kind)
 		assert.Equal(t, casify("True"), rule.ReadyValues, "kind %s ready values", rule.GroupKind.Kind)
 		assert.Empty(t, rule.FailedValues, "kind %s must treat False as progressing", rule.GroupKind.Kind)
 	}
