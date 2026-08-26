@@ -247,8 +247,7 @@ rules:
     resourceKind: "Postgres"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -260,8 +259,7 @@ rules:
     resourceKind: "Memcached"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -273,8 +271,7 @@ rules:
     resourceKind: "Valkey"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -286,8 +283,7 @@ rules:
     resourceKind: "Kafka"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -299,8 +295,7 @@ rules:
     resourceKind: "Opensearch"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -312,8 +307,7 @@ rules:
     resourceKind: "HiveMetastore"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -325,8 +319,7 @@ rules:
     resourceKind: "Clickhouse"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -338,8 +331,7 @@ rules:
     resourceKind: "Starrocks"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -351,8 +343,7 @@ rules:
     resourceKind: "Trino"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -364,8 +355,7 @@ rules:
     resourceKind: "Cassandra"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"
@@ -377,8 +367,7 @@ rules:
     resourceKind: "Rabbit"
     jsonPaths:
       - '$.status.conditions[?(@.type=="Available")].status'
-      - '$.status.conditions[?(@.type=="LastValidConfigurationApplied")].status'
-    humanJsonPath: "status.conditions[type=Available&&LastValidConfigurationApplied].status"
+    humanJsonPath: "status.conditions[type=Available].status"
     conditions:
       ready:
         - "True"

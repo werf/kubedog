@@ -39,8 +39,8 @@ func condition(conditionType, status string) map[string]interface{} {
 	return map[string]interface{}{"type": conditionType, "status": status}
 }
 
-func TestAI_ManagedServiceReadyWhenBothConditionsTrue(t *testing.T) {
-	object := managedServiceObject("Postgres", condition("Available", "True"), condition("LastValidConfigurationApplied", "True"))
+func TestAI_ManagedServiceReadyWhenAvailableIsTrue(t *testing.T) {
+	object := managedServiceObject("Postgres", condition("Available", "True"))
 
 	indicator, humanPath, err := NewResourceStatusIndicator(object)
 	require.NoError(t, err)
@@ -48,62 +48,49 @@ func TestAI_ManagedServiceReadyWhenBothConditionsTrue(t *testing.T) {
 
 	assert.True(t, indicator.IsReady())
 	assert.False(t, indicator.IsFailed())
-	assert.Equal(t, "True, True", indicator.Value)
-	assert.Equal(t, "status.conditions[type=Available&&LastValidConfigurationApplied].status", humanPath)
+	assert.Equal(t, "True", indicator.Value)
+	assert.Equal(t, "status.conditions[type=Available].status", humanPath)
+}
+
+func TestAI_ManagedServiceReadinessIgnoresOtherConditions(t *testing.T) {
+	object := managedServiceObject("Postgres",
+		condition("Available", "True"),
+		condition("LastValidConfigurationApplied", "False"),
+	)
+
+	indicator, _, err := NewResourceStatusIndicator(object)
+	require.NoError(t, err)
+	require.NotNil(t, indicator)
+
+	assert.True(t, indicator.IsReady(), "only Available decides readiness")
+	assert.False(t, indicator.IsFailed())
+	assert.Equal(t, "True", indicator.Value)
 }
 
 func TestAI_ManagedServiceNotReadyOnNonTrueCondition(t *testing.T) {
 	for _, status := range []string{"False", "Unknown"} {
-		for _, conditionType := range []string{"Available", "LastValidConfigurationApplied"} {
-			t.Run(fmt.Sprintf("%s=%s", conditionType, status), func(t *testing.T) {
-				conditions := []map[string]interface{}{
-					condition("Available", "True"),
-					condition("LastValidConfigurationApplied", "True"),
-				}
-				for i, c := range conditions {
-					if c["type"] == conditionType {
-						conditions[i] = condition(conditionType, status)
-					}
-				}
-
-				indicator, _, err := NewResourceStatusIndicator(managedServiceObject("Postgres", conditions...))
-				require.NoError(t, err)
-				require.NotNil(t, indicator)
-
-				assert.False(t, indicator.IsReady(), "must not be ready")
-				assert.False(t, indicator.IsFailed(), "a non-True condition is progressing, never terminal")
-			})
-		}
-	}
-}
-
-func TestAI_ManagedServicePendingWhenOneConditionMissing(t *testing.T) {
-	for _, testCase := range []struct {
-		name          string
-		conditions    []map[string]interface{}
-		expectedValue string
-	}{
-		{
-			name:          "LastValidConfigurationApplied missing",
-			conditions:    []map[string]interface{}{condition("Available", "True")},
-			expectedValue: "True, -",
-		},
-		{
-			name:          "Available missing",
-			conditions:    []map[string]interface{}{condition("LastValidConfigurationApplied", "True")},
-			expectedValue: "-, True",
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			indicator, _, err := NewResourceStatusIndicator(managedServiceObject("Postgres", testCase.conditions...))
+		t.Run(fmt.Sprintf("Available=%s", status), func(t *testing.T) {
+			indicator, _, err := NewResourceStatusIndicator(managedServiceObject("Postgres", condition("Available", status)))
 			require.NoError(t, err)
 			require.NotNil(t, indicator)
 
-			assert.False(t, indicator.IsReady())
-			assert.False(t, indicator.IsFailed())
-			assert.Equal(t, testCase.expectedValue, indicator.Value)
+			assert.False(t, indicator.IsReady(), "must not be ready")
+			assert.False(t, indicator.IsFailed(), "a non-True condition is progressing, never terminal")
+			assert.Equal(t, status, indicator.Value)
 		})
 	}
+}
+
+func TestAI_ManagedServicePendingWhenAvailableMissing(t *testing.T) {
+	object := managedServiceObject("Postgres", condition("LastValidConfigurationApplied", "True"))
+
+	indicator, _, err := NewResourceStatusIndicator(object)
+	require.NoError(t, err)
+	require.NotNil(t, indicator)
+
+	assert.False(t, indicator.IsReady())
+	assert.False(t, indicator.IsFailed())
+	assert.Empty(t, indicator.Value, "an unresolved rule must keep skipping the value display")
 }
 
 func TestAI_NonWhitelistedKindsInGroupAreNotTracked(t *testing.T) {
@@ -144,13 +131,13 @@ func TestAI_WhitelistedKindStaysPendingUntilConditionsAppear(t *testing.T) {
 	assert.False(t, indicator.IsReady(), "must not go implicitly ready before the operator reports")
 	assert.False(t, indicator.IsFailed())
 	assert.Empty(t, indicator.Value)
-	assert.Equal(t, "status.conditions[type=Available&&LastValidConfigurationApplied].status", humanPath)
+	assert.Equal(t, "status.conditions[type=Available].status", humanPath)
 }
 
 func TestAI_EveryWhitelistedKindIsTracked(t *testing.T) {
 	for _, kind := range managedServicesWhitelistedKinds {
 		t.Run(kind, func(t *testing.T) {
-			object := managedServiceObject(kind, condition("Available", "True"), condition("LastValidConfigurationApplied", "True"))
+			object := managedServiceObject(kind, condition("Available", "True"))
 
 			indicator, _, err := NewResourceStatusIndicator(object)
 			require.NoError(t, err)
@@ -162,7 +149,7 @@ func TestAI_EveryWhitelistedKindIsTracked(t *testing.T) {
 }
 
 func TestAI_ManagedServiceReadyWithLowercaseConditionStatus(t *testing.T) {
-	object := managedServiceObject("Postgres", condition("Available", "true"), condition("LastValidConfigurationApplied", "true"))
+	object := managedServiceObject("Postgres", condition("Available", "true"))
 
 	indicator, _, err := NewResourceStatusIndicator(object)
 	require.NoError(t, err)
@@ -250,8 +237,8 @@ func TestAI_VerdictRequiresEveryPathReadyAndResolved(t *testing.T) {
 }
 
 func TestAI_ConcurrentEvaluationIsDeterministic(t *testing.T) {
-	ready := managedServiceObject("Postgres", condition("Available", "True"), condition("LastValidConfigurationApplied", "True"))
-	pending := managedServiceObject("Valkey", condition("Available", "True"), condition("LastValidConfigurationApplied", "False"))
+	ready := managedServiceObject("Postgres", condition("Available", "True"))
+	pending := managedServiceObject("Valkey", condition("Available", "False"))
 
 	for _, caseInsensitive := range []bool{false, true} {
 		t.Run(fmt.Sprintf("caseInsensitive=%v", caseInsensitive), func(t *testing.T) {
