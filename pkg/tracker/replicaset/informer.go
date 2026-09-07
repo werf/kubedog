@@ -44,11 +44,13 @@ type ReplicaSetPodError struct {
 // ReplicaSetInformer monitor ReplicaSet events to use with controllers (Deployment, StatefulSet, DaemonSet)
 type ReplicaSetInformer struct {
 	tracker.Tracker
-	Controller         utils.ControllerMetadata
-	ReplicaSetAdded    chan *appsv1.ReplicaSet
-	ReplicaSetModified chan *appsv1.ReplicaSet
-	ReplicaSetDeleted  chan *appsv1.ReplicaSet
-	Errors             chan error
+	Controller           utils.ControllerMetadata
+	ReplicaSetAdded      chan *appsv1.ReplicaSet
+	ReplicaSetModified   chan *appsv1.ReplicaSet
+	ReplicaSetDeleted    chan *appsv1.ReplicaSet
+	replicaSetUnselected chan *appsv1.ReplicaSet
+	replicaSetSynced     chan struct{}
+	Errors               chan error
 }
 
 func NewReplicaSetInformer(trk *tracker.Tracker, controller utils.ControllerMetadata) *ReplicaSetInformer {
@@ -81,7 +83,29 @@ func (r *ReplicaSetInformer) WithChannels(added chan *appsv1.ReplicaSet,
 	return r
 }
 
+// WithUnselectedChannel reports ReplicaSets that stop matching the controller selector
+// without being deleted. Consumers can remove them without permanently tombstoning the UID.
+func (r *ReplicaSetInformer) WithUnselectedChannel(unselected chan *appsv1.ReplicaSet) *ReplicaSetInformer {
+	r.replicaSetUnselected = unselected
+	return r
+}
+
+// WithSyncedChannel reports when this handler has consumed its initial ReplicaSet list.
+func (r *ReplicaSetInformer) WithSyncedChannel(synced chan struct{}) *ReplicaSetInformer {
+	r.replicaSetSynced = synced
+	return r
+}
+
 func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
+	// The event channels may be unbuffered, so a send with no receiver left blocks the
+	// shared informer goroutine forever: stop sending once the consumer is gone.
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := r.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -104,45 +128,58 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 	}
 
 	if err := inform.RWTransactionErr(func(inf *informer.Informer) error {
+		toReplicaSet := func(obj interface{}) *appsv1.ReplicaSet {
+			if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+				obj = d.Obj
+			}
+
+			rsObj := &appsv1.ReplicaSet{}
+			lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
+			return rsObj
+		}
+		matches := func(rs *appsv1.ReplicaSet) bool {
+			return labelSelector.Matches(apilabels.Set(rs.GetLabels()))
+		}
+
 		handler, err := inf.AddEventHandler(
-			cache.FilteringResourceEventHandler{
-				FilterFunc: func(obj interface{}) bool {
-					if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
-						obj = d.Obj
+			cache.ResourceEventHandlerFuncs{
+				AddFunc: func(obj interface{}) {
+					rsObj := toReplicaSet(obj)
+					if matches(rsObj) {
+						sendReplicaSet(ctx, r.ReplicaSetAdded, rsObj)
 					}
-
-					rsObj := &appsv1.ReplicaSet{}
-					lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
-					return labelSelector.Matches(apilabels.Set(rsObj.GetLabels()))
 				},
-				Handler: cache.ResourceEventHandlerFuncs{
-					AddFunc: func(obj interface{}) {
-						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
-							obj = d.Obj
-						}
+				UpdateFunc: func(oldObj, newObj interface{}) {
+					oldReplicaSet := toReplicaSet(oldObj)
+					newReplicaSet := toReplicaSet(newObj)
+					oldMatches := matches(oldReplicaSet)
+					newMatches := matches(newReplicaSet)
 
-						rsObj := &appsv1.ReplicaSet{}
-						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
-						r.ReplicaSetAdded <- rsObj
-					},
-					UpdateFunc: func(oldObj, newObj interface{}) {
-						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
-							newObj = d.Obj
+					switch {
+					case oldReplicaSet.UID != newReplicaSet.UID:
+						if oldMatches {
+							sendReplicaSet(ctx, r.ReplicaSetDeleted, oldReplicaSet)
 						}
-
-						rsObj := &appsv1.ReplicaSet{}
-						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, rsObj))
-						r.ReplicaSetModified <- rsObj
-					},
-					DeleteFunc: func(obj interface{}) {
-						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
-							obj = d.Obj
+						if newMatches {
+							sendReplicaSet(ctx, r.ReplicaSetAdded, newReplicaSet)
 						}
-
-						rsObj := &appsv1.ReplicaSet{}
-						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
-						r.ReplicaSetDeleted <- rsObj
-					},
+					case oldMatches && newMatches:
+						sendReplicaSet(ctx, r.ReplicaSetModified, newReplicaSet)
+					case oldMatches:
+						if r.replicaSetUnselected != nil {
+							sendReplicaSet(ctx, r.replicaSetUnselected, newReplicaSet)
+						} else {
+							sendReplicaSet(ctx, r.ReplicaSetDeleted, oldReplicaSet)
+						}
+					case newMatches:
+						sendReplicaSet(ctx, r.ReplicaSetAdded, newReplicaSet)
+					}
+				},
+				DeleteFunc: func(obj interface{}) {
+					rsObj := toReplicaSet(obj)
+					if matches(rsObj) {
+						sendReplicaSet(ctx, r.ReplicaSetDeleted, rsObj)
+					}
 				},
 			},
 		)
@@ -151,10 +188,23 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
 		inf.Run()
+		if r.replicaSetSynced != nil {
+			go func() {
+				if !cache.WaitForCacheSync(ctx.Done(), handler.HasSynced) {
+					return
+				}
+
+				select {
+				case r.replicaSetSynced <- struct{}{}:
+				case <-ctx.Done():
+				}
+			}()
+		}
 
 		return nil
 	}); err != nil {
@@ -162,4 +212,11 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 	}
 
 	return cleanupFn, nil
+}
+
+func sendReplicaSet(ctx context.Context, ch chan<- *appsv1.ReplicaSet, rsObj *appsv1.ReplicaSet) {
+	select {
+	case ch <- rsObj:
+	case <-ctx.Done():
+	}
 }

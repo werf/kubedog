@@ -7,21 +7,42 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// FindNewReplicaSet returns the ReplicaSet the Deployment is currently rolling out.
+// Only controlled ReplicaSets are considered: label selectors are not unique, so a
+// ReplicaSet of another Deployment may match both the labels and the pod template.
 func FindNewReplicaSet(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) (*appsv1.ReplicaSet, error) {
 	newRSTemplate := GetNewReplicaSetTemplate(deployment)
-	sort.Sort(ReplicaSetsByCreationTimestamp(rsList))
-	for i := range rsList {
-		if EqualIgnoreHash(rsList[i].Spec.Template, newRSTemplate) {
+	ownedRSList := controlledReplicaSets(deployment, rsList)
+	sort.Sort(ReplicaSetsByCreationTimestamp(ownedRSList))
+	for i := range ownedRSList {
+		if EqualIgnoreHash(ownedRSList[i].Spec.Template, newRSTemplate) {
 			// In rare cases, such as after cluster upgrades, Deployment may end up with
 			// having more than one new ReplicaSets that have the same template as its template,
 			// see https://github.com/kubernetes/kubernetes/issues/40415
 			// We deterministically choose the oldest new ReplicaSet.
-			return rsList[i], nil
+			return ownedRSList[i], nil
 		}
 	}
 	return nil, nil
+}
+
+// controlledReplicaSets keeps only the ReplicaSets owned by the Deployment. Adoption of an
+// orphan is left to the Deployment controller: tracking one before it happens would report
+// a ReplicaSet that may never become ours.
+func controlledReplicaSets(deployment *appsv1.Deployment, rsList []*appsv1.ReplicaSet) []*appsv1.ReplicaSet {
+	ownedRSList := make([]*appsv1.ReplicaSet, 0, len(rsList))
+	for _, rs := range rsList {
+		if rs == nil || !metav1.IsControlledBy(rs, deployment) {
+			continue
+		}
+
+		ownedRSList = append(ownedRSList, rs)
+	}
+
+	return ownedRSList
 }
 
 func IsReplicaSetNew(deployment *appsv1.Deployment, rsMap map[string]*appsv1.ReplicaSet, rsName string) (bool, error) {

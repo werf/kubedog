@@ -9,6 +9,17 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/pod"
 )
 
+// FailureMode qualifies a reported failure: a counted one may be transient and spends the
+// consumer's error budget, while a fatal one is durable and bypasses it.
+type FailureMode uint8
+
+const (
+	// FailureModeCounted is a recoverable failure charged against the consumer's error budget.
+	FailureModeCounted FailureMode = iota
+	// FailureModeFatal is a rollout-wide failure that cannot recover without an external change.
+	FailureModeFatal
+)
+
 type DeploymentStatus struct {
 	appsv1.DeploymentStatus
 
@@ -23,6 +34,7 @@ type DeploymentStatus struct {
 	IsReady      bool
 	IsFailed     bool
 	FailedReason string
+	FailureMode  FailureMode
 
 	Pods map[string]pod.PodStatus
 	// New Pod belongs to the new ReplicaSet of the Deployment,
@@ -78,17 +90,14 @@ processingPodsStatuses:
 			TargetValue: *object.Spec.Replicas,
 		}
 
-		res.IsReady = true
+		res.IsReady = deploymentStatusReady(object)
 		if object.Status.UpdatedReplicas != *object.Spec.Replicas {
-			res.IsReady = false
 			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("up-to-date %d->%d", object.Status.UpdatedReplicas, *object.Spec.Replicas))
 		}
 		if object.Status.Replicas != *object.Spec.Replicas {
-			res.IsReady = false
 			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("replicas %d->%d", object.Status.Replicas, *object.Spec.Replicas))
 		}
 		if object.Status.AvailableReplicas != *object.Spec.Replicas {
-			res.IsReady = false
 			res.WaitingForMessages = append(res.WaitingForMessages, fmt.Sprintf("available %d->%d", object.Status.AvailableReplicas, *object.Spec.Replicas))
 		}
 	} else {
@@ -101,4 +110,16 @@ processingPodsStatuses:
 	}
 
 	return res
+}
+
+// deploymentStatusReady reports whether the Deployment controller has observed the
+// current spec and reports every replica up-to-date, present and available.
+func deploymentStatusReady(object *appsv1.Deployment) bool {
+	if object.Status.ObservedGeneration < object.Generation || object.Spec.Replicas == nil {
+		return false
+	}
+
+	return object.Status.UpdatedReplicas == *object.Spec.Replicas &&
+		object.Status.Replicas == *object.Spec.Replicas &&
+		object.Status.AvailableReplicas == *object.Spec.Replicas
 }
