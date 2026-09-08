@@ -3,6 +3,7 @@ package informer
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -15,13 +16,14 @@ import (
 )
 
 type informerFromFactoryOptions struct {
-	Namespace string
+	Namespace           string
+	ForbiddenIsNotFatal bool
 }
 
 func newInformerFromFactory(gvr schema.GroupVersionResource, factory dynamicinformer.DynamicSharedInformerFactory, stopCh <-chan struct{}, watchErrCh chan<- error, opts informerFromFactoryOptions) (*Informer, error) {
 	informer := factory.ForResource(gvr)
 
-	if err := setWatchErrorHandler(informer.Informer().SetWatchErrorHandler, watchErrCh, gvr); err != nil {
+	if err := setWatchErrorHandler(informer.Informer().SetWatchErrorHandler, watchErrCh, gvr, opts.ForbiddenIsNotFatal); err != nil {
 		return nil, fmt.Errorf("set watch error handler for resource %s: %w", gvr.String(), err)
 	}
 
@@ -70,7 +72,9 @@ func (i *Informer) Get(name string) (runtime.Object, error) {
 	return i.lister.Get(name)
 }
 
-func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHandler) error, watchErrCh chan<- error, gvr schema.GroupVersionResource) error {
+func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHandler) error, watchErrCh chan<- error, gvr schema.GroupVersionResource, forbiddenIsNotFatal bool) error {
+	var forbiddenOnce sync.Once
+
 	if err := setWatchErrorHandler(
 		func(r *cache.Reflector, err error) {
 			isExpiredError := func(err error) bool {
@@ -89,6 +93,14 @@ func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHand
 				if debug.Debug() {
 					fmt.Printf("[SetWatchErrorHandler] %s watch closed with unexpected EOF error: %s\n", gvr.String(), err)
 				}
+			case forbiddenIsNotFatal && apierrors.IsForbidden(err):
+				// No access to the resource, so we just won't get its objects. The reflector
+				// keeps retrying, hence log only once to not spam the same message.
+				forbiddenOnce.Do(func() {
+					if debug.Debug() {
+						fmt.Printf("[SetWatchErrorHandler] no access to %s, won't be watched: %s\n", gvr.String(), err)
+					}
+				})
 			default:
 				if debug.Debug() {
 					fmt.Printf("[SetWatchErrorHandler] %s watch closed with an error: %s\n", gvr.String(), err)

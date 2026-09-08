@@ -25,6 +25,13 @@ func NewConcurrentInformerFactory(stopCh <-chan struct{}, watchErrCh chan<- erro
 	}, lock)
 }
 
+// InformerOptions are the settings of a particular informer.
+type InformerOptions struct {
+	// ForbiddenIsNotFatal makes "403 Forbidden" on list/watch a non-fatal error. The
+	// informer keeps retrying, but the missing access doesn't stop the tracking.
+	ForbiddenIsNotFatal bool
+}
+
 type InformerFactory struct {
 	clusteredFactory    dynamicinformer.DynamicSharedInformerFactory
 	dynamicClient       dynamic.Interface
@@ -34,15 +41,23 @@ type InformerFactory struct {
 	watchErrCh          chan<- error
 }
 
-func (f *InformerFactory) ForNamespace(gvr schema.GroupVersionResource, namespace string) (*util.Concurrent[*Informer], error) {
-	factory, found := f.namespacedFactories[namespace]
+func (f *InformerFactory) ForNamespace(gvr schema.GroupVersionResource, namespace string, opts ...InformerOptions) (*util.Concurrent[*Informer], error) {
+	var opt InformerOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	key := namespacedFactoryKey(namespace, opt)
+
+	factory, found := f.namespacedFactories[key]
 	if !found {
 		factory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(f.dynamicClient, 0, namespace, nil)
-		f.namespacedFactories[namespace] = factory
+		f.namespacedFactories[key] = factory
 	}
 
 	informer, err := newInformerFromFactory(gvr, factory, f.stopCh, f.watchErrCh, informerFromFactoryOptions{
-		Namespace: namespace,
+		Namespace:           namespace,
+		ForbiddenIsNotFatal: opt.ForbiddenIsNotFatal,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct informer: %w", err)
@@ -62,4 +77,16 @@ func (f *InformerFactory) Clustered(gvr schema.GroupVersionResource) (*util.Conc
 	}
 
 	return util.NewConcurrentWithLock(informer, f.informersLock), nil
+}
+
+// namespacedFactoryKey makes the watch error policy a part of the informer identity: a
+// single SharedIndexInformer has a single watch error handler, which can only be set once,
+// so the consumers disagreeing on the policy must not share an informer. A namespace name
+// can't contain a slash, hence the key never collides with a plain namespace.
+func namespacedFactoryKey(namespace string, opt InformerOptions) string {
+	if opt.ForbiddenIsNotFatal {
+		return namespace + "/forbidden-is-not-fatal"
+	}
+
+	return namespace
 }
