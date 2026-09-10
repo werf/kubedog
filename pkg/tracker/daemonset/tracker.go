@@ -290,7 +290,7 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 			Group:    "apps",
 			Version:  "v1",
 			Resource: "daemonsets",
-		}, d.Namespace, informer.InformerOptions{})
+		}, d.Namespace)
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

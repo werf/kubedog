@@ -258,7 +258,7 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 			Group:    "batch",
 			Version:  "v1",
 			Resource: "jobs",
-		}, job.Namespace, informer.InformerOptions{})
+		}, job.Namespace)
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

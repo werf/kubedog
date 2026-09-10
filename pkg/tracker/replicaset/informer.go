@@ -88,7 +88,7 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 			Group:    "apps",
 			Version:  "v1",
 			Resource: "replicasets",
-		}, r.Namespace, informer.InformerOptions{})
+		}, r.Namespace)
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

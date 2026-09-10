@@ -50,7 +50,7 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 	var inform *util.Concurrent[*informer.Informer]
 	if err := w.informerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		if namespaced {
-			inform, err = factory.ForNamespace(*gvr, w.ResourceID.Namespace, informer.InformerOptions{})
+			inform, err = factory.ForNamespace(*gvr, w.ResourceID.Namespace)
 			if err != nil {
 				return fmt.Errorf("get namespaced informer from factory: %w", err)
 			}

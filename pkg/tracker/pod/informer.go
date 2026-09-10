@@ -55,7 +55,7 @@ func (p *PodsInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 			Group:    "",
 			Version:  "v1",
 			Resource: "pods",
-		}, p.Namespace, informer.InformerOptions{})
+		}, p.Namespace)
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

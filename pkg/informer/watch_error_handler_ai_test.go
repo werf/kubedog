@@ -3,10 +3,11 @@
 package informer
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"sync"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,9 +16,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic/dynamicinformer"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/werf/kubedog/pkg/display"
 )
 
 var (
@@ -139,31 +141,43 @@ func TestSetWatchErrorHandlerAlreadyStartedInformerIsNotAnError(t *testing.T) {
 func newTestInformerFactory(t *testing.T) *InformerFactory {
 	t.Helper()
 
-	return &InformerFactory{
-		dynamicClient:        dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
-		namespacedFactories:  make(map[string]dynamicinformer.DynamicSharedInformerFactory),
-		informerPolicies:     make(map[informerPolicyKey]InformerOptions),
-		informersLock:        &sync.RWMutex{},
-		stopCh:               make(chan struct{}),
-		watchErrCh:           make(chan error, 1),
-		onNonFatalWatchError: func(_ schema.GroupVersionResource, _ string, _ error) {},
-	}
+	var factory *InformerFactory
+	NewConcurrentInformerFactory(make(chan struct{}), make(chan error, 1), dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ConcurrentInformerFactoryOptions{
+		OnNonFatalWatchError: func(_ schema.GroupVersionResource, _ string, _ error) {},
+	}).RTransaction(func(f *InformerFactory) {
+		factory = f
+	})
+
+	return factory
 }
 
-// A single informer has a single watch error handler, which can only be set once, so
-// disagreeing consumers must be rejected instead of silently getting the policy of
-// whoever created the informer first.
-func TestForNamespaceRejectsConflictingOptions(t *testing.T) {
+// Consumers disagreeing on the options must not share an informer, because a single
+// informer has a single watch error handler, which can only be set once.
+func TestForNamespaceSeparatesInformersByOptions(t *testing.T) {
 	factory := newTestInformerFactory(t)
 
-	_, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+	_, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault)
 	require.NoError(t, err)
 
-	_, err = factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{})
-	require.ErrorContains(t, err, "conflicting options")
+	_, err = factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+	require.NoError(t, err)
+
+	assert.Len(t, factory.namespacedFactories, 2)
 }
 
-func TestForNamespaceAllowsSamePolicyAndDifferentResources(t *testing.T) {
+// Tracking a v1/Event itself requests the same resource and namespace both as the tracked
+// resource and as the events feed, so the differing options must not break the tracking.
+func TestForNamespaceSupportsTrackingEventsThemselves(t *testing.T) {
+	factory := newTestInformerFactory(t)
+
+	_, err := factory.ForNamespace(eventsGVR, "production")
+	require.NoError(t, err)
+
+	_, err = factory.ForNamespace(eventsGVR, "production", InformerOptions{ForbiddenIsNotFatal: true})
+	require.NoError(t, err)
+}
+
+func TestForNamespaceReusesFactoryForSameOptions(t *testing.T) {
 	factory := newTestInformerFactory(t)
 
 	for i := 0; i < 3; i++ {
@@ -171,21 +185,34 @@ func TestForNamespaceAllowsSamePolicyAndDifferentResources(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	_, err := factory.ForNamespace(podsGVR, metav1.NamespaceDefault, InformerOptions{})
+	_, err := factory.ForNamespace(podsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
 	require.NoError(t, err)
 
-	_, err = factory.ForNamespace(eventsGVR, "production", InformerOptions{ForbiddenIsNotFatal: true})
-	require.NoError(t, err)
-
-	assert.Len(t, factory.namespacedFactories, 2, "one factory per namespace regardless of the policy")
+	assert.Len(t, factory.namespacedFactories, 1)
 }
 
-func TestNewConcurrentInformerFactoryDefaultsNonFatalWatchErrorReporting(t *testing.T) {
+func TestForNamespaceRejectsMoreThanOneOptions(t *testing.T) {
+	factory := newTestInformerFactory(t)
+
+	_, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{}, InformerOptions{})
+
+	require.ErrorContains(t, err, "at most one")
+}
+
+// The warning must reach the user without the consumer opting in.
+func TestNewConcurrentInformerFactoryWarnsByDefault(t *testing.T) {
+	var out bytes.Buffer
+	t.Cleanup(func() { display.SetErr(os.Stderr) })
+	display.SetErr(&out)
+
 	var factory *InformerFactory
 	NewConcurrentInformerFactory(make(chan struct{}), make(chan error, 1), dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ConcurrentInformerFactoryOptions{}).
 		RTransaction(func(f *InformerFactory) {
 			factory = f
 		})
 
-	assert.NotNil(t, factory.onNonFatalWatchError, "the warning must be emitted without the consumer opting in")
+	factory.onNonFatalWatchError(eventsGVR, metav1.NamespaceDefault, forbiddenErr())
+
+	assert.Contains(t, out.String(), "WARNING")
+	assert.Contains(t, out.String(), metav1.NamespaceDefault)
 }

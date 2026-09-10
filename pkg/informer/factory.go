@@ -9,6 +9,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 
+	"github.com/werf/kubedog/pkg/display"
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
@@ -27,8 +28,7 @@ func NewConcurrentInformerFactory(stopCh <-chan struct{}, watchErrCh chan<- erro
 	lock := &sync.RWMutex{}
 	return util.NewConcurrentWithLock(&InformerFactory{
 		dynamicClient:        dynamicClient,
-		namespacedFactories:  make(map[string]dynamicinformer.DynamicSharedInformerFactory),
-		informerPolicies:     make(map[informerPolicyKey]InformerOptions),
+		namespacedFactories:  make(map[namespacedFactoryKey]dynamicinformer.DynamicSharedInformerFactory),
 		informersLock:        lock,
 		stopCh:               stopCh,
 		watchErrCh:           watchErrCh,
@@ -37,7 +37,7 @@ func NewConcurrentInformerFactory(stopCh <-chan struct{}, watchErrCh chan<- erro
 }
 
 func warnAboutNonFatalWatchError(gvr schema.GroupVersionResource, namespace string, err error) {
-	fmt.Printf("WARNING: no access to %s in namespace %q, tracking continues without it: %s\n", gvr.String(), namespace, err)
+	display.ErrF("WARNING: no access to %s in namespace %q, tracking continues without it: %s\n", gvr.String(), namespace, err)
 }
 
 // InformerOptions are the settings of a particular informer.
@@ -47,36 +47,42 @@ type InformerOptions struct {
 	ForbiddenIsNotFatal bool
 }
 
-// informerPolicyKey identifies an informer shared by all the consumers of the same
-// resource in the same namespace. Such an informer has a single watch error handler,
-// which can only be set once, so the consumers must agree on the options.
-type informerPolicyKey struct {
-	gvr       schema.GroupVersionResource
+// namespacedFactoryKey makes the options a part of the informer identity: a single
+// informer has a single watch error handler, which can only be set once, so the consumers
+// disagreeing on the options must not share an informer. Informers are created lazily per
+// resource, so a second factory for a namespace costs nothing until the same resource is
+// actually requested with both options.
+type namespacedFactoryKey struct {
 	namespace string
+	options   InformerOptions
 }
 
 type InformerFactory struct {
 	clusteredFactory     dynamicinformer.DynamicSharedInformerFactory
 	dynamicClient        dynamic.Interface
 	informersLock        *sync.RWMutex
-	namespacedFactories  map[string]dynamicinformer.DynamicSharedInformerFactory
-	informerPolicies     map[informerPolicyKey]InformerOptions
+	namespacedFactories  map[namespacedFactoryKey]dynamicinformer.DynamicSharedInformerFactory
 	stopCh               <-chan struct{}
 	watchErrCh           chan<- error
 	onNonFatalWatchError func(gvr schema.GroupVersionResource, namespace string, err error)
 }
 
-func (f *InformerFactory) ForNamespace(gvr schema.GroupVersionResource, namespace string, opt InformerOptions) (*util.Concurrent[*Informer], error) {
-	key := informerPolicyKey{gvr: gvr, namespace: namespace}
-	if previous, found := f.informerPolicies[key]; found && previous != opt {
-		return nil, fmt.Errorf("conflicting options for informer of resource %s in namespace %q", gvr.String(), namespace)
+func (f *InformerFactory) ForNamespace(gvr schema.GroupVersionResource, namespace string, opts ...InformerOptions) (*util.Concurrent[*Informer], error) {
+	if len(opts) > 1 {
+		return nil, fmt.Errorf("expected at most one InformerOptions, got %d", len(opts))
 	}
-	f.informerPolicies[key] = opt
 
-	factory, found := f.namespacedFactories[namespace]
+	var opt InformerOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	key := namespacedFactoryKey{namespace: namespace, options: opt}
+
+	factory, found := f.namespacedFactories[key]
 	if !found {
 		factory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(f.dynamicClient, 0, namespace, nil)
-		f.namespacedFactories[namespace] = factory
+		f.namespacedFactories[key] = factory
 	}
 
 	informer, err := newInformerFromFactory(gvr, factory, f.stopCh, f.watchErrCh, informerFromFactoryOptions{

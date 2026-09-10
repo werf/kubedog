@@ -417,7 +417,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 			Group:    "apps",
 			Version:  "v1",
 			Resource: "deployments",
-		}, d.Namespace, informer.InformerOptions{})
+		}, d.Namespace)
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}
