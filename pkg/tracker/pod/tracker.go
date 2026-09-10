@@ -601,7 +601,7 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 			Group:    "",
 			Version:  "v1",
 			Resource: "pods",
-		}, pod.Namespace)
+		}, pod.Namespace, informer.InformerOptions{})
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

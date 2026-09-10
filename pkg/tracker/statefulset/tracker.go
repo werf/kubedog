@@ -299,7 +299,7 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 			Group:    "apps",
 			Version:  "v1",
 			Resource: "statefulsets",
-		}, d.Namespace)
+		}, d.Namespace, informer.InformerOptions{})
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

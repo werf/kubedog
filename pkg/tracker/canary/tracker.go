@@ -137,7 +137,7 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 			Group:    "flagger.app",
 			Version:  "v1beta1",
 			Resource: "canaries",
-		}, canary.Namespace)
+		}, canary.Namespace, informer.InformerOptions{})
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

@@ -12,17 +12,32 @@ import (
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
-type ConcurrentInformerFactoryOptions struct{}
+type ConcurrentInformerFactoryOptions struct {
+	// OnNonFatalWatchError reports a watch error that doesn't stop the tracking. It is
+	// called at most once per informer and error kind. Defaults to printing a warning.
+	OnNonFatalWatchError func(gvr schema.GroupVersionResource, namespace string, err error)
+}
 
 func NewConcurrentInformerFactory(stopCh <-chan struct{}, watchErrCh chan<- error, dynamicClient dynamic.Interface, opts ConcurrentInformerFactoryOptions) *util.Concurrent[*InformerFactory] {
+	onNonFatalWatchError := opts.OnNonFatalWatchError
+	if onNonFatalWatchError == nil {
+		onNonFatalWatchError = warnAboutNonFatalWatchError
+	}
+
 	lock := &sync.RWMutex{}
 	return util.NewConcurrentWithLock(&InformerFactory{
-		dynamicClient:       dynamicClient,
-		namespacedFactories: make(map[string]dynamicinformer.DynamicSharedInformerFactory),
-		informersLock:       lock,
-		stopCh:              stopCh,
-		watchErrCh:          watchErrCh,
+		dynamicClient:        dynamicClient,
+		namespacedFactories:  make(map[string]dynamicinformer.DynamicSharedInformerFactory),
+		informerPolicies:     make(map[informerPolicyKey]InformerOptions),
+		informersLock:        lock,
+		stopCh:               stopCh,
+		watchErrCh:           watchErrCh,
+		onNonFatalWatchError: onNonFatalWatchError,
 	}, lock)
+}
+
+func warnAboutNonFatalWatchError(gvr schema.GroupVersionResource, namespace string, err error) {
+	fmt.Printf("WARNING: no access to %s in namespace %q, tracking continues without it: %s\n", gvr.String(), namespace, err)
 }
 
 // InformerOptions are the settings of a particular informer.
@@ -32,32 +47,42 @@ type InformerOptions struct {
 	ForbiddenIsNotFatal bool
 }
 
-type InformerFactory struct {
-	clusteredFactory    dynamicinformer.DynamicSharedInformerFactory
-	dynamicClient       dynamic.Interface
-	informersLock       *sync.RWMutex
-	namespacedFactories map[string]dynamicinformer.DynamicSharedInformerFactory
-	stopCh              <-chan struct{}
-	watchErrCh          chan<- error
+// informerPolicyKey identifies an informer shared by all the consumers of the same
+// resource in the same namespace. Such an informer has a single watch error handler,
+// which can only be set once, so the consumers must agree on the options.
+type informerPolicyKey struct {
+	gvr       schema.GroupVersionResource
+	namespace string
 }
 
-func (f *InformerFactory) ForNamespace(gvr schema.GroupVersionResource, namespace string, opts ...InformerOptions) (*util.Concurrent[*Informer], error) {
-	var opt InformerOptions
-	if len(opts) > 0 {
-		opt = opts[0]
+type InformerFactory struct {
+	clusteredFactory     dynamicinformer.DynamicSharedInformerFactory
+	dynamicClient        dynamic.Interface
+	informersLock        *sync.RWMutex
+	namespacedFactories  map[string]dynamicinformer.DynamicSharedInformerFactory
+	informerPolicies     map[informerPolicyKey]InformerOptions
+	stopCh               <-chan struct{}
+	watchErrCh           chan<- error
+	onNonFatalWatchError func(gvr schema.GroupVersionResource, namespace string, err error)
+}
+
+func (f *InformerFactory) ForNamespace(gvr schema.GroupVersionResource, namespace string, opt InformerOptions) (*util.Concurrent[*Informer], error) {
+	key := informerPolicyKey{gvr: gvr, namespace: namespace}
+	if previous, found := f.informerPolicies[key]; found && previous != opt {
+		return nil, fmt.Errorf("conflicting options for informer of resource %s in namespace %q", gvr.String(), namespace)
 	}
+	f.informerPolicies[key] = opt
 
-	key := namespacedFactoryKey(namespace, opt)
-
-	factory, found := f.namespacedFactories[key]
+	factory, found := f.namespacedFactories[namespace]
 	if !found {
 		factory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(f.dynamicClient, 0, namespace, nil)
-		f.namespacedFactories[key] = factory
+		f.namespacedFactories[namespace] = factory
 	}
 
 	informer, err := newInformerFromFactory(gvr, factory, f.stopCh, f.watchErrCh, informerFromFactoryOptions{
-		Namespace:           namespace,
-		ForbiddenIsNotFatal: opt.ForbiddenIsNotFatal,
+		Namespace:            namespace,
+		ForbiddenIsNotFatal:  opt.ForbiddenIsNotFatal,
+		OnNonFatalWatchError: f.onNonFatalWatchError,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct informer: %w", err)
@@ -71,22 +96,12 @@ func (f *InformerFactory) Clustered(gvr schema.GroupVersionResource) (*util.Conc
 		f.clusteredFactory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(f.dynamicClient, 0, metav1.NamespaceAll, nil)
 	}
 
-	informer, err := newInformerFromFactory(gvr, f.clusteredFactory, f.stopCh, f.watchErrCh, informerFromFactoryOptions{})
+	informer, err := newInformerFromFactory(gvr, f.clusteredFactory, f.stopCh, f.watchErrCh, informerFromFactoryOptions{
+		OnNonFatalWatchError: f.onNonFatalWatchError,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("construct informer: %w", err)
 	}
 
 	return util.NewConcurrentWithLock(informer, f.informersLock), nil
-}
-
-// namespacedFactoryKey makes the watch error policy a part of the informer identity: a
-// single SharedIndexInformer has a single watch error handler, which can only be set once,
-// so the consumers disagreeing on the policy must not share an informer. A namespace name
-// can't contain a slash, hence the key never collides with a plain namespace.
-func namespacedFactoryKey(namespace string, opt InformerOptions) string {
-	if opt.ForbiddenIsNotFatal {
-		return namespace + "/forbidden-is-not-fatal"
-	}
-
-	return namespace
 }
