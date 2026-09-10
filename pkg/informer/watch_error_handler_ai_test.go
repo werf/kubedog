@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/werf/kubedog/pkg/display"
+	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 var (
@@ -156,13 +156,23 @@ func newTestInformerFactory(t *testing.T) *InformerFactory {
 func TestForNamespaceSeparatesInformersByOptions(t *testing.T) {
 	factory := newTestInformerFactory(t)
 
-	_, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault)
+	strict, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault)
 	require.NoError(t, err)
 
-	_, err = factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+	lenient, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
 	require.NoError(t, err)
 
 	assert.Len(t, factory.namespacedFactories, 2)
+	assert.NotSame(t, sharedInformerOf(strict), sharedInformerOf(lenient))
+}
+
+func sharedInformerOf(inform *util.Concurrent[*Informer]) cache.SharedIndexInformer {
+	var shared cache.SharedIndexInformer
+	inform.RTransaction(func(i *Informer) {
+		shared = i.informer
+	})
+
+	return shared
 }
 
 // Tracking a v1/Event itself requests the same resource and namespace both as the tracked
@@ -180,12 +190,16 @@ func TestForNamespaceSupportsTrackingEventsThemselves(t *testing.T) {
 func TestForNamespaceReusesFactoryForSameOptions(t *testing.T) {
 	factory := newTestInformerFactory(t)
 
+	first, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+	require.NoError(t, err)
+
 	for i := 0; i < 3; i++ {
-		_, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+		same, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
 		require.NoError(t, err)
+		assert.Same(t, sharedInformerOf(first), sharedInformerOf(same))
 	}
 
-	_, err := factory.ForNamespace(podsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+	_, err = factory.ForNamespace(podsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
 	require.NoError(t, err)
 
 	assert.Len(t, factory.namespacedFactories, 1)
@@ -202,7 +216,8 @@ func TestForNamespaceRejectsMoreThanOneOptions(t *testing.T) {
 // The warning must reach the user without the consumer opting in.
 func TestNewConcurrentInformerFactoryWarnsByDefault(t *testing.T) {
 	var out bytes.Buffer
-	t.Cleanup(func() { display.SetErr(os.Stderr) })
+	previousErr := display.Err
+	t.Cleanup(func() { display.SetErr(previousErr) })
 	display.SetErr(&out)
 
 	var factory *InformerFactory
