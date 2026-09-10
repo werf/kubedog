@@ -68,10 +68,11 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 			Version:  "v1",
 			Resource: "events",
 		}, eventNamespace, informer.InformerOptions{
-			// Events of cluster-scoped resources are stored in the "default" namespace,
-			// which the user might have no access to. Missing events is not a reason to
-			// stop tracking the resource itself.
-			ForbiddenIsNotFatal: !namespaced,
+			// A user allowed to read the tracked resource is not necessarily allowed to
+			// read its events, especially for a cluster-scoped resource, whose events
+			// live in the "default" namespace. Missing events is not a reason to stop
+			// tracking the resource itself.
+			ForbiddenIsNotFatal: true,
 		})
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
