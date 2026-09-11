@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/werf/kubedog/pkg/display"
@@ -211,6 +214,87 @@ func TestForNamespaceRejectsMoreThanOneOptions(t *testing.T) {
 	_, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{}, InformerOptions{})
 
 	require.ErrorContains(t, err, "at most one")
+}
+
+// newForbiddenEventsFactory returns a factory over a client denying both list and watch of
+// events, along with the channel the fatal errors are reported to and the channel the
+// non-fatal ones are reported to.
+func newForbiddenEventsFactory(t *testing.T) (*InformerFactory, chan error, chan error) {
+	t.Helper()
+
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		eventsGVR: "EventList",
+	})
+	client.PrependReactor("list", eventsGVR.Resource, func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, forbiddenErr()
+	})
+	client.PrependWatchReactor(eventsGVR.Resource, func(k8stesting.Action) (bool, watch.Interface, error) {
+		return true, nil, forbiddenErr()
+	})
+
+	stopCh := make(chan struct{})
+	t.Cleanup(func() { close(stopCh) })
+
+	watchErrCh := make(chan error, 10)
+	nonFatalCh := make(chan error, 10)
+
+	var factory *InformerFactory
+	NewConcurrentInformerFactory(stopCh, watchErrCh, client, ConcurrentInformerFactoryOptions{
+		OnNonFatalWatchError: func(_ schema.GroupVersionResource, _ string, err error) {
+			nonFatalCh <- err
+		},
+	}).RTransaction(func(f *InformerFactory) {
+		factory = f
+	})
+
+	return factory, watchErrCh, nonFatalCh
+}
+
+// awaitWatchError returns the error the reflector reported and whether it was reported as
+// fatal, failing if the reflector reports nothing at all.
+func awaitWatchError(t *testing.T, watchErrCh, nonFatalCh chan error) (err error, fatal bool) {
+	t.Helper()
+
+	select {
+	case err := <-watchErrCh:
+		return err, true
+	case err := <-nonFatalCh:
+		return err, false
+	case <-time.After(time.Minute):
+		t.Fatal("the reflector reported no error")
+
+		return nil, false
+	}
+}
+
+// The reflector is a real one here, so the option must survive the whole way from
+// ForNamespace down to the handler it installs on the informer.
+func TestForNamespaceLenientInformerSurvivesForbiddenEvents(t *testing.T) {
+	factory, watchErrCh, nonFatalCh := newForbiddenEventsFactory(t)
+
+	inform, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault, InformerOptions{ForbiddenIsNotFatal: true})
+	require.NoError(t, err)
+
+	inform.RWTransaction(func(i *Informer) { i.Run() })
+
+	reportedErr, fatal := awaitWatchError(t, watchErrCh, nonFatalCh)
+
+	assert.False(t, fatal, "the tracking must not be stopped by the denied events")
+	assert.ErrorContains(t, reportedErr, "forbidden")
+}
+
+func TestForNamespaceStrictInformerFailsOnForbiddenEvents(t *testing.T) {
+	factory, watchErrCh, nonFatalCh := newForbiddenEventsFactory(t)
+
+	inform, err := factory.ForNamespace(eventsGVR, metav1.NamespaceDefault)
+	require.NoError(t, err)
+
+	inform.RWTransaction(func(i *Informer) { i.Run() })
+
+	reportedErr, fatal := awaitWatchError(t, watchErrCh, nonFatalCh)
+
+	assert.True(t, fatal)
+	assert.ErrorContains(t, reportedErr, "unrecoverable watch error")
 }
 
 // The warning must reach the user without the consumer opting in.
