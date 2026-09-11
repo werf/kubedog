@@ -37,7 +37,7 @@ func NewConcurrentInformerFactory(stopCh <-chan struct{}, watchErrCh chan<- erro
 }
 
 func warnAboutNonFatalWatchError(gvr schema.GroupVersionResource, namespace string, err error) {
-	display.ErrF("WARNING: no access to %s in namespace %q, tracking continues without it: %s\n", gvr.String(), namespace, err)
+	display.OutF("WARNING: no access to %s in namespace %q, tracking continues without it: %s\n", gvr.String(), namespace, err)
 }
 
 // InformerOptions are the settings of a particular informer.

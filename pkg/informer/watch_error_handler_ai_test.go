@@ -300,9 +300,9 @@ func TestForNamespaceStrictInformerFailsOnForbiddenEvents(t *testing.T) {
 // The warning must reach the user without the consumer opting in.
 func TestNewConcurrentInformerFactoryWarnsByDefault(t *testing.T) {
 	var out bytes.Buffer
-	previousErr := display.Err
-	t.Cleanup(func() { display.SetErr(previousErr) })
-	display.SetErr(&out)
+	previousOut := display.Out
+	t.Cleanup(func() { display.SetOut(previousOut) })
+	display.SetOut(&out)
 
 	var factory *InformerFactory
 	NewConcurrentInformerFactory(make(chan struct{}), make(chan error, 1), dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ConcurrentInformerFactoryOptions{}).

@@ -68,10 +68,6 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 			Version:  "v1",
 			Resource: "events",
 		}, eventNamespace, informer.InformerOptions{
-			// A user allowed to read the tracked resource is not necessarily allowed to
-			// read its events, especially for a cluster-scoped resource, whose events
-			// live in the "default" namespace. Missing events is not a reason to stop
-			// tracking the resource itself.
 			ForbiddenIsNotFatal: true,
 		})
 		if err != nil {

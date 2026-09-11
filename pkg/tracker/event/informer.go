@@ -73,9 +73,6 @@ func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 			Version:  "v1",
 			Resource: "events",
 		}, e.Namespace, informer.InformerOptions{
-			// A user allowed to read the tracked resource is not necessarily allowed to
-			// read its events. Losing the events feed costs the failure detection based
-			// on them, but readiness is derived from the resource itself.
 			ForbiddenIsNotFatal: true,
 		})
 		if err != nil {
