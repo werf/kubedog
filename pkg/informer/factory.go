@@ -15,7 +15,7 @@ import (
 
 type ConcurrentInformerFactoryOptions struct {
 	// OnNonFatalWatchError reports a watch error that doesn't stop the tracking. It is
-	// called at most once per informer and error kind. Defaults to printing a warning.
+	// called at most once per informer. Defaults to printing a warning.
 	OnNonFatalWatchError func(gvr schema.GroupVersionResource, namespace string, err error)
 }
 
