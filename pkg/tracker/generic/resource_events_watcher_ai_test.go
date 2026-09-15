@@ -20,9 +20,9 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
-	"github.com/werf/kubedog/pkg/tracker/resid"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog/pkg/resid"
 )
 
 var eventsGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "events"}

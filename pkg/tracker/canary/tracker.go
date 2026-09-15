@@ -16,10 +16,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
+	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker"
-	"github.com/werf/kubedog/pkg/tracker/debug"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
 )
 
 func init() {
@@ -119,7 +119,7 @@ func (canary *Tracker) Track(ctx context.Context) error {
 				panic(fmt.Errorf("unexpected type %T", failure))
 			}
 		case <-ctx.Done():
-			if debug.Debug() {
+			if log.Debug() {
 				fmt.Printf("Canary `%s` tracker context canceled: %s\n", canary.ResourceName, context.Cause(ctx))
 			}
 

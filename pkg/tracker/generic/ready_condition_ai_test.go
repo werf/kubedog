@@ -240,35 +240,29 @@ func TestAI_ConcurrentEvaluationIsDeterministic(t *testing.T) {
 	ready := managedServiceObject("Postgres", condition("Available", "True"))
 	pending := managedServiceObject("Valkey", condition("Available", "False"))
 
-	for _, caseInsensitive := range []bool{false, true} {
-		t.Run(fmt.Sprintf("caseInsensitive=%v", caseInsensitive), func(t *testing.T) {
-			opts := NewResourceStatusIndicatorOptions{CaseInsensitiveConditionTracking: caseInsensitive}
+	var wg sync.WaitGroup
+	for i := 0; i < 500; i++ {
+		wg.Add(2)
 
-			var wg sync.WaitGroup
-			for i := 0; i < 500; i++ {
-				wg.Add(2)
+		go func() {
+			defer wg.Done()
 
-				go func() {
-					defer wg.Done()
-
-					indicator, _, err := NewResourceStatusIndicator(ready, opts)
-					assert.NoError(t, err)
-					if assert.NotNil(t, indicator) {
-						assert.True(t, indicator.IsReady())
-					}
-				}()
-
-				go func() {
-					defer wg.Done()
-
-					indicator, _, err := NewResourceStatusIndicator(pending, opts)
-					assert.NoError(t, err)
-					if assert.NotNil(t, indicator) {
-						assert.False(t, indicator.IsReady())
-					}
-				}()
+			indicator, _, err := NewResourceStatusIndicator(ready)
+			assert.NoError(t, err)
+			if assert.NotNil(t, indicator) {
+				assert.True(t, indicator.IsReady())
 			}
-			wg.Wait()
-		})
+		}()
+
+		go func() {
+			defer wg.Done()
+
+			indicator, _, err := NewResourceStatusIndicator(pending)
+			assert.NoError(t, err)
+			if assert.NotNil(t, indicator) {
+				assert.False(t, indicator.IsReady())
+			}
+		}()
 	}
+	wg.Wait()
 }
