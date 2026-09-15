@@ -17,14 +17,14 @@ const widgetHeader = "apiVersion: example.io/v1\nkind: Widget\nmetadata:\n  name
 
 func conditionRules(table []*ResourceStatusJSONPathCondition) []*ResourceStatusJSONPathCondition {
 	return lo.Filter(table, func(condition *ResourceStatusJSONPathCondition, _ int) bool {
-		return condition.GroupKind == nil && strings.Contains(condition.JSONPath, "status.conditions[?")
+		return condition.GroupKind == nil && len(condition.JSONPaths) == 1 && strings.Contains(condition.JSONPaths[0], "status.conditions[?")
 	})
 }
 
 func TestAI_ConditionTableCoversEveryCasifyVariant(t *testing.T) {
 	rules := conditionRules(ResourceStatusJSONPathConditions)
 
-	registered := lo.Map(rules, func(condition *ResourceStatusJSONPathCondition, _ int) string { return condition.JSONPath })
+	registered := lo.Map(rules, func(condition *ResourceStatusJSONPathCondition, _ int) string { return condition.JSONPaths[0] })
 
 	conditionTypes := lo.Map(rules, func(condition *ResourceStatusJSONPathCondition, _ int) string {
 		return strings.TrimSuffix(strings.TrimPrefix(condition.HumanPath, "status.conditions[type="), "].status")

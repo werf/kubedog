@@ -67,7 +67,9 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 			Group:    "",
 			Version:  "v1",
 			Resource: "events",
-		}, eventNamespace)
+		}, eventNamespace, informer.InformerOptions{
+			ForbiddenIsNotFatal: true,
+		})
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}

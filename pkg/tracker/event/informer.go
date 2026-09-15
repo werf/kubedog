@@ -72,7 +72,9 @@ func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 			Group:    "",
 			Version:  "v1",
 			Resource: "events",
-		}, e.Namespace)
+		}, e.Namespace, informer.InformerOptions{
+			ForbiddenIsNotFatal: true,
+		})
 		if err != nil {
 			return fmt.Errorf("get informer from factory: %w", err)
 		}
