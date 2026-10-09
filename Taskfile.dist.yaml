@@ -2,15 +2,22 @@ version: "3"
 
 silent: true
 
+vars:
+  golangciLintVersion: "v2.5.0"
+
 includes:
   lint:
     taskfile: https://raw.githubusercontent.com/werf/common-ci/refs/heads/main/Taskfile.format_lint.yml
     flatten: true
     vars:
       paths: "."
+      golangciLintVersion: "{{.golangciLintVersion}}"
+      golangciConfigPath: ".golangci.yaml"
   deps:
     taskfile: https://raw.githubusercontent.com/werf/common-ci/refs/heads/main/Taskfile.deps.yml
     flatten: true
+    vars:
+      golangciLintVersion: "{{.golangciLintVersion}}"
 
 tasks:
   sign:
