@@ -1,0 +1,41 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - copyloopvar
+    - errname
+    - errorlint
+    - gocritic
+    - ineffassign
+    - misspell
+    - nolintlint
+    - unused
+  settings:
+    errorlint:
+      comparison: false
+      asserts: false
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+    misspell:
+      locale: US
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/werf/)
+    gofumpt:
+      extra-rules: true
+
+issues:
+  max-issues-per-linter: 0

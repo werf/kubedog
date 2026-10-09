@@ -7,7 +7,6 @@ import (
 
 	"github.com/werf/kubedog/pkg/tracker/indicators"
 	"github.com/werf/kubedog/pkg/tracker/pod"
-	"github.com/werf/kubedog/pkg/utils"
 )
 
 type DeploymentStatus struct {
@@ -102,34 +101,4 @@ processingPodsStatuses:
 	}
 
 	return res
-}
-
-// DeploymentRolloutStatus returns a message describing deployment status, and a bool value indicating if the status is considered done.
-func DeploymentRolloutStatus(deployment *appsv1.Deployment, revision int64) (string, bool, error) {
-	if revision > 0 {
-		deploymentRev, err := utils.Revision(deployment)
-		if err != nil {
-			return "", false, fmt.Errorf("cannot get the revision of deployment %q: %w", deployment.Name, err)
-		}
-		if revision != deploymentRev {
-			return "", false, fmt.Errorf("desired revision (%d) is different from the running revision (%d)", revision, deploymentRev)
-		}
-	}
-	if deployment.Generation <= deployment.Status.ObservedGeneration {
-		cond := utils.GetDeploymentCondition(deployment.Status, appsv1.DeploymentProgressing)
-		if cond != nil && cond.Reason == utils.TimedOutReason {
-			return "", false, fmt.Errorf("deployment %q exceeded its progress deadline", deployment.Name)
-		}
-		if deployment.Spec.Replicas != nil && deployment.Status.UpdatedReplicas < *deployment.Spec.Replicas {
-			return fmt.Sprintf("Waiting for deployment %q rollout to finish: %d out of %d new replicas have been updated...\n", deployment.Name, deployment.Status.UpdatedReplicas, *deployment.Spec.Replicas), false, nil
-		}
-		if deployment.Status.Replicas > deployment.Status.UpdatedReplicas {
-			return fmt.Sprintf("Waiting for deployment %q rollout to finish: %d old replicas are pending termination...\n", deployment.Name, deployment.Status.Replicas-deployment.Status.UpdatedReplicas), false, nil
-		}
-		if deployment.Status.AvailableReplicas < deployment.Status.UpdatedReplicas {
-			return fmt.Sprintf("Waiting for deployment %q rollout to finish: %d of %d updated replicas are available...\n", deployment.Name, deployment.Status.AvailableReplicas, deployment.Status.UpdatedReplicas), false, nil
-		}
-		return fmt.Sprintf("deployment %q successfully rolled out\n", deployment.Name), true, nil
-	}
-	return "Waiting for deployment spec update to be observed...\n", false, nil
 }

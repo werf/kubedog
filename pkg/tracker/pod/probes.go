@@ -7,7 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/log"
 )
 
 type ReadinessProbe struct {
@@ -49,7 +49,7 @@ func (p *ReadinessProbe) IsFailureShouldBeIgnoredNow() bool {
 	}
 
 	ignoreFailuresUntilTime := p.startedAtTime.Add(p.ignoreFailuresDuration)
-	if debug.Debug() {
+	if log.Debug() {
 		fmt.Printf("startedAtTime time is %q and ignoreFailuresUntilTime is %q for probe: %+v\n",
 			p.startedAtTime, ignoreFailuresUntilTime, p)
 	}
@@ -86,7 +86,7 @@ func (p *ReadinessProbe) calculateIgnoreFailuresDuration() time.Duration {
 		// And after all of this the first failed ReadinessProbe should fail the rollout.
 	), 0))) * time.Second
 
-	if debug.Debug() {
+	if log.Debug() {
 		fmt.Printf("ignoreFailuresDuration calculated as %q for probe: %+v\n", ignoreFailuresDuration, p)
 	}
 

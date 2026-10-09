@@ -2,15 +2,22 @@ version: "3"
 
 silent: true
 
+vars:
+  golangciLintVersion: "v2.5.0"
+
 includes:
   lint:
     taskfile: https://raw.githubusercontent.com/werf/common-ci/refs/heads/main/Taskfile.format_lint.yml
     flatten: true
     vars:
       paths: "."
+      golangciLintVersion: "{{.golangciLintVersion}}"
+      golangciConfigPath: ".golangci.yaml"
   deps:
     taskfile: https://raw.githubusercontent.com/werf/common-ci/refs/heads/main/Taskfile.deps.yml
     flatten: true
+    vars:
+      golangciLintVersion: "{{.golangciLintVersion}}"
 
 tasks:
   sign:
@@ -25,11 +32,3 @@ tasks:
           git signatures show {{.CLI_ARGS}} $ref
         done
       - git signatures push {{.CLI_ARGS}}
-
-  build:
-    desc: "Build kubedog binary file"
-    cmd: go build github.com/werf/kubedog/cmd/kubedog
-
-  install:
-    desc: "Install kubedog"
-    cmd: go install github.com/werf/kubedog/cmd/kubedog

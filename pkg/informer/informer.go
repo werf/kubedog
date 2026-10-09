@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/werf/kubedog/pkg/tracker/debug"
+	"github.com/werf/kubedog/pkg/log"
 )
 
 type informerFromFactoryOptions struct {
@@ -85,13 +85,13 @@ func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHand
 			// Based on: k8s.io/client-go@v0.30.11/tools/cache/reflector.go
 			switch {
 			case isExpiredError(err):
-				if debug.Debug() {
+				if log.Debug() {
 					fmt.Printf("[SetWatchErrorHandler] %s watch closed with expired error: %s\n", gvr.String(), err)
 				}
 			case err == io.EOF:
 				// watch closed normally
 			case err == io.ErrUnexpectedEOF:
-				if debug.Debug() {
+				if log.Debug() {
 					fmt.Printf("[SetWatchErrorHandler] %s watch closed with unexpected EOF error: %s\n", gvr.String(), err)
 				}
 			case opts.ForbiddenIsNotFatal && apierrors.IsForbidden(err):
@@ -101,7 +101,7 @@ func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHand
 					opts.OnNonFatalWatchError(gvr, opts.Namespace, err)
 				})
 			default:
-				if debug.Debug() {
+				if log.Debug() {
 					fmt.Printf("[SetWatchErrorHandler] %s watch closed with an error: %s\n", gvr.String(), err)
 				}
 

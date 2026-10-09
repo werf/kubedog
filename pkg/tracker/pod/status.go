@@ -146,12 +146,9 @@ func NewPodStatus(pod *corev1.Pod, statusGeneration uint64, trackedContainers []
 
 func setContainersStatusesToPodStatus(status *PodStatus, pod *corev1.Pod) {
 	for _, cs := range pod.Status.InitContainerStatuses {
-		if cs.State.Terminated != nil {
-			switch cs.State.Terminated.Reason {
-			case "Error":
-				status.IsFailed = true
-				status.FailedReason = cs.State.Terminated.Reason
-			}
+		if cs.State.Terminated != nil && cs.State.Terminated.Reason == "Error" {
+			status.IsFailed = true
+			status.FailedReason = cs.State.Terminated.Reason
 		}
 	}
 

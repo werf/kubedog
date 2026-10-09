@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -21,8 +22,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/werf/kubedog/pkg/display"
-	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 )
 
 var (
@@ -299,19 +299,44 @@ func TestForNamespaceStrictInformerFailsOnForbiddenEvents(t *testing.T) {
 
 // The warning must reach the user without the consumer opting in.
 func TestNewConcurrentInformerFactoryWarnsByDefault(t *testing.T) {
-	var out bytes.Buffer
-	previousOut := display.Out
-	t.Cleanup(func() { display.SetOut(previousOut) })
-	display.SetOut(&out)
-
 	var factory *InformerFactory
 	NewConcurrentInformerFactory(make(chan struct{}), make(chan error, 1), dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), ConcurrentInformerFactoryOptions{}).
 		RTransaction(func(f *InformerFactory) {
 			factory = f
 		})
 
-	factory.onNonFatalWatchError(eventsGVR, metav1.NamespaceDefault, forbiddenErr())
+	out := captureStdout(t, func() {
+		factory.onNonFatalWatchError(eventsGVR, metav1.NamespaceDefault, forbiddenErr())
+	})
 
-	assert.Contains(t, out.String(), "WARNING")
-	assert.Contains(t, out.String(), metav1.NamespaceDefault)
+	assert.Contains(t, out, "WARNING")
+	assert.Contains(t, out, metav1.NamespaceDefault)
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { reader.Close() })
+
+	original := os.Stdout
+	os.Stdout = writer
+
+	// Restore stdout and close the writer even if fn panics, so a failing test cannot leave
+	// the rest of the binary writing into a dead pipe.
+	func() {
+		defer func() {
+			os.Stdout = original
+			writer.Close()
+		}()
+
+		fn()
+	}()
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, reader)
+	require.NoError(t, err)
+
+	return buf.String()
 }
