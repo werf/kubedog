@@ -46,15 +46,14 @@ type DynamicReadinessTracker struct {
 	timeout           time.Duration
 	noActivityTimeout time.Duration
 
-	saveLogsOnlyForNumberOfReplicas int
-	saveLogsOnlyForContainers       []string
-	saveLogsByRegex                 *regexp.Regexp
-	saveLogsByRegexForContainers    map[string]*regexp.Regexp
-	ignoreLogs                      bool
-	ignoreLogsForContainers         []string
-	ignoreLogsByRegex               *regexp.Regexp
-	ignoreLogsByRegexForContainers  map[string]*regexp.Regexp
-	saveEvents                      bool
+	saveLogsOnlyForContainers      []string
+	saveLogsByRegex                *regexp.Regexp
+	saveLogsByRegexForContainers   map[string]*regexp.Regexp
+	ignoreLogs                     bool
+	ignoreLogsForContainers        []string
+	ignoreLogsByRegex              *regexp.Regexp
+	ignoreLogsByRegexForContainers map[string]*regexp.Regexp
+	saveEvents                     bool
 }
 
 func NewDynamicReadinessTracker(
@@ -1464,11 +1463,11 @@ func (t *DynamicReadinessTracker) handleTaskStateStatus(taskState *statestore.Re
 	case statestore.ReadinessTaskStatusProgressing:
 	case statestore.ReadinessTaskStatusReady:
 		abort = true
-		return
+		return abort, abortErr
 	case statestore.ReadinessTaskStatusFailed:
 		abort = true
 		abortErr = fmt.Errorf("waiting for resource %q readiness failed", t.resourceHumanID)
-		return
+		return abort, abortErr
 	default:
 		panic("unexpected status")
 	}

@@ -167,13 +167,13 @@ func (t *Tracker) handleResourceAddedModified(ctx context.Context, object *unstr
 		t.setLastState(TrackerStateStatusStabilizing)
 		t.setLastObjectDuringStatusStabilization(object)
 
-		return
+		return cleanupFn, err
 	}
 
 	if t.getLastState() == TrackerStateStatusStabilizing {
 		t.setLastObjectDuringStatusStabilization(object)
 
-		return
+		return cleanupFn, err
 	}
 
 	resourceStatus, err := NewResourceStatus(object)
