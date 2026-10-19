@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/werf/kubedog/pkg/tracker/job"
 	"github.com/werf/kubedog/pkg/tracker/pod"
 	"github.com/werf/kubedog/pkg/tracker/replicaset"
+	resourcedeployment "github.com/werf/kubedog/pkg/tracker/resource/deployment"
 	"github.com/werf/kubedog/pkg/tracker/statefulset"
 )
 
@@ -113,14 +115,20 @@ func NewDynamicReadinessTracker(
 	var tracker any
 	switch lookupGVK.GroupKind() {
 	case schema.GroupKind{Group: "apps", Kind: "deployment"}, schema.GroupKind{Group: "extensions", Kind: "deployment"}:
-		tracker = deployment.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
+		trackerOpts := commontracker.Options{
 			ParentContext:                            ctx,
 			Timeout:                                  timeout,
 			LogsFromTime:                             captureLogsFromTime,
 			SaveLogsOnlyForNumberOfReplicas:          opts.SaveLogsOnlyForNumberOfReplicas,
 			IgnoreLogs:                               opts.IgnoreLogs,
 			IgnoreReadinessProbeFailsByContainerName: ignoreReadinessProbeFailsByContainerName,
-		})
+		}
+
+		if os.Getenv("KUBEDOG_EXPERIMENTAL_DEPLOYMENT_TRACKER") == "1" {
+			tracker = resourcedeployment.NewLegacyTracker(resourceName, resourceNamespace, staticClient, informerFactory, trackerOpts)
+		} else {
+			tracker = deployment.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, trackerOpts)
+		}
 	case schema.GroupKind{Group: "apps", Kind: "daemonset"}, schema.GroupKind{Group: "extensions", Kind: "daemonset"}:
 		tracker = daemonset.NewTracker(resourceName, resourceNamespace, staticClient, informerFactory, commontracker.Options{
 			ParentContext:                            ctx,
@@ -210,7 +218,11 @@ type DynamicReadinessTrackerOptions struct {
 func (t *DynamicReadinessTracker) Track(ctx context.Context) error {
 	switch tracker := t.tracker.(type) {
 	case *deployment.Tracker:
-		if err := t.trackDeployment(ctx, tracker); err != nil {
+		if err := t.trackDeployment(ctx, tracker.Track, &tracker.Feed); err != nil {
+			return fmt.Errorf("track deployment: %w", err)
+		}
+	case *resourcedeployment.LegacyTracker:
+		if err := t.trackDeployment(ctx, tracker.Track, &tracker.Feed); err != nil {
 			return fmt.Errorf("track deployment: %w", err)
 		}
 	case *statefulset.Tracker:
@@ -244,13 +256,13 @@ func (t *DynamicReadinessTracker) Track(ctx context.Context) error {
 	return nil
 }
 
-func (t *DynamicReadinessTracker) trackDeployment(ctx context.Context, tracker *deployment.Tracker) error {
+func (t *DynamicReadinessTracker) trackDeployment(ctx context.Context, track func(context.Context) error, tracker *deployment.Feed) error {
 	trackCtx, trackCtxCancelFn := watchtools.ContextWithOptionalTimeout(ctx, t.timeout)
 	defer trackCtxCancelFn()
 
 	trackErrCh := make(chan error, 1)
 	go func() {
-		trackErrCh <- tracker.Track(trackCtx)
+		trackErrCh <- track(trackCtx)
 	}()
 
 	for {

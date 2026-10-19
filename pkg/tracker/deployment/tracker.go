@@ -40,6 +40,35 @@ type PodErrorReport struct {
 	DeploymentStatus   DeploymentStatus
 }
 
+// Feed holds the channels the Deployment tracker reports to.
+type Feed struct {
+	Added  chan DeploymentStatus
+	Ready  chan DeploymentStatus
+	Failed chan DeploymentStatus
+	Status chan DeploymentStatus
+
+	EventMsg        chan string
+	AddedReplicaSet chan ReplicaSetAddedReport
+	AddedPod        chan PodAddedReport
+	PodLogChunk     chan *replicaset.ReplicaSetPodLogChunk
+	PodError        chan PodErrorReport
+}
+
+func NewFeed() Feed {
+	return Feed{
+		Added:  make(chan DeploymentStatus, 1),
+		Ready:  make(chan DeploymentStatus),
+		Failed: make(chan DeploymentStatus),
+		Status: make(chan DeploymentStatus, 100),
+
+		EventMsg:        make(chan string, 1),
+		AddedReplicaSet: make(chan ReplicaSetAddedReport, 10),
+		AddedPod:        make(chan PodAddedReport, 10),
+		PodLogChunk:     make(chan *replicaset.ReplicaSetPodLogChunk, 1000),
+		PodError:        make(chan PodErrorReport),
+	}
+}
+
 type Tracker struct {
 	tracker.Tracker
 
@@ -59,16 +88,7 @@ type Tracker struct {
 
 	TrackedPodsNames []string
 
-	Added  chan DeploymentStatus
-	Ready  chan DeploymentStatus
-	Failed chan DeploymentStatus
-	Status chan DeploymentStatus
-
-	EventMsg        chan string
-	AddedReplicaSet chan ReplicaSetAddedReport
-	AddedPod        chan PodAddedReport
-	PodLogChunk     chan *replicaset.ReplicaSetPodLogChunk
-	PodError        chan PodErrorReport
+	Feed
 
 	resourceAdded      chan *appsv1.Deployment
 	resourceModified   chan *appsv1.Deployment
@@ -98,16 +118,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, informerFacto
 			InformerFactory:                 informerFactory,
 		},
 
-		Added:  make(chan DeploymentStatus, 1),
-		Ready:  make(chan DeploymentStatus),
-		Failed: make(chan DeploymentStatus),
-		Status: make(chan DeploymentStatus, 100),
-
-		EventMsg:        make(chan string, 1),
-		AddedReplicaSet: make(chan ReplicaSetAddedReport, 10),
-		AddedPod:        make(chan PodAddedReport, 10),
-		PodLogChunk:     make(chan *replicaset.ReplicaSetPodLogChunk, 1000),
-		PodError:        make(chan PodErrorReport),
+		Feed: NewFeed(),
 
 		knownReplicaSets: make(map[string]*appsv1.ReplicaSet),
 		podStatuses:      make(map[string]pod.PodStatus),
