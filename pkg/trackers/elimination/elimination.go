@@ -160,16 +160,17 @@ func NewEliminationTracker(kubeDynamicClient dynamic.Interface, spec *Eliminatio
 }
 
 func (tracker *EliminationTracker) Track(ctx context.Context, opts EliminationTrackerOptions) error {
-	listOpts := metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("metadata.name=%s", tracker.Spec.ResourceName),
+	tweakListOptions := func(options metav1.ListOptions) metav1.ListOptions {
+		options.FieldSelector = fmt.Sprintf("metadata.name=%s", tracker.Spec.ResourceName)
+		return options
 	}
 
 	lwe := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).List(ctx, listOpts)
+			return tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).List(ctx, tweakListOptions(options))
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).Watch(ctx, listOpts)
+			return tracker.KubeDynamicClient.Resource(tracker.Spec.GroupVersionResource).Namespace(tracker.Spec.Namespace).Watch(ctx, tweakListOptions(options))
 		},
 	}
 
