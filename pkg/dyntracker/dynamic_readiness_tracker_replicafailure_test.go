@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -27,7 +28,7 @@ import (
 var replicaFailureDeploymentGVK = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 
 func TestDynamicReadinessTracker_SingleDurableReplicaFailure_TerminatesPromptly(t *testing.T) {
-	const boundedTimeout = 8 * time.Second
+	const boundedTimeout = 60 * time.Second
 
 	tests := []struct {
 		name          string
@@ -41,7 +42,7 @@ func TestDynamicReadinessTracker_SingleDurableReplicaFailure_TerminatesPromptly(
 		t.Run(tt.name, func(t *testing.T) {
 			dynClient := dynamicfake.NewSimpleDynamicClient(k8sscheme.Scheme,
 				replicaFailureOneReplicaDeployment(), replicaFailureFailedCreateReplicaSet())
-			kubeClient := k8sfake.NewSimpleClientset()
+			kubeClient := k8sfake.NewSimpleClientset(replicaFailureExhaustedQuota())
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -147,9 +148,19 @@ func replicaFailureFailedCreateReplicaSet() *appsv1.ReplicaSet {
 				Type:               appsv1.ReplicaSetReplicaFailure,
 				Status:             corev1.ConditionTrue,
 				Reason:             "FailedCreate",
-				Message:            `pods "demo-111" is forbidden: exceeded quota: compute-quota`,
+				Message:            `pods "demo-111" is forbidden: exceeded quota: compute-quota, requested: pods=1, used: pods=1, limited: pods=1`,
 				LastTransitionTime: metav1.Now(),
 			}},
+		},
+	}
+}
+
+func replicaFailureExhaustedQuota() *corev1.ResourceQuota {
+	return &corev1.ResourceQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "compute-quota", Namespace: "default"},
+		Status: corev1.ResourceQuotaStatus{
+			Hard: corev1.ResourceList{corev1.ResourcePods: resource.MustParse("1")},
+			Used: corev1.ResourceList{corev1.ResourcePods: resource.MustParse("1")},
 		},
 	}
 }

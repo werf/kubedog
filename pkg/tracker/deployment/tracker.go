@@ -57,6 +57,8 @@ type Tracker struct {
 	lastObject                 *appsv1.Deployment
 	failedFromReplicaSetUID    types.UID
 	reportedReplicaSetFailures map[types.UID]struct{}
+	quotaDeadlockSince         map[types.UID]time.Time
+	quotaDeadlockConfirmation  time.Duration
 	replicaSetsSynced          bool
 	podStatuses                map[string]pod.PodStatus
 	rsNameByPod                map[string]string
@@ -87,6 +89,7 @@ type Tracker struct {
 	replicaSetDeleted    chan *appsv1.ReplicaSet
 	replicaSetUnselected chan *appsv1.ReplicaSet
 	replicaSetSynced     chan struct{}
+	quotaDeadlockRecheck chan struct{}
 	errors               chan error
 
 	podAddedRelay           chan *corev1.Pod
@@ -122,6 +125,8 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, informerFacto
 		knownReplicaSets:           make(map[string]*appsv1.ReplicaSet),
 		deletedReplicaSetUIDs:      make(map[types.UID]struct{}),
 		reportedReplicaSetFailures: make(map[types.UID]struct{}),
+		quotaDeadlockSince:         make(map[types.UID]time.Time),
+		quotaDeadlockConfirmation:  defaultQuotaDeadlockConfirmation,
 		podStatuses:                make(map[string]pod.PodStatus),
 		rsNameByPod:                make(map[string]string),
 
@@ -141,6 +146,7 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, informerFacto
 		replicaSetDeleted:    make(chan *appsv1.ReplicaSet),
 		replicaSetUnselected: make(chan *appsv1.ReplicaSet),
 		replicaSetSynced:     make(chan struct{}),
+		quotaDeadlockRecheck: make(chan struct{}, 1),
 
 		podAddedRelay:           make(chan *corev1.Pod, 1),
 		podStatusesRelay:        make(chan map[string]pod.PodStatus, 10),
@@ -190,6 +196,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			d.knownReplicaSets = make(map[string]*appsv1.ReplicaSet)
 			d.deletedReplicaSetUIDs = make(map[types.UID]struct{})
 			d.reportedReplicaSetFailures = make(map[types.UID]struct{})
+			d.quotaDeadlockSince = make(map[types.UID]time.Time)
 			d.failedFromReplicaSetUID = ""
 			d.podStatuses = make(map[string]pod.PodStatus)
 			d.rsNameByPod = make(map[string]string)
@@ -269,7 +276,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			if known, found := d.knownReplicaSets[rs.Name]; found && known.UID == rs.UID {
 				delete(d.knownReplicaSets, rs.Name)
 			}
-			delete(d.reportedReplicaSetFailures, rs.UID)
+			d.forgetReplicaSetFailure(rs.UID)
 
 			d.clearReplicaSetFailure(rs.UID)
 
@@ -285,7 +292,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			if known, found := d.knownReplicaSets[rs.Name]; found && known.UID == rs.UID {
 				delete(d.knownReplicaSets, rs.Name)
 			}
-			delete(d.reportedReplicaSetFailures, rs.UID)
+			d.forgetReplicaSetFailure(rs.UID)
 			d.clearReplicaSetFailure(rs.UID)
 
 			if d.lastObject != nil {
@@ -298,6 +305,13 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			d.replicaSetsSynced = true
 			if err := d.handleNewReplicaSetFailure(ctx); err != nil {
 				return err
+			}
+
+		case <-d.quotaDeadlockRecheck:
+			if d.lastObject != nil {
+				if err := d.handleNewReplicaSetFailure(ctx); err != nil {
+					return err
+				}
 			}
 
 		case pod := <-d.podAddedRelay:

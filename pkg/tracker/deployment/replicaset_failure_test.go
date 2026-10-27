@@ -1,6 +1,16 @@
 package deployment
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
+
+	"github.com/werf/kubedog/pkg/tracker"
+)
 
 func TestReplicaSetFailureMode_whenFailedCreateMessageIsClassified(t *testing.T) {
 	tests := []struct {
@@ -46,6 +56,57 @@ func TestReplicaSetFailureMode_whenFailedCreateMessageIsClassified(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			if got := replicaSetFailureMode(tt.message, tt.deploymentCanRecover); got != tt.want {
 				t.Fatalf("replicaSetFailureMode(%q, %t) = %v, want %v", tt.message, tt.deploymentCanRecover, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQuotaStillExceeded_whenQuotaStatusChanged(t *testing.T) {
+	const message = `pods "demo-111" is forbidden: exceeded quota: compute-quota, requested: limits.cpu=750m,limits.memory=1Gi, used: limits.cpu=3600m,limits.memory=3Gi, limited: limits.cpu=4,limits.memory=4Gi`
+
+	tests := []struct {
+		name    string
+		message string
+		used    corev1.ResourceList
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:    "one requested resource still exceeds the quota",
+			message: message,
+			used:    corev1.ResourceList{corev1.ResourceLimitsCPU: resource.MustParse("3600m"), corev1.ResourceLimitsMemory: resource.MustParse("1Gi")},
+			want:    true,
+		},
+		{
+			name:    "quota has room for every requested resource",
+			message: message,
+			used:    corev1.ResourceList{corev1.ResourceLimitsCPU: resource.MustParse("3250m"), corev1.ResourceLimitsMemory: resource.MustParse("3Gi")},
+			want:    false,
+		},
+		{
+			name:    "message is not a quota admission failure",
+			message: `pods "demo-111" is forbidden: exceeded quota: compute-quota`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			quota := &corev1.ResourceQuota{
+				ObjectMeta: metav1.ObjectMeta{Name: "compute-quota", Namespace: "default"},
+				Status: corev1.ResourceQuotaStatus{
+					Hard: corev1.ResourceList{corev1.ResourceLimitsCPU: resource.MustParse("4"), corev1.ResourceLimitsMemory: resource.MustParse("4Gi")},
+					Used: tt.used,
+				},
+			}
+			d := &Tracker{Tracker: tracker.Tracker{Kube: k8sfake.NewSimpleClientset(quota), Namespace: "default"}}
+
+			got, err := d.quotaStillExceeded(context.Background(), tt.message)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("quotaStillExceeded() error = %v, wantErr %t", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Fatalf("quotaStillExceeded() = %t, want %t", got, tt.want)
 			}
 		})
 	}

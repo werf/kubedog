@@ -1,6 +1,7 @@
 package deployment_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -467,9 +468,11 @@ func TestTrack_PreservesReplicaSetEventOrderAcrossChannels(t *testing.T) {
 	// Occupies the tracker so the events below arrive while it is busy: only then can
 	// buffered fan-out channels reorder them and make this test a discriminator.
 	h.tracker.TestOnlyInjectResourceFailure("keeps the tracker busy")
-	h.tracker.TestOnlyInjectReplicaSetAdded(withReplicaFailure(rs.DeepCopy(), "FailedCreate", initialMarker))
+	// An invalid pod spec is classified at once, unlike a quota failure, which waits for the
+	// deadlock to be confirmed and is dropped if it clears in the meantime.
+	h.tracker.TestOnlyInjectReplicaSetAdded(withInvalidPodFailure(rs.DeepCopy(), initialMarker))
 	h.tracker.TestOnlyInjectReplicaSetModified(rs.DeepCopy())
-	h.tracker.TestOnlyInjectReplicaSetModified(withReplicaFailure(rs.DeepCopy(), "FailedCreate", recurringMarker))
+	h.tracker.TestOnlyInjectReplicaSetModified(withInvalidPodFailure(rs.DeepCopy(), recurringMarker))
 
 	if _, err := h.waitFor("Failed", 10*time.Second, failedWithMarker(initialMarker)); err != nil {
 		t.Fatalf("initial failure must be reported despite fan-out across channels: %v", err)
@@ -477,6 +480,12 @@ func TestTrack_PreservesReplicaSetEventOrderAcrossChannels(t *testing.T) {
 	if _, err := h.waitFor("Failed", 10*time.Second, failedWithMarker(recurringMarker)); err != nil {
 		t.Fatalf("failure recurring after recovery must be reported anew: %v", err)
 	}
+}
+
+func withInvalidPodFailure(rs *appsv1.ReplicaSet, marker string) *appsv1.ReplicaSet {
+	rs = withReplicaFailure(rs, "FailedCreate", marker)
+	rs.Status.Conditions[0].Message = fmt.Sprintf("Pod %q is invalid: spec.containers[0].image: Required value [%s]", rs.Name, marker)
+	return rs
 }
 
 func addedReplicaSetNamed(name string) func(observation) bool {

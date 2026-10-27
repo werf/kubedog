@@ -11,6 +11,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,11 +52,16 @@ type observation struct {
 type harnessConfig struct {
 	dynamicSeed          []runtime.Object
 	prepareDynamicClient func(*dynamicfake.FakeDynamicClient)
+	kubeSeed             []runtime.Object
+	prepareKubeClient    func(*k8sfake.Clientset)
+	// quotaDeadlockConfirmation defaults to a short period to keep fatal quota tests fast.
+	quotaDeadlockConfirmation time.Duration
 }
 
 type harness struct {
 	ctx     context.Context
 	dynamic dynamic.Interface
+	kube    *k8sfake.Clientset
 	tracker *deployment.Tracker
 
 	events  chan observation
@@ -76,16 +82,29 @@ func newHarness(t *testing.T, cfg harnessConfig) *harness {
 	if cfg.prepareDynamicClient != nil {
 		cfg.prepareDynamicClient(dynClient)
 	}
-	kubeClient := k8sfake.NewSimpleClientset()
+	kubeSeed := cfg.kubeSeed
+	if kubeSeed == nil {
+		kubeSeed = []runtime.Object{computeQuota(1, 1)}
+	}
+	kubeClient := k8sfake.NewSimpleClientset(kubeSeed...)
+	if cfg.prepareKubeClient != nil {
+		cfg.prepareKubeClient(kubeClient)
+	}
 
 	watchErrCh := make(chan error, 100)
 	factory := informer.NewConcurrentInformerFactory(ctx.Done(), watchErrCh, dynClient, informer.ConcurrentInformerFactoryOptions{})
 
 	trk := deployment.NewTracker(testDeploymentName, testNamespace, kubeClient, factory, tracker.Options{IgnoreLogs: true})
+	quotaDeadlockConfirmation := cfg.quotaDeadlockConfirmation
+	if quotaDeadlockConfirmation == 0 {
+		quotaDeadlockConfirmation = 50 * time.Millisecond
+	}
+	trk.TestOnlySetQuotaDeadlockConfirmation(quotaDeadlockConfirmation)
 
 	h := &harness{
 		ctx:     ctx,
 		dynamic: dynClient,
+		kube:    kubeClient,
 		tracker: trk,
 		events:  make(chan observation, 4096),
 		done:    make(chan struct{}),
@@ -337,10 +356,20 @@ func withReplicaFailure(rs *appsv1.ReplicaSet, reason, marker string) *appsv1.Re
 		Type:               appsv1.ReplicaSetReplicaFailure,
 		Status:             corev1.ConditionTrue,
 		Reason:             reason,
-		Message:            fmt.Sprintf("pods %q is forbidden: exceeded quota: compute-quota [%s]", rs.Name, marker),
+		Message:            fmt.Sprintf("pods %q is forbidden: exceeded quota: compute-quota, requested: pods=1, used: pods=1, limited: pods=1 [%s]", rs.Name, marker),
 		LastTransitionTime: metav1.Now(),
 	}}
 	return rs
+}
+
+func computeQuota(hardPods, usedPods int64) *corev1.ResourceQuota {
+	return &corev1.ResourceQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "compute-quota", Namespace: testNamespace},
+		Status: corev1.ResourceQuotaStatus{
+			Hard: corev1.ResourceList{corev1.ResourcePods: *resource.NewQuantity(hardPods, resource.DecimalSI)},
+			Used: corev1.ResourceList{corev1.ResourcePods: *resource.NewQuantity(usedPods, resource.DecimalSI)},
+		},
+	}
 }
 
 func failedWithMarker(marker string) func(observation) bool {
