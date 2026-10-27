@@ -215,7 +215,7 @@ func (h *harness) waitFor(kind string, timeout time.Duration, pred func(observat
 			}
 			h.backlog = append(h.backlog, ev)
 		case <-h.done:
-			return observation{}, fmt.Errorf("%w (err=%v) while waiting for kind=%s", errTrackDone, h.getTrackErr(), kind)
+			return observation{}, fmt.Errorf("%w (err=%w) while waiting for kind=%s", errTrackDone, h.getTrackErr(), kind)
 		case <-deadline.C:
 			return observation{}, fmt.Errorf("%w after %s waiting for kind=%s", errTimeout, timeout, kind)
 		}

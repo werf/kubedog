@@ -34,7 +34,8 @@ type DeploymentStatus struct {
 	IsReady      bool
 	IsFailed     bool
 	FailedReason string
-	FailureMode  FailureMode
+	// FailureMode qualifies the failure when IsFailed is set.
+	FailureMode FailureMode
 
 	Pods map[string]pod.PodStatus
 	// New Pod belongs to the new ReplicaSet of the Deployment,
