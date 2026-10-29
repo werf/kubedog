@@ -190,29 +190,33 @@ func initReadinessTaskStateReadyConditions() []ReadinessTaskConditionFn {
 func initReadinessTaskStateFailureConditions(failMode FailMode, totalAllowFailuresCount int) []ReadinessTaskConditionFn {
 	var failureConditions []ReadinessTaskConditionFn
 
-	failureConditions = append(failureConditions, func(taskState *ReadinessTaskState) bool {
-		var failed bool
-		lo.Must0(domigraph.BFS(taskState.resourceStatesTree, util.ResourceID(taskState.name, taskState.namespace, taskState.groupVersionKind), func(id string) bool {
-			state := lo.Must(taskState.resourceStatesTree.Vertex(id))
-			state.RTransaction(func(s *ResourceState) {
-				if s.Status() == ResourceStatusFailed {
-					failed = true
-				}
-			})
-
-			if failed {
-				return true
-			}
-
-			return false
-		}))
-
-		return failed
-	})
-
 	switch failMode {
 	case IgnoreAndContinueDeployProcess:
+		// This mode must do nothing when tracking of the resource fails, so neither a
+		// resource marked as failed nor an exceeded error budget may fail the task.
 	case FailWholeDeployProcessImmediately, LegacyHopeUntilEndOfDeployProcess:
+		// A resource marked as failed reports a durable failure it cannot recover from on
+		// its own, so it fails the task regardless of the allowed failures count.
+		failureConditions = append(failureConditions, func(taskState *ReadinessTaskState) bool {
+			var failed bool
+			lo.Must0(domigraph.BFS(taskState.resourceStatesTree, util.ResourceID(taskState.name, taskState.namespace, taskState.groupVersionKind), func(id string) bool {
+				state := lo.Must(taskState.resourceStatesTree.Vertex(id))
+				state.RTransaction(func(s *ResourceState) {
+					if s.Status() == ResourceStatusFailed {
+						failed = true
+					}
+				})
+
+				if failed {
+					return true
+				}
+
+				return false
+			}))
+
+			return failed
+		})
+
 		failureConditions = append(failureConditions, func(taskState *ReadinessTaskState) bool {
 			var totalErrsCount int
 			lo.Must0(domigraph.BFS(taskState.resourceStatesTree, util.ResourceID(taskState.name, taskState.namespace, taskState.groupVersionKind), func(id string) bool {
