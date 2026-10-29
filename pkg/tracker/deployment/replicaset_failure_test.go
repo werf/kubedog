@@ -84,6 +84,13 @@ func TestQuotaStillExceeded_whenQuotaStatusChanged(t *testing.T) {
 			want:    false,
 		},
 		{
+			// Anyone allowed to write the ReplicaSet status controls the message, and parsing
+			// such a quantity takes the arbitrary-precision arithmetic minutes.
+			name:    "requested quantity is out of the range the quota admission plugin prints",
+			message: `pods "demo-111" is forbidden: exceeded quota: compute-quota, requested: limits.cpu=1e-1000000000, used: limits.cpu=0, limited: limits.cpu=4`,
+			wantErr: true,
+		},
+		{
 			name:    "message is not a quota admission failure",
 			message: `pods "demo-111" is forbidden: exceeded quota: compute-quota`,
 			wantErr: true,

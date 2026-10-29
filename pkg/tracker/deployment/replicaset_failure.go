@@ -24,7 +24,12 @@ const (
 	defaultQuotaDeadlockConfirmation = 10 * time.Second
 )
 
-var exceededQuotaPattern = regexp.MustCompile(`exceeded quota: ([^,\s]+), requested: (\S+), used: \S+, limited: \S+`)
+var (
+	exceededQuotaPattern = regexp.MustCompile(`exceeded quota: ([^,\s]+), requested: (\S+), used: \S+, limited: \S+`)
+	// boundedQuantityPattern admits the canonical quantities the quota admission plugin prints
+	// and keeps their exponent small: parsing a huge one takes minutes.
+	boundedQuantityPattern = regexp.MustCompile(`^[0-9]{1,30}(\.[0-9]{1,30})?([numkMGTPE]|[KMGTPE]i|[eE][+-]?[0-9]{1,2})?$`)
+)
 
 func (d *Tracker) clearReplicaSetFailure(replicaSetUID types.UID) {
 	if replicaSetUID == "" || d.failedFromReplicaSetUID != replicaSetUID {
@@ -291,6 +296,10 @@ func (d *Tracker) quotaStillExceeded(ctx context.Context, message string) (bool,
 		name, value, found := strings.Cut(item, "=")
 		if !found {
 			return false, fmt.Errorf("parse requested resource %q", item)
+		}
+
+		if !boundedQuantityPattern.MatchString(value) {
+			return false, fmt.Errorf("parse requested quantity %q", item)
 		}
 
 		quantity, err := resource.ParseQuantity(value)
