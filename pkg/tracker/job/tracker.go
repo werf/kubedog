@@ -252,6 +252,13 @@ func (job *Tracker) Track(ctx context.Context) error {
 }
 
 func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := job.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -289,7 +296,7 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 
 						jobObj := &batchv1.Job{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, jobObj))
-						job.objectAdded <- jobObj
+						utils.SendOrDone(ctx, job.objectAdded, jobObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -298,7 +305,7 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 
 						jobObj := &batchv1.Job{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, jobObj))
-						job.objectModified <- jobObj
+						utils.SendOrDone(ctx, job.objectModified, jobObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -307,7 +314,7 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 
 						jobObj := &batchv1.Job{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, jobObj))
-						job.objectDeleted <- jobObj
+						utils.SendOrDone(ctx, job.objectDeleted, jobObj)
 					},
 				},
 			},
@@ -317,6 +324,7 @@ func (job *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
@@ -349,6 +357,7 @@ func (job *Tracker) handleJobState(ctx context.Context, object *batchv1.Job) (cl
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
 			eventsInformerCleanupFn, err = job.runEventsInformer(ctx, object)
 			if err != nil {
+				podsInformerCleanupFn()
 				return nil, fmt.Errorf("run events informer: %w", err)
 			}
 		}

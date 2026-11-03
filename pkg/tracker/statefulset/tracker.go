@@ -293,6 +293,13 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 
 // runStatefulSetInformer watch for StatefulSet events
 func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := d.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -330,7 +337,7 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 
 						statefulsetObj := &appsv1.StatefulSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
-						d.resourceAdded <- statefulsetObj
+						utils.SendOrDone(ctx, d.resourceAdded, statefulsetObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -339,7 +346,7 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 
 						statefulsetObj := &appsv1.StatefulSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, statefulsetObj))
-						d.resourceModified <- statefulsetObj
+						utils.SendOrDone(ctx, d.resourceModified, statefulsetObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -348,7 +355,7 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 
 						statefulsetObj := &appsv1.StatefulSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, statefulsetObj))
-						d.resourceDeleted <- statefulsetObj
+						utils.SendOrDone(ctx, d.resourceDeleted, statefulsetObj)
 					},
 				},
 			},
@@ -358,6 +365,7 @@ func (d *Tracker) runStatefulSetInformer(ctx context.Context) (cleanupFn func(),
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
@@ -463,6 +471,7 @@ func (d *Tracker) handleStatefulSetState(ctx context.Context, object *appsv1.Sta
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
 			eventsInformerCleanupFn, err = d.runEventsInformer(ctx, object)
 			if err != nil {
+				podsInformerCleanupFn()
 				return nil, fmt.Errorf("run events informer: %w", err)
 			}
 		}

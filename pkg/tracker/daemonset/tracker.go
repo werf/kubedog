@@ -284,6 +284,13 @@ func (d *Tracker) getNewPodsNames() []string {
 
 // runDaemonSetInformer watch for DaemonSet events
 func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := d.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -321,7 +328,7 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 
 						daemonsetObj := &appsv1.DaemonSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
-						d.resourceAdded <- daemonsetObj
+						utils.SendOrDone(ctx, d.resourceAdded, daemonsetObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -330,7 +337,7 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 
 						daemonsetObj := &appsv1.DaemonSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, daemonsetObj))
-						d.resourceModified <- daemonsetObj
+						utils.SendOrDone(ctx, d.resourceModified, daemonsetObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -339,7 +346,7 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 
 						daemonsetObj := &appsv1.DaemonSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, daemonsetObj))
-						d.resourceDeleted <- daemonsetObj
+						utils.SendOrDone(ctx, d.resourceDeleted, daemonsetObj)
 					},
 				},
 			},
@@ -349,6 +356,7 @@ func (d *Tracker) runDaemonSetInformer(ctx context.Context) (cleanupFn func(), e
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
@@ -462,6 +470,7 @@ func (d *Tracker) handleDaemonSetState(ctx context.Context, object *appsv1.Daemo
 		if os.Getenv("KUBEDOG_DISABLE_EVENTS") != "1" {
 			eventsInformerCleanupFn, err = d.runEventsInformer(ctx, object)
 			if err != nil {
+				podsInformerCleanupFn()
 				return nil, fmt.Errorf("run events informer: %w", err)
 			}
 		}

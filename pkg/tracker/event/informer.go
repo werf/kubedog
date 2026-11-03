@@ -20,6 +20,7 @@ import (
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/debug"
 	"github.com/werf/kubedog/pkg/trackers/dyntracker/util"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type ProbeTriggeredRestart struct {
@@ -66,6 +67,13 @@ func (e *EventInformer) WithChannels(msgCh chan string, failCh chan interface{},
 
 // Run watch for StatefulSet events
 func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := e.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -113,7 +121,7 @@ func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 
 						eventObj := &corev1.Event{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, eventObj))
-						e.handleEvent(eventObj)
+						e.handleEvent(ctx, eventObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -122,7 +130,7 @@ func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 
 						eventObj := &corev1.Event{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, eventObj))
-						e.handleEvent(eventObj)
+						e.handleEvent(ctx, eventObj)
 					},
 				},
 			},
@@ -132,6 +140,7 @@ func (e *EventInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
@@ -170,7 +179,7 @@ func (e *EventInformer) handleInitialEvents(inform *informer.Informer, involvedU
 }
 
 // handleEvent sends a message to Messages channel for all events and a message to Failures channel for Failed events
-func (e *EventInformer) handleEvent(event *corev1.Event) {
+func (e *EventInformer) handleEvent(ctx context.Context, event *corev1.Event) {
 	if _, ok := e.initialEventUids[event.UID]; ok {
 		delete(e.initialEventUids, event.UID)
 		return
@@ -191,17 +200,17 @@ func (e *EventInformer) handleEvent(event *corev1.Event) {
 		fmt.Printf("  %s got normal event: %s\n", e.FullResourceName, msg)
 	}
 
-	e.Messages <- msg
+	utils.SendOrDone(ctx, e.Messages, msg)
 
 	switch resource := e.Resource.(type) {
 	case *corev1.Pod:
-		e.handlePodEvent(event, resource, msg)
+		e.handlePodEvent(ctx, event, resource, msg)
 	default:
-		e.handleRegularEvent(event, msg)
+		e.handleRegularEvent(ctx, event, msg)
 	}
 }
 
-func (e *EventInformer) handleRegularEvent(event *corev1.Event, msg string) {
+func (e *EventInformer) handleRegularEvent(ctx context.Context, event *corev1.Event, msg string) {
 	if strings.Contains(event.Reason, "RecreatingFailedPod") ||
 		strings.Contains(event.Reason, "FailedDelete") {
 		return
@@ -211,11 +220,11 @@ func (e *EventInformer) handleRegularEvent(event *corev1.Event, msg string) {
 		if debug.Debug() {
 			fmt.Printf("got FAILED EVENT!!! %s\n", msg)
 		}
-		e.Failures <- msg
+		utils.SendOrDone[interface{}](ctx, e.Failures, msg)
 	}
 }
 
-func (e *EventInformer) handlePodEvent(event *corev1.Event, pod *corev1.Pod, msg string) {
+func (e *EventInformer) handlePodEvent(ctx context.Context, event *corev1.Event, pod *corev1.Pod, msg string) {
 	if pod.ObjectMeta.DeletionTimestamp != nil {
 		return
 	}
@@ -223,16 +232,16 @@ func (e *EventInformer) handlePodEvent(event *corev1.Event, pod *corev1.Pod, msg
 	if matched, err := regexp.MatchString(`failed (startup|liveness) probe, will be restarted`, event.Message); err != nil {
 		panic("can't compile regex")
 	} else if matched {
-		e.Failures <- ProbeTriggeredRestart{
+		utils.SendOrDone[interface{}](ctx, e.Failures, ProbeTriggeredRestart{
 			ContainerName: strings.TrimSuffix(strings.Split(event.InvolvedObject.FieldPath, "{")[1], "}"),
 			Message:       msg,
-		}
+		})
 	}
 
 	if strings.Contains(event.Message, "Readiness probe failed:") {
-		e.Failures <- ReadinessProbeFailure{
+		utils.SendOrDone[interface{}](ctx, e.Failures, ReadinessProbeFailure{
 			ContainerName: strings.TrimSuffix(strings.Split(event.InvolvedObject.FieldPath, "{")[1], "}"),
 			Message:       msg,
-		}
+		})
 	}
 }
