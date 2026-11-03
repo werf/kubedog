@@ -82,6 +82,13 @@ func (r *ReplicaSetInformer) WithChannels(added chan *appsv1.ReplicaSet,
 }
 
 func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := r.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -123,7 +130,7 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 
 						rsObj := &appsv1.ReplicaSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
-						r.ReplicaSetAdded <- rsObj
+						utils.SendOrDone(ctx, r.ReplicaSetAdded, rsObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -132,7 +139,7 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 
 						rsObj := &appsv1.ReplicaSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, rsObj))
-						r.ReplicaSetModified <- rsObj
+						utils.SendOrDone(ctx, r.ReplicaSetModified, rsObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -141,7 +148,7 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 
 						rsObj := &appsv1.ReplicaSet{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, rsObj))
-						r.ReplicaSetDeleted <- rsObj
+						utils.SendOrDone(ctx, r.ReplicaSetDeleted, rsObj)
 					},
 				},
 			},
@@ -151,6 +158,7 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 

@@ -49,6 +49,13 @@ func (p *PodsInformer) WithChannels(added chan *corev1.Pod, errors chan error) *
 }
 
 func (p *PodsInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := p.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -90,7 +97,7 @@ func (p *PodsInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
-						p.PodAdded <- podObj
+						utils.SendOrDone(ctx, p.PodAdded, podObj)
 					},
 				},
 			},
@@ -100,6 +107,7 @@ func (p *PodsInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
