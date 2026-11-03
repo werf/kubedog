@@ -55,7 +55,7 @@ func newTestWatchErrorHandler(t *testing.T, forbiddenIsNotFatal bool) (cache.Wat
 	err := setWatchErrorHandler(func(h cache.WatchErrorHandler) error {
 		handler = h
 		return nil
-	}, watchErrCh, eventsGVR, informerFromFactoryOptions{
+	}, watchErrCh, make(chan struct{}), eventsGVR, informerFromFactoryOptions{
 		Namespace:           metav1.NamespaceDefault,
 		ForbiddenIsNotFatal: forbiddenIsNotFatal,
 		OnNonFatalWatchError: func(gvr schema.GroupVersionResource, namespace string, err error) {
@@ -136,7 +136,7 @@ func TestSetWatchErrorHandlerNonFatalErrorsUnaffected(t *testing.T) {
 func TestSetWatchErrorHandlerAlreadyStartedInformerIsNotAnError(t *testing.T) {
 	err := setWatchErrorHandler(func(h cache.WatchErrorHandler) error {
 		return errors.New("informer has already started")
-	}, make(chan error, 1), eventsGVR, informerFromFactoryOptions{})
+	}, make(chan error, 1), make(chan struct{}), eventsGVR, informerFromFactoryOptions{})
 
 	assert.NoError(t, err)
 }

@@ -24,7 +24,7 @@ type informerFromFactoryOptions struct {
 func newInformerFromFactory(gvr schema.GroupVersionResource, factory dynamicinformer.DynamicSharedInformerFactory, stopCh <-chan struct{}, watchErrCh chan<- error, opts informerFromFactoryOptions) (*Informer, error) {
 	informer := factory.ForResource(gvr)
 
-	if err := setWatchErrorHandler(informer.Informer().SetWatchErrorHandler, watchErrCh, gvr, opts); err != nil {
+	if err := setWatchErrorHandler(informer.Informer().SetWatchErrorHandler, watchErrCh, stopCh, gvr, opts); err != nil {
 		return nil, fmt.Errorf("set watch error handler for resource %s: %w", gvr.String(), err)
 	}
 
@@ -73,7 +73,7 @@ func (i *Informer) Get(name string) (runtime.Object, error) {
 	return i.lister.Get(name)
 }
 
-func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHandler) error, watchErrCh chan<- error, gvr schema.GroupVersionResource, opts informerFromFactoryOptions) error {
+func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHandler) error, watchErrCh chan<- error, stopCh <-chan struct{}, gvr schema.GroupVersionResource, opts informerFromFactoryOptions) error {
 	var forbiddenOnce sync.Once
 
 	if err := setWatchErrorHandler(
@@ -105,7 +105,11 @@ func setWatchErrorHandler(setWatchErrorHandler func(handler cache.WatchErrorHand
 					fmt.Printf("[SetWatchErrorHandler] %s watch closed with an error: %s\n", gvr.String(), err)
 				}
 
-				watchErrCh <- fmt.Errorf("unrecoverable watch error for %s: %w", gvr.String(), err)
+				// The informer can't stop until this handler returns, and the consumer may be gone already.
+				select {
+				case watchErrCh <- fmt.Errorf("unrecoverable watch error for %s: %w", gvr.String(), err):
+				case <-stopCh:
+				}
 			}
 		},
 	); err != nil {
