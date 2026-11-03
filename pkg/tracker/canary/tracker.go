@@ -20,6 +20,7 @@ import (
 	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 func init() {
@@ -131,6 +132,13 @@ func (canary *Tracker) Track(ctx context.Context) error {
 }
 
 func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := canary.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -168,7 +176,7 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 
 						canaryObj := &v1beta1.Canary{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
-						canary.objectAdded <- canaryObj
+						utils.SendOrDone(ctx, canary.objectAdded, canaryObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -177,7 +185,7 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 
 						canaryObj := &v1beta1.Canary{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, canaryObj))
-						canary.objectModified <- canaryObj
+						utils.SendOrDone(ctx, canary.objectModified, canaryObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -186,7 +194,7 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 
 						canaryObj := &v1beta1.Canary{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, canaryObj))
-						canary.objectDeleted <- canaryObj
+						utils.SendOrDone(ctx, canary.objectDeleted, canaryObj)
 					},
 				},
 			},
@@ -196,6 +204,7 @@ func (canary *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err e
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 

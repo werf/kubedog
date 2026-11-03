@@ -12,6 +12,7 @@ import (
 	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/resid"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type ResourceStateWatcher struct {
@@ -37,6 +38,13 @@ func NewResourceStateWatcher(
 }
 
 func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourceModifiedCh, resourceDeletedCh chan<- *unstructured.Unstructured) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	gvr, err := w.ResourceID.GroupVersionResource(w.mapper)
 	if err != nil {
 		return nil, fmt.Errorf("get GroupVersionResource: %w", err)
@@ -84,21 +92,21 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 							obj = d.Obj
 						}
 
-						resourceAddedCh <- obj.(*unstructured.Unstructured)
+						utils.SendOrDone(ctx, resourceAddedCh, obj.(*unstructured.Unstructured))
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
 							newObj = d.Obj
 						}
 
-						resourceModifiedCh <- newObj.(*unstructured.Unstructured)
+						utils.SendOrDone(ctx, resourceModifiedCh, newObj.(*unstructured.Unstructured))
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 							obj = d.Obj
 						}
 
-						resourceDeletedCh <- obj.(*unstructured.Unstructured)
+						utils.SendOrDone(ctx, resourceDeletedCh, obj.(*unstructured.Unstructured))
 					},
 				},
 			},
@@ -108,6 +116,7 @@ func (w *ResourceStateWatcher) Run(ctx context.Context, resourceAddedCh, resourc
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 

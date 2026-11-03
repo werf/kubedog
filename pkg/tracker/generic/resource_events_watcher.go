@@ -20,6 +20,7 @@ import (
 	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/resid"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 type ResourceEventsWatcher struct {
@@ -49,6 +50,13 @@ func NewResourceEventsWatcher(
 }
 
 func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1.Event) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	namespaced, err := i.ResourceID.Namespaced(i.mapper)
 	if err != nil {
 		return nil, fmt.Errorf("check if resource is namespaced: %w", err)
@@ -127,6 +135,7 @@ func (i *ResourceEventsWatcher) Run(ctx context.Context, eventsCh chan<- *corev1
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
@@ -178,7 +187,7 @@ func (i *ResourceEventsWatcher) handleEventStateChange(ctx context.Context, even
 		fmt.Printf("  %s got normal event: %s: %s\n", i.ResourceID, eventObj.Reason, eventObj.Message)
 	}
 
-	eventsCh <- eventObj
+	utils.SendOrDone(ctx, eventsCh, eventObj)
 }
 
 func (i *ResourceEventsWatcher) resourceInitialEventsUIDs() []types.UID {

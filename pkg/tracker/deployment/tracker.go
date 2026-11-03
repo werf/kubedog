@@ -496,6 +496,13 @@ func (d *Tracker) getNewPodsNames() ([]string, error) {
 
 // runDeploymentInformer watch for deployment events
 func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := d.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -533,7 +540,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 
 						deploymentObj := &appsv1.Deployment{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
-						d.resourceAdded <- deploymentObj
+						utils.SendOrDone(ctx, d.resourceAdded, deploymentObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -542,7 +549,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 
 						deploymentObj := &appsv1.Deployment{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, deploymentObj))
-						d.resourceModified <- deploymentObj
+						utils.SendOrDone(ctx, d.resourceModified, deploymentObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -551,7 +558,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 
 						deploymentObj := &appsv1.Deployment{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, deploymentObj))
-						d.resourceDeleted <- deploymentObj
+						utils.SendOrDone(ctx, d.resourceDeleted, deploymentObj)
 					},
 				},
 			},
@@ -561,6 +568,7 @@ func (d *Tracker) runDeploymentInformer(ctx context.Context) (cleanupFn func(), 
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 
@@ -682,8 +690,8 @@ func (d *Tracker) handleDeploymentState(ctx context.Context, object *appsv1.Depl
 
 		podsInformerCleanupFn, err := d.runPodsInformer(ctx, object)
 		if err != nil {
-			// An informer left running has no consumer: its callbacks park forever
-			// on the unbuffered channels of a tracker that never starts.
+			// An informer left running has no consumer: its callbacks block until the
+			// tracker ctx ends.
 			replicasetsInformerCleanupFn()
 			return nil, fmt.Errorf("run pods informer: %w", err)
 		}

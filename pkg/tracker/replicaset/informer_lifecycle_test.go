@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,8 +17,10 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 
+	"github.com/werf/kubedog/pkg/dyntracker/util"
 	"github.com/werf/kubedog/pkg/informer"
 	"github.com/werf/kubedog/pkg/tracker"
+	"github.com/werf/kubedog/pkg/tracker/internal/informertest"
 	"github.com/werf/kubedog/pkg/utils"
 )
 
@@ -109,6 +112,24 @@ func TestRun_whenReplicaSetLeavesAndReentersSelector(t *testing.T) {
 	if got := receiveReplicaSet(t, h.added); got.UID != replicaSet.UID {
 		t.Fatalf("reentry Added UID = %q, want %q", got.UID, replicaSet.UID)
 	}
+}
+
+func TestRun_whenConsumerStopsReading(t *testing.T) {
+	seed := func() []runtime.Object { return []runtime.Object{lifecycleReplicaSet("demo-111", "rs-uid-1")} }
+
+	informertest.RunConsumerStopsReading(t, "github.com/werf/kubedog/pkg/tracker/replicaset.(*ReplicaSetInformer).Run.func", seed,
+		func(t *testing.T, ctx context.Context, factory *util.Concurrent[*informer.InformerFactory]) func() {
+			rsInformer := NewReplicaSetInformer(&tracker.Tracker{
+				Namespace:       testNamespace,
+				InformerFactory: factory,
+			}, utils.ControllerAccessor(lifecycleDeployment()))
+			rsInformer.ReplicaSetAdded <- &appsv1.ReplicaSet{}
+
+			cleanup, err := rsInformer.Run(ctx)
+			require.NoError(t, err)
+
+			return cleanup
+		})
 }
 
 func newLifecycleInformerHarness(t *testing.T, seed *appsv1.ReplicaSet) *lifecycleInformerHarness {

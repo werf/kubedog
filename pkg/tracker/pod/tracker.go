@@ -23,6 +23,7 @@ import (
 	"github.com/werf/kubedog/pkg/log"
 	"github.com/werf/kubedog/pkg/tracker"
 	"github.com/werf/kubedog/pkg/tracker/event"
+	"github.com/werf/kubedog/pkg/utils"
 )
 
 var errLogStreamingTimeout = errors.New("log streaming timeout reached")
@@ -320,6 +321,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) (cle
 		}
 
 		if err := pod.runContainersTrackers(ctx, object); err != nil {
+			cleanupFn()
 			return nil, fmt.Errorf("unable to start tracking pod/%s containers: %w", pod.ResourceName, err)
 		}
 	default:
@@ -329,6 +331,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) (cle
 	}
 
 	if err := pod.handleContainersState(object); err != nil {
+		cleanupFn()
 		return nil, fmt.Errorf("unable to handle pod containers state: %w", err)
 	}
 
@@ -594,6 +597,13 @@ func (pod *Tracker) runContainersTrackers(ctx context.Context, object *corev1.Po
 }
 
 func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err error) {
+	ctx, stopSending := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			stopSending()
+		}
+	}()
+
 	var inform *util.Concurrent[*informer.Informer]
 	if err := pod.InformerFactory.RWTransactionErr(func(factory *informer.InformerFactory) error {
 		inform, err = factory.ForNamespace(schema.GroupVersionResource{
@@ -631,7 +641,7 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
-						pod.objectAdded <- podObj
+						utils.SendOrDone(ctx, pod.objectAdded, podObj)
 					},
 					UpdateFunc: func(oldObj, newObj interface{}) {
 						if d, ok := newObj.(cache.DeletedFinalStateUnknown); ok {
@@ -640,7 +650,7 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(newObj.(*unstructured.Unstructured).Object, podObj))
-						pod.objectModified <- podObj
+						utils.SendOrDone(ctx, pod.objectModified, podObj)
 					},
 					DeleteFunc: func(obj interface{}) {
 						if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -649,7 +659,7 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 
 						podObj := &corev1.Pod{}
 						lo.Must0(runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, podObj))
-						pod.objectDeleted <- podObj
+						utils.SendOrDone(ctx, pod.objectDeleted, podObj)
 					},
 				},
 			},
@@ -659,6 +669,7 @@ func (pod *Tracker) runInformer(ctx context.Context) (cleanupFn func(), err erro
 		}
 
 		cleanupFn = func() {
+			stopSending()
 			inf.RemoveEventHandler(handler)
 		}
 

@@ -97,8 +97,6 @@ func (r *ReplicaSetInformer) WithSyncedChannel(synced chan struct{}) *ReplicaSet
 }
 
 func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err error) {
-	// The event channels may be unbuffered, so a send with no receiver left blocks the
-	// shared informer goroutine forever: stop sending once the consumer is gone.
 	ctx, stopSending := context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
@@ -146,7 +144,7 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 				AddFunc: func(obj interface{}) {
 					rsObj := toReplicaSet(obj)
 					if matches(rsObj) {
-						sendReplicaSet(ctx, r.ReplicaSetAdded, rsObj)
+						utils.SendOrDone(ctx, r.ReplicaSetAdded, rsObj)
 					}
 				},
 				UpdateFunc: func(oldObj, newObj interface{}) {
@@ -158,27 +156,27 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 					switch {
 					case oldReplicaSet.UID != newReplicaSet.UID:
 						if oldMatches {
-							sendReplicaSet(ctx, r.ReplicaSetDeleted, oldReplicaSet)
+							utils.SendOrDone(ctx, r.ReplicaSetDeleted, oldReplicaSet)
 						}
 						if newMatches {
-							sendReplicaSet(ctx, r.ReplicaSetAdded, newReplicaSet)
+							utils.SendOrDone(ctx, r.ReplicaSetAdded, newReplicaSet)
 						}
 					case oldMatches && newMatches:
-						sendReplicaSet(ctx, r.ReplicaSetModified, newReplicaSet)
+						utils.SendOrDone(ctx, r.ReplicaSetModified, newReplicaSet)
 					case oldMatches:
 						if r.replicaSetUnselected != nil {
-							sendReplicaSet(ctx, r.replicaSetUnselected, newReplicaSet)
+							utils.SendOrDone(ctx, r.replicaSetUnselected, newReplicaSet)
 						} else {
-							sendReplicaSet(ctx, r.ReplicaSetDeleted, oldReplicaSet)
+							utils.SendOrDone(ctx, r.ReplicaSetDeleted, oldReplicaSet)
 						}
 					case newMatches:
-						sendReplicaSet(ctx, r.ReplicaSetAdded, newReplicaSet)
+						utils.SendOrDone(ctx, r.ReplicaSetAdded, newReplicaSet)
 					}
 				},
 				DeleteFunc: func(obj interface{}) {
 					rsObj := toReplicaSet(obj)
 					if matches(rsObj) {
-						sendReplicaSet(ctx, r.ReplicaSetDeleted, rsObj)
+						utils.SendOrDone(ctx, r.ReplicaSetDeleted, rsObj)
 					}
 				},
 			},
@@ -212,11 +210,4 @@ func (r *ReplicaSetInformer) Run(ctx context.Context) (cleanupFn func(), err err
 	}
 
 	return cleanupFn, nil
-}
-
-func sendReplicaSet(ctx context.Context, ch chan<- *appsv1.ReplicaSet, rsObj *appsv1.ReplicaSet) {
-	select {
-	case ch <- rsObj:
-	case <-ctx.Done():
-	}
 }
