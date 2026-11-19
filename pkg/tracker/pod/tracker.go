@@ -28,7 +28,10 @@ import (
 
 var errLogStreamingTimeout = errors.New("log streaming timeout reached")
 
-const containerLogLineLengthLimit = 64 * 1024
+const (
+	containerLogLineLengthLimit   = 64 * 1024
+	containerLogStreamRetryDelay = time.Second
+)
 
 type ContainerError struct {
 	Message       string
@@ -534,20 +537,37 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 					return nil
 				}
 
-				var sinceTime *metav1.Time
+				sinceTime := (*metav1.Time)(nil)
 				if !pod.LogsFromTime.IsZero() {
 					sinceTime = &metav1.Time{
 						Time: pod.LogsFromTime,
 					}
 				}
 
-				if err := pod.followContainerLogs(ctx, containerName, sinceTime); err != nil {
+				// Retry streaming on error instead of giving up after a single attempt: a
+				// transient failure to attach (pod restarting, connection reset, etc.) used to
+				// silently drop all logs of the container. Reset the since-time to now on each
+				// retry so already-captured lines are not re-emitted as duplicates.
+				for {
+					err := pod.followContainerLogs(ctx, containerName, sinceTime)
+					if err == nil {
+						return nil
+					}
+
 					if log.Debug() {
 						fmt.Fprintf(os.Stderr, "pod/%s container/%s logs streaming error: %s\n", pod.ResourceName, containerName, err)
 					}
-				}
 
-				return nil
+					sinceTime = &metav1.Time{
+						Time: time.Now(),
+					}
+
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(containerLogStreamRetryDelay):
+					}
+				}
 
 			case tracker.ContainerTrackerDone:
 				return nil
