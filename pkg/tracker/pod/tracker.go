@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -89,6 +90,12 @@ type Tracker struct {
 	LogsFromTime      time.Time
 
 	ignoreLogs bool
+
+	// Per-container cancel functions used to interrupt an in-flight container log follow as soon
+	// as the pod becomes Ready, so runtime/access logs stop flooding the deploy output. Guarded by
+	// sync.Map because it is written from the container-tracking goroutine and read from the main
+	// Start loop goroutine.
+	containerLogFollowCancel sync.Map // containerName -> context.CancelFunc
 
 	readinessProbes                          map[string]*ReadinessProbe
 	ignoreReadinessProbeFailsByContainerName map[string]time.Duration
@@ -333,7 +340,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) (cle
 		}
 	}
 
-	if err := pod.handleContainersState(object); err != nil {
+	if err := pod.handleContainersState(object, status.IsReady); err != nil {
 		cleanupFn()
 		return nil, fmt.Errorf("unable to handle pod containers state: %w", err)
 	}
@@ -411,7 +418,7 @@ func (pod *Tracker) handlePodState(ctx context.Context, object *corev1.Pod) (cle
 	return cleanupFn, nil
 }
 
-func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
+func (pod *Tracker) handleContainersState(object *corev1.Pod, isReady bool) error {
 	allContainerStatuses := make([]corev1.ContainerStatus, 0)
 	allContainerStatuses = append(allContainerStatuses, object.Status.InitContainerStatuses...)
 	allContainerStatuses = append(allContainerStatuses, object.Status.ContainerStatuses...)
@@ -419,11 +426,23 @@ func (pod *Tracker) handleContainersState(object *corev1.Pod) error {
 	for _, cs := range allContainerStatuses {
 		if cs.State.Running != nil || cs.State.Terminated != nil {
 			oldState := pod.ContainerTrackerStates[cs.Name]
-			newState := lo.Ternary(pod.ignoreLogs, tracker.ContainerTrackerDone, tracker.FollowingContainerLogs)
+			// Once the pod is Ready its startup is complete; stop streaming its container logs so
+			// runtime/access logs (e.g. a webserver already serving traffic) do not flood the
+			// deploy output while the rest of the rollout is still in progress.
+			newState := lo.Ternary(pod.ignoreLogs || isReady, tracker.ContainerTrackerDone, tracker.FollowingContainerLogs)
 
 			if oldState != newState {
 				pod.ContainerTrackerStates[cs.Name] = newState
 				pod.ContainerTrackerStateChanges[cs.Name] <- newState
+
+				// Interrupt an in-flight log follow when the container is marked done (e.g. the pod
+				// became Ready): the follow goroutine is blocked in the stream and would otherwise
+				// keep streaming until the tracking context is canceled.
+				if newState == tracker.ContainerTrackerDone {
+					if cancelAny, ok := pod.containerLogFollowCancel.Load(cs.Name); ok {
+						cancelAny.(context.CancelFunc)()
+					}
+				}
 
 				if log.Debug() {
 					fmt.Printf("pod/%s container/%s state changed %v -> %v\n", pod.ResourceName, cs.Name, oldState, newState)
@@ -530,12 +549,19 @@ func (pod *Tracker) followContainerLogs(ctx context.Context, containerName strin
 func (pod *Tracker) trackContainer(ctx context.Context, containerName string, containerTrackerStateChanges chan tracker.TrackerState) error {
 	for {
 		select {
+		case <-ctx.Done():
+			return nil
 		case state := <-containerTrackerStateChanges:
 			switch state {
 			case tracker.FollowingContainerLogs:
 				if pod.ignoreLogs {
 					return nil
 				}
+
+				// Use a per-container cancellable context so the in-flight stream can be interrupted
+				// (via containerLogFollowCancel) when the pod becomes Ready — see handleContainersState.
+				followCtx, cancelFollow := context.WithCancel(ctx)
+				pod.containerLogFollowCancel.Store(containerName, cancelFollow)
 
 				sinceTime := (*metav1.Time)(nil)
 				if !pod.LogsFromTime.IsZero() {
@@ -548,9 +574,17 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 				// transient failure to attach (pod restarting, connection reset, etc.) used to
 				// silently drop all logs of the container. Reset the since-time to now on each
 				// retry so already-captured lines are not re-emitted as duplicates.
+			followLoop:
 				for {
-					err := pod.followContainerLogs(ctx, containerName, sinceTime)
+					err := pod.followContainerLogs(followCtx, containerName, sinceTime)
 					if err == nil {
+						// Stream ended. If it was canceled because the pod became Ready (the parent
+						// tracking context is still alive), keep this container tracker running so it
+						// can resume if the pod becomes not-ready again. Otherwise (normal EOF or
+						// deploy/pod context canceled) exit.
+						if followCtx.Err() != nil && ctx.Err() == nil {
+							break followLoop
+						}
 						return nil
 					}
 
@@ -564,6 +598,11 @@ func (pod *Tracker) trackContainer(ctx context.Context, containerName string, co
 
 					select {
 					case <-ctx.Done():
+						return nil
+					case <-followCtx.Done():
+						if followCtx.Err() != nil && ctx.Err() == nil {
+							break followLoop
+						}
 						return nil
 					case <-time.After(containerLogStreamRetryDelay):
 					}
