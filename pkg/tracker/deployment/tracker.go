@@ -318,8 +318,10 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 			rsName := utils.GetPodReplicaSetName(pod)
 			d.rsNameByPod[pod.Name] = rsName
 
+			rsNew := true
 			if d.lastObject != nil {
-				rsNew, err := utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
+				var err error
+				rsNew, err = utils.IsReplicaSetNew(d.lastObject, d.knownReplicaSets, rsName)
 				if err != nil {
 					return err
 				}
@@ -344,7 +346,7 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				}
 			}
 
-			if err := d.runPodTracker(ctx, pod.Name, rsName); err != nil {
+			if err := d.runPodTracker(ctx, pod.Name, rsName, rsNew); err != nil {
 				return err
 			}
 
@@ -598,11 +600,16 @@ func (d *Tracker) runPodsInformer(ctx context.Context, object *appsv1.Deployment
 	return podsInformer.Run(ctx)
 }
 
-func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string) error {
+func (d *Tracker) runPodTracker(_ctx context.Context, podName, rsName string, rsNew bool) error {
 	errorChan := make(chan error, 1)
 	doneChan := make(chan struct{})
 
-	ignoreLogs := d.ignoreLogs || d.savingLogsReplicas >= d.SaveLogsOnlyForNumberOfReplicas
+	// Only pods of the new ReplicaSet consume the log-replicas budget. During a rollout the old
+	// ReplicaSet is scaled down and its pods are tracked as well; counting them would exhaust the
+	// budget (SaveLogsOnlyForNumberOfReplicas) and silently drop logs of the actual new pods. This
+	// mirrors the IsNew guard in handleReplicaSetPodLogChunk, which already drops log chunks of
+	// non-new ReplicaSets.
+	ignoreLogs := d.ignoreLogs || !rsNew || d.savingLogsReplicas >= d.SaveLogsOnlyForNumberOfReplicas
 	if !ignoreLogs {
 		d.savingLogsReplicas++
 	}
