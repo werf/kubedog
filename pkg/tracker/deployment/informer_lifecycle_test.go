@@ -26,7 +26,6 @@ func TestRunDeploymentInformer_whenConsumerStopsReading(t *testing.T) {
 	informertest.RunConsumerStopsReading(t, "github.com/werf/kubedog/pkg/tracker/deployment.(*Tracker).runDeploymentInformer.func", seed,
 		func(t *testing.T, ctx context.Context, factory *util.Concurrent[*informer.InformerFactory]) func() {
 			trk := NewTracker("demo", "default", nil, factory, tracker.Options{})
-			trk.resourceAdded <- &appsv1.Deployment{}
 
 			cleanup, err := trk.runDeploymentInformer(ctx)
 			require.NoError(t, err)

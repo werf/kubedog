@@ -9,7 +9,9 @@ import (
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,6 +57,9 @@ type Tracker struct {
 	knownReplicaSets           map[string]*appsv1.ReplicaSet
 	deletedReplicaSetUIDs      map[types.UID]struct{}
 	lastObject                 *appsv1.Deployment
+	awaitingLiveState          bool
+	liveUID                    types.UID
+	liveGeneration             int64
 	failedFromReplicaSetUID    types.UID
 	reportedReplicaSetFailures map[types.UID]struct{}
 	quotaDeadlockSince         map[types.UID]time.Time
@@ -133,10 +138,12 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, informerFacto
 		ignoreLogs:                               opts.IgnoreLogs,
 		ignoreReadinessProbeFailsByContainerName: opts.IgnoreReadinessProbeFailsByContainerName,
 
-		errors:           make(chan error, 1),
-		resourceAdded:    make(chan *appsv1.Deployment, 1),
-		resourceModified: make(chan *appsv1.Deployment, 1),
-		resourceDeleted:  make(chan *appsv1.Deployment, 1),
+		errors: make(chan error, 1),
+		// Deployment events are unbuffered for the same reason as ReplicaSet events below: a
+		// buffered Added replayed from the informer cache could be consumed after a newer Modified.
+		resourceAdded:    make(chan *appsv1.Deployment),
+		resourceModified: make(chan *appsv1.Deployment),
+		resourceDeleted:  make(chan *appsv1.Deployment),
 		resourceFailed:   make(chan interface{}, 1),
 		// ReplicaSet events come from a single informer goroutine and fan out into three
 		// channels. Unbuffered sends keep them in order: a buffered Added could otherwise
@@ -164,6 +171,11 @@ func NewTracker(name, namespace string, kube kubernetes.Interface, informerFacto
 // there is option StopOnAvailable — if true, watcher stops after deployment has available status
 // you can define custom stop triggers using custom implementation of ControllerFeed.
 func (d *Tracker) Track(ctx context.Context) (err error) {
+	if err := d.fetchLiveState(ctx); err != nil {
+		return err
+	}
+	d.awaitingLiveState = true
+
 	deploymentInformerCleanupFn, err := d.runDeploymentInformer(ctx)
 	if err != nil {
 		return err
@@ -173,6 +185,14 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 	for {
 		select {
 		case object := <-d.resourceAdded:
+			stale, err := d.predatesLiveState(ctx, object)
+			if err != nil {
+				return err
+			}
+			if stale {
+				break
+			}
+
 			cleanupFn, err := d.handleDeploymentState(ctx, object)
 			if err != nil {
 				return err
@@ -182,6 +202,14 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				return err
 			}
 		case object := <-d.resourceModified:
+			stale, err := d.predatesLiveState(ctx, object)
+			if err != nil {
+				return err
+			}
+			if stale {
+				break
+			}
+
 			cleanupFn, err := d.handleDeploymentState(ctx, object)
 			if err != nil {
 				return err
@@ -191,6 +219,11 @@ func (d *Tracker) Track(ctx context.Context) (err error) {
 				return err
 			}
 		case <-d.resourceDeleted:
+			// Nothing is tracked before the first live object, so there is nothing to reset.
+			if d.awaitingLiveState {
+				break
+			}
+
 			d.State = tracker.ResourceDeleted
 			d.lastObject = nil
 			d.knownReplicaSets = make(map[string]*appsv1.ReplicaSet)
@@ -492,6 +525,64 @@ func (d *Tracker) getNewPodsNames() ([]string, error) {
 	}
 
 	return res, nil
+}
+
+// fetchLiveState remembers the Deployment as the API server has it, or that it is absent.
+// The shared informer may have listed the namespace before the Deployment was applied
+// and replay that older object first, which would be reported ready right away.
+func (d *Tracker) fetchLiveState(ctx context.Context) error {
+	// Listing by name needs no permission beyond the informer's, and an unset resource
+	// version makes it a consistent read, which sees the object applied before tracking.
+	list, err := d.Kube.AppsV1().Deployments(d.Namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector("metadata.name", d.ResourceName).String(),
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
+
+		return fmt.Errorf("list deployment: %w", err)
+	}
+
+	d.liveUID = ""
+	d.liveGeneration = 0
+	for _, item := range list.Items {
+		if item.Name == d.ResourceName {
+			d.liveUID = item.UID
+			d.liveGeneration = item.Generation
+			break
+		}
+	}
+
+	return nil
+}
+
+// predatesLiveState reports an informer object older than the live Deployment: a previous
+// generation or a deleted incarnation. The first object that is not older ends the check,
+// since the informer delivers the following ones in order.
+func (d *Tracker) predatesLiveState(ctx context.Context, object *appsv1.Deployment) (bool, error) {
+	if !d.awaitingLiveState {
+		return false, nil
+	}
+
+	if object.UID != d.liveUID {
+		// Either a deleted incarnation or one created after the live state was read.
+		if err := d.fetchLiveState(ctx); err != nil {
+			return false, err
+		}
+
+		if object.UID != d.liveUID {
+			return true, nil
+		}
+	}
+
+	if object.Generation < d.liveGeneration {
+		return true, nil
+	}
+
+	d.awaitingLiveState = false
+
+	return false, nil
 }
 
 // runDeploymentInformer watch for deployment events

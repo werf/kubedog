@@ -42,7 +42,7 @@ func TestDynamicReadinessTracker_SingleDurableReplicaFailure_TerminatesPromptly(
 		t.Run(tt.name, func(t *testing.T) {
 			dynClient := dynamicfake.NewSimpleDynamicClient(k8sscheme.Scheme,
 				replicaFailureOneReplicaDeployment(), replicaFailureFailedCreateReplicaSet())
-			kubeClient := k8sfake.NewSimpleClientset(replicaFailureExhaustedQuota())
+			kubeClient := k8sfake.NewSimpleClientset(replicaFailureExhaustedQuota(), replicaFailureOneReplicaDeployment())
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
