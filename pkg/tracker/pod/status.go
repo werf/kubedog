@@ -145,6 +145,16 @@ func NewPodStatus(pod *corev1.Pod, statusGeneration uint64, trackedContainers []
 }
 
 func setContainersStatusesToPodStatus(status *PodStatus, pod *corev1.Pod) {
+	// The pod can't be scheduled (e.g. "0/1 nodes are available: 1 Insufficient memory."), so its
+	// containers will never start. Report it as an error, otherwise the tracker hangs until timeout.
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse && cond.Reason == corev1.PodReasonUnschedulable {
+			status.ContainersErrors = append(status.ContainersErrors, ContainerError{
+				Message: fmt.Sprintf("%s: %s", cond.Reason, cond.Message),
+			})
+		}
+	}
+
 	for _, cs := range pod.Status.InitContainerStatuses {
 		if cs.State.Terminated != nil && cs.State.Terminated.Reason == "Error" {
 			status.IsFailed = true
