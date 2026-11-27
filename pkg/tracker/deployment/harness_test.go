@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -54,6 +55,10 @@ type harnessConfig struct {
 	prepareDynamicClient func(*dynamicfake.FakeDynamicClient)
 	kubeSeed             []runtime.Object
 	prepareKubeClient    func(*k8sfake.Clientset)
+	// The tracker reads the live Deployment through the kube client. Unless kubeSeed has one,
+	// it gets the dynamicSeed Deployments, i.e. the informer cache is up to date, or none if
+	// noLiveDeployment is set.
+	noLiveDeployment bool
 	// quotaDeadlockConfirmation defaults to a short period to keep fatal quota tests fast.
 	quotaDeadlockConfirmation time.Duration
 }
@@ -85,6 +90,13 @@ func newHarness(t *testing.T, cfg harnessConfig) *harness {
 	kubeSeed := cfg.kubeSeed
 	if kubeSeed == nil {
 		kubeSeed = []runtime.Object{computeQuota(1, 1)}
+	}
+	if !cfg.noLiveDeployment && !lo.ContainsBy(kubeSeed, isDeployment) {
+		for _, obj := range cfg.dynamicSeed {
+			if isDeployment(obj) {
+				kubeSeed = append(kubeSeed, obj.DeepCopyObject())
+			}
+		}
 	}
 	kubeClient := k8sfake.NewSimpleClientset(kubeSeed...)
 	if cfg.prepareKubeClient != nil {
@@ -162,6 +174,11 @@ func newHarness(t *testing.T, cfg harnessConfig) *harness {
 	})
 
 	return h
+}
+
+func isDeployment(obj runtime.Object) bool {
+	_, ok := obj.(*appsv1.Deployment)
+	return ok
 }
 
 func forwardChan[T any](h *harness, kind string, ch <-chan T) {
